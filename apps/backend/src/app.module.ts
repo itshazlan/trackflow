@@ -7,6 +7,7 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
 import { IssuesModule } from './modules/issues/issues.module';
 import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module';
+import { TimesheetsModule } from './modules/timesheets/timesheets.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module
     ProjectsModule,
     MembershipsModule,
     IssuesModule,
-    TimeTrackingModule
+    TimeTrackingModule,
+    TimesheetsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
