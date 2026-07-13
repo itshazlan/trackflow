@@ -1,0 +1,295 @@
+# Product Requirements Document (PRD) — Versi Lean Internal
+## TrackFlow — Web Project Management & Desktop Time Tracker
+
+| | |
+|---|---|
+| **Versi Dokumen** | 2.0 (Lean Internal) |
+| **Status** | Draft |
+| **Tanggal** | 14 Juli 2026 |
+| **Dokumen Terkait** | SDD_Lean_Internal.md |
+| **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
+
+> Dokumen ini adalah versi yang **disederhanakan** dari PRD v1.0, disesuaikan untuk kebutuhan **pemakaian internal satu kantor** (bukan produk SaaS yang dijual ke banyak perusahaan). Beberapa lapisan governance yang dirancang untuk skenario multi-pihak yang tidak saling percaya (SaaS) dihilangkan atau disederhanakan. Ringkasan perbandingan ada di §13.
+
+---
+
+## 1. Ringkasan Eksekutif
+
+TrackFlow adalah sistem manajemen proyek berbasis web yang dipadukan dengan aplikasi *time tracker* desktop, dipakai secara internal oleh satu kantor untuk mengelola proyek, tiket, dan jam kerja tim (termasuk tim remote/outsourced) dengan bukti kerja (screenshot & aktivitas).
+
+---
+
+## 2. Latar Belakang & Masalah yang Diselesaikan
+
+| Masalah | Solusi TrackFlow |
+|---|---|
+| Manajer tidak punya visibilitas real-time terhadap pekerjaan tim remote | Dashboard monitoring real-time + bukti kerja (screenshot & aktivitas) |
+| Tools manajemen proyek dan time tracking terpisah | Satu platform terpadu: tiket, waktu kerja, dan laporan dalam satu tempat |
+| Approval timesheet manual/berbasis spreadsheet | Approval timesheet terintegrasi dengan bukti kerja per blok waktu |
+| Privasi pekerja terganggu oleh screenshot (data sensitif tertangkap) | Fitur hapus blok waktu 10 menit oleh pekerja sendiri (konsekuensi: waktu hangus) |
+| Aktivitas di luar komputer (meeting luring, telepon klien) tidak tercatat | Input waktu manual (offline time) |
+| Tiket bug ditulis tidak konsisten, sulit ditelusuri | Issue Template preset (khususnya Bug) agar laporan bug selalu lengkap |
+
+---
+
+## 3. Tujuan Produk
+
+1. Satu platform yang menggabungkan manajemen proyek berbasis tiket dan pelacakan waktu kerja otomatis berbasis bukti.
+2. Memberi Manager/Admin alat verifikasi objektif tanpa mengorbankan privasi dasar pekerja.
+3. Alur kerja tiket yang jelas namun tetap bisa disesuaikan (tambah/ubah/hapus status) tanpa perlu sistem konfigurasi yang rumit.
+4. Laporan jam kerja akurat, dapat diekspor untuk keperluan internal (payroll/evaluasi tim).
+5. Pengalaman UI/UX modern setara Linear/Plane.
+
+### Non-Goals
+- Payroll/penggajian otomatis.
+- Manajemen HR (cuti, absensi, kontrak).
+- Native mobile app.
+- **Dukungan multi-klien/multi-perusahaan** — produk ini didesain khusus untuk dipakai satu kantor saja (lihat §13 untuk konsekuensi desainnya).
+
+---
+
+## 4. Prinsip Desain "Lean Internal"
+
+Karena TrackFlow dipakai oleh satu tim internal yang saling mengenal dan saling percaya (bukan banyak perusahaan asing yang perlu diisolasi satu sama lain), beberapa area sengaja **tidak** dirancang seketat produk SaaS komersial:
+
+- **Tidak ada konsep "organisasi" sebagai entitas terpisah** — cukup satu set pengaturan aplikasi (branding, kebijakan retensi), bukan tabel relasional yang mendukung banyak organisasi.
+- **Hak admin cukup 1 flag sederhana** (`is_admin`), bukan hierarki Owner/Admin/Member dengan pencatatan siapa-memberi-peran-ke-siapa.
+- **Override/hapus blok waktu pekerja lain cukup dibatasi ke Admin saja** — tidak perlu sistem izin granular per-Manager, karena jumlah orang yang butuh kewenangan ini biasanya sangat sedikit (1–2 orang, misal IT/Ops lead).
+- **Workflow tiket punya default yang jelas dan tetap bisa dikustomisasi** (tambah/hapus/ubah nama status), tapi aturan siapa-boleh-set-status-apa dibuat sesederhana mungkin: cukup satu pengecualian (misal "hanya QA yang bisa set Done"), bukan matriks role x status yang kompleks.
+
+Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun — mempercepat waktu pengembangan MVP secara signifikan tanpa mengurangi fitur inti yang benar-benar dibutuhkan tim internal.
+
+---
+
+## 5. Target Pengguna & Level Akses
+
+| Persona | Level Akses | Kebutuhan Utama |
+|---|---|---|
+| **Admin** | Aplikasi (`is_admin = true`) | Kelola user & pengaturan aplikasi (mis. retensi screenshot), punya akses baca ke semua proyek, satu-satunya pihak yang bisa override/hapus blok waktu milik pekerja lain. Biasanya 1–2 orang (mis. IT/Ops lead, atau pemilik bisnis) |
+| **Manager** | Per-Proyek | Memantau progres tim real-time, melihat total jam kerja, memverifikasi bukti kerja, menyetujui/menolak timesheet, mengatur status/workflow tiket pada proyek yang diampu |
+| **Developer** | Per-Proyek | Melihat tugas yang ditugaskan, memastikan desktop client tersinkronisasi, memperbarui status tiket sesuai batasan |
+| **QA (Quality Assurance)** | Per-Proyek | Memverifikasi tiket "Resolved", satu-satunya yang bisa mengubah status tiket menjadi "Done" (default rule, bisa diubah) |
+
+> Seorang user bisa punya role proyek berbeda di proyek berbeda (mis. Manager di Proyek A, Developer di Proyek B), terlepas dari status `is_admin`-nya.
+
+---
+
+## 6. Ruang Lingkup
+
+### 6.1 Dalam Lingkup
+- Web app: manajemen proyek, tiket, time book, reporting.
+- Desktop client (Tauri, Windows/macOS/Linux): time tracking, screenshot, activity logging, sync.
+- Cloudflare R2 untuk file (screenshot & dokumen proyek).
+- Ekspor laporan PDF/CSV.
+
+### 6.2 Di Luar Lingkup
+- Aplikasi mobile.
+- Integrasi pihak ketiga (Slack, Jira, GitHub) — dipertimbangkan nanti.
+- Fitur chat internal.
+- Payroll/invoicing otomatis.
+- **Dukungan multi-organisasi/multi-klien dalam satu instalasi.**
+
+---
+
+## 7. Kebutuhan Fungsional
+
+### 7.1 Autentikasi & Akses
+
+| ID | Requirement |
+|---|---|
+| FR-001 | Pengguna login menggunakan email & password (via Better Auth) |
+| FR-002 | Admin (`is_admin=true`) dapat menambahkan user baru dan mengatur flag admin pada user lain |
+| FR-003 | Setiap user yang ditambahkan ke sebuah proyek diberi salah satu role: **Manager**, **Developer**, atau **Reporter/QA** |
+| FR-004 | Role proyek menentukan hak akses: Manager (kelola proyek, approve timesheet, atur status tiket), Developer (kerjakan tugas, submit waktu), Reporter/QA (verifikasi tiket) |
+| FR-005 | Admin memiliki akses baca implisit ke semua proyek untuk keperluan pengawasan, tanpa perlu didaftarkan sebagai member di tiap proyek |
+
+### 7.1.1 Profil Pengguna & Informasi Kepegawaian
+
+| ID | Requirement |
+|---|---|
+| FR-006 | Setiap pengguna memiliki profil berisi: **username** (unik, wajib), **foto profil**, dan **email** (dari akun login) |
+| FR-007 | Pengguna dapat melengkapi informasi kepegawaian esensial pada profilnya: nomor telepon, **jabatan**, **departemen/divisi** |
+| FR-008 | Admin dapat melengkapi/mengubah data kepegawaian tambahan untuk user manapun: **nomor induk karyawan (employee ID)**, **tanggal bergabung**, dan **status kepegawaian** (Aktif/Tidak Aktif/Cuti). Kecuali username, seluruh informasi kepegawaian ini bersifat **opsional** — tidak menghambat penggunaan sistem bila belum lengkap diisi |
+| FR-009 | Saat karyawan resign, akun diubah menjadi **Tidak Aktif** (bukan dihapus) — histori tiket, timesheet, dan time block miliknya tetap tersimpan utuh |
+
+### 7.2 Struktur Proyek & Sub-proyek
+
+| ID | Requirement |
+|---|---|
+| FR-010 | Pengguna dengan hak sesuai dapat membuat proyek baru |
+| FR-011 | Di dalam proyek, dapat dibuat Sub-project (mis. "Aplikasi Mobile" → "Android", "iOS") |
+| FR-012 | Setiap proyek independen: anggota tim & modul aktif diatur terpisah per proyek |
+
+### 7.3 Sistem Tiket & Workflow (Dapat Dikustomisasi)
+
+| ID | Requirement |
+|---|---|
+| FR-020 | Tiket memiliki jenis (**Tracker**): Bug, Feature, Support |
+| FR-021 | Setiap proyek baru otomatis mendapat set status default: `New → In Progress → Testing → Ready to Deploy → Blocker → Done` |
+| FR-022 | Manager/Admin dapat **menambah, mengganti nama, menghapus, atau mengurutkan ulang** status pada proyeknya — workflow tidak mengunci ke set status bawaan |
+| FR-023 | Setiap status **opsional** dapat dibatasi hanya boleh diset oleh satu role tertentu. Default: hanya **QA** yang boleh mengubah status menjadi **Done**; status lain bebas diset anggota proyek manapun. Aturan ini dapat diubah/dihapus per status oleh Manager/Admin |
+| FR-024 | Atribut tiket: Assignee, Priority, Tanggal mulai, Tenggat waktu, Estimasi waktu |
+| FR-025 | Tiket dapat ditampilkan sebagai List (default), Kanban, atau Calendar |
+| FR-026 | Pengguna dapat memberi komentar & lampiran pada tiket |
+
+### 7.4 Issue Template (Preset & Dapat Diperluas)
+
+| ID | Requirement |
+|---|---|
+| FR-030 | Sistem menyediakan template default untuk tracker **Bug**, dengan pola judul dan field berikut: |
+
+**Template Default — Bug:**
+
+```
+Pola Judul: [BUG] {Nama Fitur} - {Nama Bug}
+
+Field:
+- Role User
+- Current Condition
+- Expected Result
+- Link Halaman
+- Step to Reproduce
+- Evidence
+- Environment  ← WAJIB diisi (menentukan bug terjadi di lingkungan/perangkat/browser mana)
+```
+
+| ID | Requirement |
+|---|---|
+| FR-031 | Saat membuat tiket dari template, judul otomatis mengikuti pola (`[BUG] {Nama Fitur} - {Nama Bug}`) dan deskripsi tiket otomatis terisi dengan field-field di atas sebagai form terstruktur |
+| FR-032 | Field **Environment** wajib diisi sebelum tiket bisa disimpan (validasi form) |
+| FR-033 | Manager/Admin dapat menambahkan template baru untuk tracker lain (Feature/Support), atau mengedit/menghapus field pada template Bug default (misal menambah field baru, mengubah field mana yang wajib) |
+| FR-034 | Template bersifat **per-proyek** secara default, namun dapat pula dibuat sebagai template global yang tersedia untuk semua proyek |
+
+### 7.5 Modul Documents & Files
+
+| ID | Requirement |
+|---|---|
+| FR-040 | Setiap proyek memiliki modul Documents & Files untuk mengunggah panduan/berkas penting, disimpan di Cloudflare R2 |
+
+### 7.6 Time Book
+
+| ID | Requirement |
+|---|---|
+| FR-050 | Manager/pekerja terkait dapat melihat galeri screenshot yang diambil tiap 10 menit |
+| FR-051 | Di bawah tiap screenshot, ditampilkan grafik aktivitas keyboard & mouse (Tinggi/Sedang/Rendah/Tidak Ada) |
+| FR-052 | Sistem menampilkan log aplikasi/judul jendela aktif pada blok waktu terkait |
+
+### 7.7 Kontrol Privasi & Override Admin
+
+| ID | Requirement |
+|---|---|
+| FR-060 | Pekerja dapat menghapus satu blok waktu (10 menit) miliknya sendiri jika terdapat data sensitif pada screenshot |
+| FR-061 | Penghapusan oleh pekerja sendiri bersifat permanen, waktu blok tersebut otomatis unpaid |
+| FR-062 | Sistem mencatat log setiap penghapusan blok waktu (waktu, pelaku) untuk transparansi |
+| FR-063 | Pekerja dapat menambahkan waktu kerja manual (**Offline Time**) dengan deskripsi wajib diisi |
+| FR-064 | Waktu manual memerlukan approval Manager sebelum dihitung sah |
+| FR-065 | **Hanya Admin** (bukan Manager proyek biasa) yang dapat meng-override/menghapus blok waktu milik pekerja lain — cukup satu lapis kewenangan, tanpa perlu izin granular per-Manager |
+| FR-066 | Setiap override oleh Admin wajib disertai alasan tertulis |
+| FR-067 | Pekerja yang blok waktunya di-override menerima notifikasi otomatis (waktu, pelaku, alasan) |
+
+### 7.8 Reporting
+
+| ID | Requirement |
+|---|---|
+| FR-070 | Laporan jam kerja harian/mingguan/bulanan per proyek atau per pekerja |
+| FR-071 | Ekspor laporan ke PDF dan CSV |
+| FR-072 | Manager dapat approve/reject timesheet |
+
+### 7.9 Desktop Client
+
+| ID | Requirement |
+|---|---|
+| FR-080 | Login, pilih proyek & tugas, klik **Start** untuk mulai mencatat waktu per blok 10 menit |
+| FR-081 | Screenshot diambil pada waktu acak dalam tiap interval 10 menit, dengan notifikasi visual/suara shutter |
+| FR-082 | Aplikasi menghitung klik mouse & ketukan keyboard per blok, dikonversi ke level aktivitas (Tinggi/Sedang/Rendah/Tidak Ada) |
+| FR-083 | Blok tanpa aktivitas sama sekali ditandai sebagai idle time |
+| FR-084 | Aplikasi mencatat nama aplikasi/judul jendela aktif |
+| FR-085 | Setiap blok selesai, data (screenshot, aktivitas, log aplikasi) otomatis diunggah ke server |
+| FR-086 | Jika koneksi terputus, data disimpan lokal sementara dan diunggah otomatis saat online kembali |
+
+---
+
+## 8. Kebutuhan Non-Fungsional
+
+| Kategori | Requirement |
+|---|---|
+| **Performa** | Dashboard memuat data proyek < 2 detik untuk proyek dengan hingga 10.000 tiket |
+| **Ketersediaan** | Cukup satu instance backend untuk skala tim internal; target uptime wajar (tidak perlu SLA enterprise) |
+| **Keamanan** | Screenshot & aktivitas terenkripsi saat transit dan saat disimpan |
+| **Privasi** | Pekerja punya kontrol hapus blok waktu sensitif tanpa campur tangan admin |
+| **Kompatibilitas Desktop** | Windows, macOS, Linux |
+| **Real-time** | Status online/aktif pekerja ter-update dalam hitungan detik |
+| **Auditability** | Perubahan status tiket, approval timesheet, dan override blok waktu tercatat dengan pelaku & waktu |
+| **Retensi Data** | Screenshot disimpan standar **12 bulan**, dihapus otomatis setelahnya |
+
+---
+
+## 9. Alur Pengguna Utama
+
+### 9.1 Developer Mengerjakan Tugas Harian
+1. Login desktop client → pilih proyek & tugas → klik Start.
+2. Setiap 10 menit, data (waktu, screenshot, aktivitas) tersinkronisasi otomatis.
+3. Klik Stop saat selesai/istirahat.
+4. Di akhir minggu, ajukan timesheet (otomatis terisi dari tracking + entri manual jika ada).
+
+### 9.2 Membuat Tiket Bug dari Template
+1. QA/Developer membuka "Buat Tiket Baru" → pilih Tracker **Bug** → pilih template default.
+2. Form otomatis menampilkan field: Role User, Current Condition, Expected Result, Link Halaman, Step to Reproduce, Evidence, Environment.
+3. Sistem memvalidasi field **Environment** wajib diisi sebelum tiket bisa disimpan.
+4. Judul tiket otomatis mengikuti pola `[BUG] {Nama Fitur} - {Nama Bug}` berdasarkan input pengguna.
+
+### 9.3 Manager Mengatur Ulang Workflow Tiket Proyek
+1. Manager membuka pengaturan proyek → "Status Tiket".
+2. Melihat daftar status default (New, In Progress, Testing, Ready to Deploy, Blocker, Done).
+3. Menambahkan status baru (mis. "In Review"), menghapus status yang tidak relevan, atau mengubah urutannya.
+4. Opsional: membatasi status tertentu hanya bisa diset role tertentu (default sudah ada untuk "Done" → QA).
+
+### 9.4 Admin Meng-override Blok Waktu
+1. Admin membuka Time Book pekerja tertentu, menemukan blok waktu yang perlu dikoreksi (mis. laporan dari pekerja bahwa ada kesalahan sistem).
+2. Admin memilih "Override Blok Waktu", mengisi alasan wajib.
+3. Sistem menandai blok sesuai aksi (hapus/tandai unpaid), mencatat log, dan mengirim notifikasi ke pekerja terkait.
+
+---
+
+## 10. Metrik Keberhasilan
+
+| Metrik | Target Indikatif |
+|---|---|
+| Tingkat adopsi harian desktop client | > 90% hari kerja |
+| Rata-rata waktu approval timesheet | < 24 jam setelah periode berakhir |
+| Konsistensi laporan bug (mengisi semua field wajib template) | Dipantau sebagai indikator kualitas laporan bug |
+| Waktu rata-rata muat dashboard | < 2 detik |
+
+---
+
+## 11. Asumsi & Batasan
+
+- **Dipakai oleh satu kantor/tim saja** — tidak perlu isolasi data multi-organisasi.
+- Jumlah Admin (`is_admin=true`) biasanya sangat sedikit (1–2 orang) dan dipercaya penuh oleh perusahaan.
+- Pekerja memiliki koneksi internet yang cukup stabil untuk sinkronisasi berkala (dengan fallback offline queue).
+- Screenshot & data aktivitas tunduk pada kebijakan privasi/ketenagakerjaan internal perusahaan.
+- Screenshot memiliki masa retensi standar 12 bulan.
+
+---
+
+## 12. Roadmap Fase Pengembangan (Indikatif)
+
+| Fase | Cakupan |
+|---|---|
+| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek, Sistem tiket + status default (list view), Issue Template Bug preset, Desktop Client (tracking + screenshot + sync), Time Book dasar, Reporting PDF/CSV |
+| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual |
+| **Fase 3** | Notifikasi lanjutan, integrasi pihak ketiga, dashboard analitik lanjutan |
+
+---
+
+## 13. Lampiran: Perbandingan dengan Versi Sebelumnya (v1.0 Full)
+
+| Aspek | v1.0 (Full / siap SaaS) | v2.0 (Lean Internal — dokumen ini) |
+|---|---|---|
+| Model tenant | Entitas `organizations` terpisah | Satu set pengaturan aplikasi, tanpa entitas organisasi |
+| Hak administratif | Owner/Admin/Member (3 level + histori pemberian peran) | 1 flag `is_admin` |
+| Override blok waktu | Opt-in per-Manager, endpoint audit khusus lintas-proyek | Admin-only, audit log sederhana |
+| Workflow tiket | `allowed_roles` (bisa banyak role per status) | 1 role pembatas opsional per status (cukup untuk kasus "QA-only Done") |
+| Issue Template | Generik, tanpa contoh konkret | Preset Bug konkret (title pattern + 7 field, 1 wajib) |
+
+> **Kapan perlu kembali ke v1.0?** Jika suatu saat TrackFlow akan dipakai lebih dari satu perusahaan (multi-klien), atau membutuhkan delegasi hak override yang lebih granular ke banyak Manager berbeda, model v1.0 sudah siap sebagai jalur upgrade tanpa perlu didesain ulang dari nol.

@@ -1,0 +1,780 @@
+# Software Design Document (SDD) — Versi Lean Internal
+## TrackFlow — Web Project Management & Desktop Time Tracker
+
+| | |
+|---|---|
+| **Versi Dokumen** | 2.0 (Lean Internal) |
+| **Status** | Draft |
+| **Tanggal** | 14 Juli 2026 |
+| **Dokumen Terkait** | PRD_Lean_Internal.md |
+| **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
+
+> Dokumen ini menyederhanakan model RBAC/organisasi & fitur override dari SDD v1.1, sambil mempertahankan dan mengonkretkan Issue Template. Tech stack MVP Lean (Drizzle, Better Auth, plain PostgreSQL, Docker Compose, Turborepo) dari revisi sebelumnya **tidak berubah**. Ringkasan perbandingan lengkap ada di §17.
+
+---
+
+## 1. Tujuan Dokumen
+
+Menjadi acuan teknis tim engineering untuk membangun TrackFlow versi internal-kantor, mencakup arsitektur sistem, skema database, kontrak API, dan alur data kritis — dengan kompleksitas seminimal mungkin yang masih memenuhi kebutuhan riil.
+
+---
+
+## 2. Tech Stack
+
+| Layer | Teknologi | Keterangan |
+|---|---|---|
+| Backend Server | Node.js + NestJS | REST API modular |
+| ORM | Drizzle ORM | Ringan, type-safe, migrasi SQL-first via `drizzle-kit` |
+| Autentikasi | Better Auth | Session, hashing password, refresh token bawaan |
+| Realtime Layer | Socket.io | Adapter in-memory bawaan — cukup untuk single-instance |
+| Frontend Web | Next.js (React) | Dashboard & Web Project Management |
+| UI Component | Shadcn UI + TanStack Table | Konsistensi desain kelas Linear/Plane |
+| Database Utama | PostgreSQL biasa | Tanpa TimescaleDB; index biasa sudah cukup di skala internal |
+| Desktop Client | Tauri | Ringan, cross-platform, akses OS-level |
+| File Storage | Cloudflare R2 | Screenshot & dokumen proyek |
+| Monorepo Tooling | Turborepo | `apps/backend`, `apps/web`, `packages/shared-types` |
+| Containerization | Docker + Docker Compose | Dev environment konsisten; produksi 1 container backend + 1 container web |
+
+> Belum ada Redis/BullMQ/load balancer di tahap ini — lihat §12 & §14 untuk strategi pemrosesan sederhana dan jalur upgrade bila suatu saat dibutuhkan.
+
+---
+
+## 3. Arsitektur Sistem (High-Level)
+
+```mermaid
+flowchart TB
+    subgraph Client Layer
+        WEB["Web Dashboard (Next.js)"]
+        DESK["Desktop Client (Tauri)"]
+    end
+
+    subgraph "Backend Container (Docker)"
+        API["NestJS REST API"]
+        AUTH["Better Auth"]
+        WS["Socket.io Gateway (in-memory adapter)"]
+        CRON["Scheduled Jobs (@nestjs/schedule)"]
+    end
+
+    subgraph Data Layer
+        PG[(PostgreSQL)]
+        R2[(Cloudflare R2)]
+    end
+
+    WEB -- REST/HTTPS --> API
+    WEB -- WSS --> WS
+    DESK -- REST/HTTPS (batch upload) --> API
+    DESK -- WSS (status heartbeat) --> WS
+
+    API --> AUTH
+    API -- Drizzle ORM --> PG
+    API -- presigned URL upload --> R2
+    CRON --> PG
+    CRON --> R2
+    AUTH --> PG
+```
+
+Tidak ada entitas "organisasi" dalam arsitektur ini — seluruh instalasi melayani satu kantor, sehingga pengaturan aplikasi (`app_settings`) cukup berupa satu baris singleton, bukan model multi-tenant.
+
+---
+
+## 4. Arsitektur Backend (NestJS)
+
+```
+trackflow/
+├── apps/
+│   ├── backend/
+│   │   └── src/
+│   │       ├── modules/
+│   │       │   ├── auth/              # Integrasi Better Auth
+│   │       │   ├── users/              # Profil pengguna: username, foto, jabatan, departemen, isAdmin (additionalFields Better Auth)
+│   │       │   ├── settings/            # app_settings (retensi, branding)
+│   │       │   ├── projects/            # Proyek & sub-proyek
+│   │       │   ├── memberships/         # Role per-proyek (manager/developer/reporter_qa)
+│   │       │   ├── issues/               # Tiket
+│   │       │   ├── issue-statuses/       # Workflow tiket (CRUD status, dapat ditambah/hapus)
+│   │       │   ├── issue-templates/      # Preset template (Bug, dsb.)
+│   │       │   ├── documents/            # Modul Documents & Files
+│   │       │   ├── time-tracking/        # Time blocks
+│   │       │   ├── screenshots/          # Upload & retrieval screenshot
+│   │       │   ├── activity/             # Aktivitas keyboard/mouse & app log
+│   │       │   ├── timesheets/            # Approval & manual time entry
+│   │       │   ├── reports/               # Laporan PDF/CSV
+│   │       │   └── notifications/         # Realtime notification via WS
+│   │       ├── gateways/
+│   │       │   └── realtime.gateway.ts
+│   │       ├── scheduled/
+│   │       │   └── retention-cleanup.job.ts   # opsional, lihat §13
+│   │       ├── db/
+│   │       │   ├── schema/                # Skema Drizzle per modul
+│   │       │   └── migrations/
+│   │       └── common/                     # Guards, interceptors, DTO validation
+│   └── web/
+├── packages/
+│   ├── shared-types/
+│   ├── ui/
+│   └── config/
+├── docker-compose.yml
+└── turbo.json
+```
+
+### 4.1 Otorisasi — Satu Flag Admin + Role per Proyek
+
+Berbeda dari draft sebelumnya (RBAC dua tingkat penuh dengan Owner/Admin/Member), versi Lean Internal cukup menggunakan **dua guard sederhana**:
+
+| Guard | Sumber Data | Fungsi |
+|---|---|---|
+| `AdminGuard` | `user.isAdmin` | Melindungi endpoint administratif: pengaturan aplikasi, kelola user, override blok waktu siapa saja |
+| `ProjectRoleGuard` | `project_memberships.role` (`manager`/`developer`/`reporter_qa`) | Melindungi endpoint operasional proyek (tiket, timesheet, dsb.) |
+
+**Aturan resolusi akses:**
+1. `AdminGuard` cukup memeriksa satu boolean — tidak perlu tabel keanggotaan organisasi terpisah dengan histori pemberian peran.
+2. Admin memiliki **akses baca implisit** ke semua proyek (tanpa perlu didaftarkan sebagai member), sehingga bisa memantau seluruh tim.
+3. Aksi tulis operasional (approve timesheet, ubah status tiket non-terbatas) tetap memerlukan role proyek eksplisit via `ProjectRoleGuard` — Admin tidak otomatis bisa mengerjakan tugas operasional Manager kecuali memang didaftarkan sebagai member proyek tersebut.
+4. **Override blok waktu milik pekerja lain** memerlukan `AdminGuard` saja — **tidak ada lapisan izin granular per-Manager** (`can_override_timeblocks` dihapus dari draft sebelumnya), karena untuk tim internal kecil cukup satu titik kewenangan yang jelas dan mudah diaudit.
+
+---
+
+## 5. Arsitektur Frontend Web (Next.js)
+
+- **Routing:** App Router Next.js (`/projects/:projectId/issues`, tanpa prefix `/org/:orgId` karena tidak ada konsep multi-organisasi).
+- **Data table tiket:** TanStack Table + Shadcn UI.
+- **State realtime:** koneksi Socket.io di root layout, invalidate cache TanStack Query saat menerima event (`issue.updated`, `timeblock.synced`, `user.status_changed`).
+- **Mode tampilan tiket:** List, Kanban, Calendar — dari endpoint issues yang sama.
+- **Pengaturan Workflow:** halaman admin/manager proyek untuk CRUD status tiket (drag-drop reorder, toggle "restricted to role").
+- **Pengaturan Template:** halaman untuk mengelola Issue Template per proyek/global (form builder sederhana: daftar field + toggle wajib/opsional).
+
+---
+
+## 6. Arsitektur Desktop Client (Tauri)
+
+```mermaid
+flowchart LR
+    UI["Tauri WebView UI (Start/Stop, pemilihan task)"]
+    CORE["Rust Core Process"]
+    HOOK["OS-level Input Hook (keyboard/mouse count)"]
+    CAP["Screenshot Capture Module"]
+    LOCALDB["Local SQLite Buffer"]
+    SYNC["Sync Service"]
+
+    UI <--> CORE
+    CORE --> HOOK
+    CORE --> CAP
+    HOOK --> LOCALDB
+    CAP --> LOCALDB
+    LOCALDB --> SYNC
+    SYNC -- HTTPS batch upload --> API["Backend API"]
+```
+
+| Komponen | Tanggung Jawab |
+|---|---|
+| **Rust Core Process** | Siklus blok waktu 10 menit, jadwal screenshot acak |
+| **OS-level Input Hook** | Hitung klik/ketukan tanpa merekam konten (privasi) |
+| **Screenshot Capture Module** | Screenshot pada detik acak + notifikasi shutter |
+| **Local SQLite Buffer** | Buffer offline sebelum berhasil diunggah |
+| **Sync Service** | Upload per blok selesai, retry dengan backoff |
+
+**Prinsip privasi tidak berubah:** idle detection, tidak ada keylogging konten, randomisasi jadwal screenshot lokal.
+
+---
+
+## 7. Desain Basis Data
+
+### 7.1 Entity Relationship Diagram (Ringkas)
+
+```mermaid
+erDiagram
+    APP_SETTINGS ||--|| APP_SETTINGS : "singleton"
+    USERS ||--o{ PROJECT_MEMBERSHIPS : has
+    PROJECTS ||--o{ PROJECTS : "sub-project of"
+    PROJECTS ||--o{ PROJECT_MEMBERSHIPS : has
+    PROJECTS ||--o{ ISSUE_STATUSES : defines
+    PROJECTS ||--o{ ISSUES : contains
+    PROJECTS ||--o{ ISSUE_TEMPLATES : defines
+    PROJECTS ||--o{ DOCUMENTS : stores
+    ISSUE_STATUSES ||--o{ ISSUES : "current status"
+    USERS ||--o{ ISSUES : "assigned to"
+    USERS ||--o{ TIME_BLOCKS : logs
+    ISSUES ||--o{ TIME_BLOCKS : "tracked against"
+    TIME_BLOCKS ||--o| SCREENSHOTS : has
+    TIME_BLOCKS ||--o| ACTIVITY_LOGS : has
+    TIME_BLOCKS ||--o{ TIME_BLOCK_AUDIT_LOGS : "logged in"
+    USERS ||--o{ MANUAL_TIME_ENTRIES : submits
+    USERS ||--o{ TIMESHEETS : has
+    TIMESHEETS ||--o{ TIMESHEET_APPROVALS : "reviewed via"
+```
+
+### 7.2 Definisi Tabel (PostgreSQL via Drizzle ORM)
+
+#### `user` (dikelola oleh Better Auth, diperluas via `additionalFields`)
+> Kolom inti disediakan otomatis oleh Better Auth. Kolom tambahan (username, foto profil sudah termasuk bawaan sebagai `image`, dan informasi kepegawaian) didaftarkan lewat konfigurasi `additionalFields` Better Auth — dengan Drizzle adapter, Better Auth otomatis menambahkannya sebagai kolom asli pada tabel `user`. **Tidak perlu tabel `user_profiles` terpisah** seperti draft sebelumnya — satu tabel jadi satu-satunya sumber data untuk seluruh info pengguna (Lean Internal: lebih sedikit tabel & join).
+
+| Kolom | Tipe | Sumber | Keterangan |
+|---|---|---|---|
+| id | uuid (PK) | Better Auth (bawaan) | |
+| email | varchar (unique) | Better Auth (bawaan) | |
+| emailVerified | boolean | Better Auth (bawaan) | |
+| name | varchar | Better Auth (bawaan) | Nama lengkap |
+| image | varchar (nullable) | Better Auth (bawaan) | **Foto profil** — URL ke object di Cloudflare R2 (`profile-photos/{userId}.webp`); kolom ini hanya menyimpan referensi |
+| createdAt | timestamptz | Better Auth (bawaan) | |
+| username | varchar (unique) | `additionalFields` | Identitas ringkas untuk tampilan @mention/komentar di UI |
+| phoneNumber | varchar (nullable) | `additionalFields` | Nomor telepon/WhatsApp untuk kontak kerja |
+| position | varchar (nullable) | `additionalFields` | Jabatan (mis. "Backend Developer", "QA Engineer") |
+| department | varchar (nullable) | `additionalFields` | Divisi/departemen (mis. "Engineering", "Product") |
+| employeeId | varchar (unique, nullable) | `additionalFields` | Nomor induk karyawan (NIK internal), bila perusahaan memakainya |
+| joinDate | date (nullable) | `additionalFields` | Tanggal bergabung — dipakai untuk laporan masa kerja |
+| employmentStatus | enum(`active`,`inactive`,`on_leave`) default `active` | `additionalFields` | Status kepegawaian. `inactive` dipakai saat karyawan resign/off-boarding — akun **dinonaktifkan**, bukan dihapus, agar histori time_blocks/tiket miliknya tetap utuh |
+| isAdmin | boolean default false | `additionalFields` | Satu-satunya flag otorisasi tingkat aplikasi (§4.1) — menggantikan hierarki Owner/Admin/Member |
+
+> **Contoh konfigurasi Better Auth (ringkas):**
+> ```ts
+> betterAuth({
+>   // ...
+>   user: {
+>     additionalFields: {
+>       username: { type: "string", required: true, unique: true },
+>       phoneNumber: { type: "string", required: false },
+>       position: { type: "string", required: false },
+>       department: { type: "string", required: false },
+>       employeeId: { type: "string", required: false, unique: true },
+>       joinDate: { type: "date", required: false },
+>       employmentStatus: { type: "string", required: false, defaultValue: "active" },
+>       isAdmin: { type: "boolean", required: false, defaultValue: false },
+>     },
+>   },
+> });
+> ```
+> Seluruh tabel domain pada dokumen ini mereferensikan `user.id` (ditulis "FK → users" untuk konsistensi penamaan). Tabel pendukung `session`, `account`, `verification` tetap di-generate otomatis oleh Better Auth tanpa perubahan.
+
+#### `app_settings` (menggantikan `organizations`)
+> Singleton — hanya 1 baris untuk seluruh instalasi (tidak ada konsep multi-organisasi).
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| company_name | varchar | Untuk branding dashboard (opsional) |
+| screenshot_retention_days | int default 365 | Retensi screenshot — standar 12 bulan |
+| created_at | timestamptz | |
+
+#### `projects`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| parent_project_id | uuid (FK → projects, nullable) | Struktur sub-project |
+| name | varchar | |
+| description | text | |
+| created_by | uuid (FK → users) | |
+| created_at | timestamptz | |
+
+> Catatan: kolom `organization_id` yang ada di draft sebelumnya **dihapus** — tidak relevan lagi tanpa entitas organisasi.
+
+#### `project_memberships`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| project_id | uuid (FK) | |
+| user_id | uuid (FK) | |
+| role | enum(`manager`,`developer`,`reporter_qa`) | Role per-proyek |
+| invited_at | timestamptz | |
+
+> Kolom `can_override_timeblocks` pada draft sebelumnya **dihapus** — override kini murni berbasis `user.isAdmin` (lihat §4.1).
+
+#### `issue_trackers` (referensi statis: Bug/Feature/Support)
+| Kolom | Tipe |
+|---|---|
+| id | uuid (PK) |
+| name | varchar |
+
+#### `issue_statuses` (workflow — dapat ditambah/diubah/dihapus)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| project_id | uuid (FK) | Status bersifat per-proyek |
+| name | varchar | Nama status (mis. New, In Progress, Testing, Ready to Deploy, Blocker, Done, atau custom seperti "In Review") |
+| order_index | int | Urutan tampilan Kanban |
+| restricted_to_role | enum(`manager`,`developer`,`reporter_qa`) nullable | **Disederhanakan dari `allowed_roles` jsonb** — cukup satu role pembatas opsional. `NULL` berarti status bebas diset anggota proyek manapun. Default: status "Done" di-seed dengan `restricted_to_role = reporter_qa` |
+
+> Saat proyek baru dibuat, backend otomatis men-seed 6 baris default (New, In Progress, Testing, Ready to Deploy, Blocker, Done) via service logic — bukan hardcode di enum kolom, sehingga Manager/Admin tetap bebas menambah, mengganti nama, menghapus, atau mengurutkan ulang status tersebut kapan saja (FR-022).
+
+#### `issues`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| project_id | uuid (FK) | |
+| tracker_id | uuid (FK → issue_trackers) | |
+| status_id | uuid (FK → issue_statuses) | |
+| title | varchar | |
+| description | text | |
+| assignee_id | uuid (FK → users, nullable) | |
+| priority | enum(`low`,`medium`,`high`,`urgent`) | |
+| start_date | date | |
+| due_date | date | |
+| estimated_hours | numeric | |
+| created_by | uuid (FK) | |
+| created_at | timestamptz | |
+
+#### `issue_templates` (dipertahankan & dikonkretkan)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| project_id | uuid (FK, nullable) | `NULL` = template global, tersedia untuk semua proyek (FR-034) |
+| tracker_id | uuid (FK → issue_trackers) | |
+| name | varchar | Nama template (mis. "Bug Report Default") |
+| title_pattern | varchar | Pola judul otomatis, mis. `[BUG] {feature} - {bugName}` |
+| fields | jsonb | Array field terstruktur (lihat contoh di bawah), bukan form-builder generik penuh — cukup daftar `{label, required}` berurutan |
+| created_at | timestamptz | |
+
+**Contoh isi kolom `fields` untuk template Bug default (di-seed otomatis saat instalasi):**
+```json
+[
+  { "label": "Role User", "required": false },
+  { "label": "Current Condition", "required": false },
+  { "label": "Expected Result", "required": false },
+  { "label": "Link Halaman", "required": false },
+  { "label": "Step to Reproduce", "required": false },
+  { "label": "Evidence", "required": false },
+  { "label": "Environment", "required": true, "helperText": "Wajib diisi bug terjadi di mana" }
+]
+```
+
+> Manager/Admin dapat mengedit array `fields` ini (tambah/hapus/ubah wajib-tidaknya) melalui UI pengaturan template (FR-033), tanpa perlu migrasi skema — cukup update baris jsonb.
+
+#### `documents`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| project_id | uuid (FK) | |
+| file_name | varchar | |
+| r2_object_key | varchar | |
+| uploaded_by | uuid (FK) | |
+| uploaded_at | timestamptz | |
+
+#### `time_blocks`
+> Tabel PostgreSQL biasa dengan composite index `(user_id, block_start)` dan `(project_id, block_start)`.
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| user_id | uuid (FK) | Pemilik blok waktu |
+| project_id | uuid (FK) | |
+| issue_id | uuid (FK, nullable) | |
+| block_start | timestamptz | |
+| block_end | timestamptz | |
+| is_deleted | boolean default false | |
+| deleted_at | timestamptz nullable | |
+| deleted_by | uuid (FK → users, nullable) | Pemilik sendiri (self) atau Admin (override) |
+| deletion_type | enum(`self`,`admin_override`) nullable | Disederhanakan dari `manager_override` menjadi `admin_override` |
+| deletion_reason | text nullable | Wajib untuk `admin_override`; opsional untuk `self` |
+| is_paid | boolean | |
+| synced_at | timestamptz | |
+| purge_after | timestamptz (generated: `block_start + retention_days`) | |
+
+#### `time_block_audit_logs`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| time_block_id | uuid (FK) | |
+| action | enum(`self_delete`,`admin_override_delete`,`admin_override_mark_unpaid`) | |
+| actor_id | uuid (FK → users) | |
+| target_user_id | uuid (FK → users) | |
+| reason | text | |
+| created_at | timestamptz | |
+
+#### `screenshots`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| time_block_id | uuid (FK) | |
+| r2_object_key | varchar | |
+| captured_at | timestamptz | |
+
+#### `activity_logs`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| time_block_id | uuid (FK) | |
+| keyboard_count | int | |
+| mouse_count | int | |
+| activity_level | enum(`none`,`low`,`medium`,`high`) | |
+| active_app_name | varchar | |
+| active_window_title | varchar | |
+
+#### `manual_time_entries`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| user_id | uuid (FK) | |
+| project_id | uuid (FK) | |
+| issue_id | uuid (FK, nullable) | |
+| duration_minutes | int | |
+| description | text | Wajib diisi |
+| entry_date | date | |
+| approval_status | enum(`pending`,`approved`,`rejected`) | |
+
+#### `timesheets`
+| Kolom | Tipe |
+|---|---|
+| id | uuid (PK) |
+| user_id | uuid (FK) |
+| project_id | uuid (FK) |
+| period_start | date |
+| period_end | date |
+| total_minutes | int |
+| status | enum(`draft`,`submitted`,`approved`,`rejected`) |
+
+#### `timesheet_approvals`
+| Kolom | Tipe |
+|---|---|
+| id | uuid (PK) |
+| timesheet_id | uuid (FK) |
+| reviewed_by | uuid (FK → users) |
+| decision | enum(`approved`,`rejected`) |
+| note | text |
+| reviewed_at | timestamptz |
+
+> **Catatan indexing:** skema didefinisikan & di-migrasi via `drizzle-kit generate`/`drizzle-kit migrate`. Tanpa entitas organisasi, tidak ada kolom `organization_id` yang perlu di-index di tabel manapun — menyederhanakan seluruh query dibanding draft v1.1.
+
+---
+
+## 8. Desain API (Ringkasan Endpoint REST)
+
+| Modul | Endpoint | Method | Deskripsi |
+|---|---|---|---|
+| Auth | `/api/auth/sign-in/email` | POST | Login via Better Auth |
+| Auth | `/api/auth/sign-up/email` | POST | Registrasi via Better Auth |
+| Auth | `/api/auth/sign-out` | POST | Logout |
+| Auth | `/api/auth/session` | GET | Sesi aktif (dipakai guard) |
+| Profil | `/users/me` | GET/PATCH | Lihat & update profil sendiri (username, foto, nomor telepon) — foto diunggah via presigned URL R2 seperti dokumen/screenshot |
+| Profil | `/admin/users/:id/employment` | PATCH | Update data kepegawaian user lain (jabatan, departemen, employeeId, joinDate, employmentStatus) — **Admin only** |
+| Admin | `/admin/settings` | GET/PATCH | Pengaturan aplikasi (`company_name`, `screenshot_retention_days`) — **Admin only** |
+| Admin | `/admin/users` | GET/POST/PATCH | Kelola user & flag `is_admin` — **Admin only** |
+| Projects | `/projects` | GET/POST | List & buat proyek |
+| Projects | `/projects/:id/sub-projects` | GET/POST | Kelola sub-proyek |
+| Memberships | `/projects/:id/members` | GET/POST/PATCH | Undang & atur role anggota proyek |
+| Issue Statuses | `/projects/:id/issue-statuses` | GET/POST/PATCH/DELETE | CRUD status workflow (termasuk reorder & set `restricted_to_role`) — **Manager/Admin** |
+| Issues | `/projects/:id/issues` | GET/POST | List (view=list\|kanban\|calendar) & buat tiket |
+| Issues | `/issues/:id` | GET/PATCH/DELETE | Detail & update tiket |
+| Issues | `/issues/:id/status` | PATCH | Ubah status (dicek terhadap `restricted_to_role`) |
+| Templates | `/projects/:id/issue-templates` | GET/POST/PATCH | Kelola template (termasuk edit array `fields`) — **Manager/Admin** |
+| Documents | `/projects/:id/documents` | GET/POST | Upload/list dokumen (presigned URL R2) |
+| Time Tracking | `/time-blocks/sync` | POST | Endpoint utama sinkronisasi dari Desktop Client tiap 10 menit |
+| Time Tracking | `/time-blocks/:id/screenshot` | POST | Upload screenshot (presigned URL) |
+| Time Tracking | `/time-blocks/:id` | DELETE | Pekerja hapus blok waktu miliknya sendiri |
+| Time Tracking | `/time-blocks/:id/override` | POST | **Admin only.** Body: `{ action: "delete"\|"mark_unpaid", reason: string }` |
+| Manual Time | `/manual-time-entries` | GET/POST | Input & lihat waktu manual |
+| Timesheets | `/timesheets` | GET | List timesheet per periode |
+| Timesheets | `/timesheets/:id/approve` | POST | Approve/reject oleh Manager |
+| Reports | `/reports/hours?format=pdf\|csv` | GET | Generate & unduh laporan |
+
+### 8.1 Contoh Payload — Buat Tiket dari Template Bug
+
+```json
+POST /projects/:id/issues
+{
+  "trackerId": "<uuid-tracker-bug>",
+  "templateId": "<uuid-template-bug-default>",
+  "titleValues": {
+    "feature": "Login Page",
+    "bugName": "Tombol submit tidak responsif"
+  },
+  "fieldValues": {
+    "Role User": "Karyawan (staff biasa)",
+    "Current Condition": "Tombol submit tidak bereaksi saat diklik di halaman login",
+    "Expected Result": "Form ter-submit dan redirect ke dashboard",
+    "Link Halaman": "https://app.trackflow.local/login",
+    "Step to Reproduce": "1. Buka halaman login 2. Isi email & password 3. Klik Submit",
+    "Evidence": "https://r2.trackflow.local/docs/screenshot-bug-001.png",
+    "Environment": "Chrome 126, Windows 11, resolusi 1366x768"
+  }
+}
+```
+Backend menyusun `title` final menjadi `"[BUG] Login Page - Tombol submit tidak responsif"` dari `title_pattern` + `titleValues`, dan menyusun `description` dari `fieldValues` sesuai urutan `fields` pada template. Validasi menolak request jika field dengan `required: true` (mis. `Environment`) kosong.
+
+### 8.2 Contoh Payload — Sinkronisasi Blok Waktu dari Desktop Client
+
+```json
+POST /time-blocks/sync
+{
+  "userId": "uuid",
+  "projectId": "uuid",
+  "issueId": "uuid",
+  "blockStart": "2026-07-14T09:00:00Z",
+  "blockEnd": "2026-07-14T09:10:00Z",
+  "activity": {
+    "keyboardCount": 342,
+    "mouseCount": 88,
+    "activeAppName": "Visual Studio Code",
+    "activeWindowTitle": "trackflow-backend — main.ts"
+  }
+}
+```
+
+---
+
+## 9. Komunikasi Real-time (Socket.io)
+
+| Event | Arah | Payload Ringkas | Kegunaan |
+|---|---|---|---|
+| `user.status_changed` | Server → Web | `{userId, status}` | Status kerja tim real-time |
+| `issue.updated` | Server → Web | `{issueId, changes}` | Update Kanban/List tanpa refresh |
+| `timeblock.synced` | Server → Web | `{userId, projectId, blockStart}` | Indikator "aktif bekerja" |
+| `timesheet.approved` | Server → Web | `{timesheetId, status}` | Notifikasi ke Developer |
+| `timeblock.overridden` | Server → Web | `{timeBlockId, actorId, targetUserId, action, reason}` | Notifikasi ke pekerja terdampak saat Admin override |
+
+Desktop Client menggunakan gateway ini untuk heartbeat ringan; screenshot tetap lewat REST + presigned URL.
+
+---
+
+## 10. Alur Data Kritis (Sequence Diagrams)
+
+### 10.1 Alur Time Tracking & Sinkronisasi
+
+```mermaid
+sequenceDiagram
+    participant D as Desktop Client
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant R2 as Cloudflare R2
+
+    D->>D: Klik Start → mulai timer & jadwalkan screenshot acak
+    loop Tiap 10 menit
+        D->>D: Hitung keyboard/mouse count, ambil screenshot acak
+        D->>A: POST /time-blocks/sync
+        A->>PG: Insert time_block + activity_log (Drizzle ORM)
+        A-->>D: 200 OK {timeBlockId}
+        D->>A: POST /time-blocks/:id/screenshot
+        A-->>D: presigned URL
+        D->>R2: Upload langsung ke R2
+        D->>A: Konfirmasi upload selesai
+        A->>PG: Update record screenshots
+    end
+```
+
+### 10.2 Alur Kontrol Privasi — Hapus Blok Waktu (Self)
+
+```mermaid
+sequenceDiagram
+    participant U as Pekerja (Web)
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant R2 as Cloudflare R2
+
+    U->>A: DELETE /time-blocks/:id
+    A->>A: Validasi: apakah blok milik user ini?
+    A->>PG: Set is_deleted=true, is_paid=false, deleted_by=self
+    A->>R2: Hapus object screenshot terkait
+    A->>PG: Insert time_block_audit_logs (action=self_delete)
+    A-->>U: 200 OK
+```
+
+### 10.3 Alur Workflow Tiket (Status Dapat Dikustomisasi)
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant QA as QA
+
+    Dev->>A: PATCH /issues/:id/status {statusId: "Resolved"}
+    A->>PG: SELECT restricted_to_role FROM issue_statuses WHERE id = :statusId
+    Note over A: restricted_to_role = NULL → siapapun anggota proyek boleh set
+    A-->>Dev: 200 OK
+    QA->>A: PATCH /issues/:id/status {statusId: "Done"}
+    A->>PG: SELECT restricted_to_role → "reporter_qa"
+    A->>A: Cek role QA saat ini == reporter_qa? Ya → izinkan
+    A-->>QA: 200 OK
+    Note over A: Jika Developer mencoba set "Done" langsung → 403 Forbidden (role tidak cocok dengan restricted_to_role)
+```
+
+### 10.4 Alur Membuat Tiket dari Issue Template (Bug)
+
+```mermaid
+sequenceDiagram
+    participant U as Pengguna (Web)
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    U->>A: GET /projects/:id/issue-templates
+    A->>PG: Query issue_templates (project_id ATAU project_id IS NULL untuk global)
+    A-->>U: List template, termasuk "Bug Report Default"
+    U->>U: Pilih template Bug → form otomatis render 7 field
+    U->>A: POST /projects/:id/issues {templateId, titleValues, fieldValues}
+    A->>A: Validasi: field required (Environment) terisi?
+    alt Environment kosong
+        A-->>U: 400 Bad Request ("Environment wajib diisi")
+    else valid
+        A->>A: Susun title dari title_pattern + titleValues
+        A->>A: Susun description dari fields + fieldValues
+        A->>PG: Insert issues
+        A-->>U: 201 Created
+    end
+```
+
+### 10.5 Alur Override Blok Waktu oleh Admin
+
+```mermaid
+sequenceDiagram
+    participant Adm as Admin
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant W as Pekerja Terdampak (via WS)
+
+    Adm->>A: POST /time-blocks/:id/override {action, reason}
+    A->>A: AdminGuard: cek user.isAdmin = true
+    alt bukan admin
+        A-->>Adm: 403 Forbidden
+    else admin
+        A->>A: Validasi field "reason" wajib terisi
+        A->>PG: Update time_blocks (deleted_by=Adm, deletion_type=admin_override, deletion_reason)
+        A->>PG: Insert time_block_audit_logs (action=admin_override_delete)
+        A-->>Adm: 200 OK
+        A->>W: emit timeblock.overridden {actorId, action, reason}
+    end
+```
+
+---
+
+## 11. Keamanan & Privasi
+
+| Aspek | Implementasi |
+|---|---|
+| Autentikasi | Better Auth — session cookie (httpOnly) + hashing password bawaan |
+| Akses data | Drizzle ORM — query ter-tipe, mengurangi risiko SQL injection |
+| Otorisasi | `AdminGuard` (flag boolean) + `ProjectRoleGuard` (role per-proyek) — dua guard sederhana, bukan hierarki organisasi bertingkat |
+| Enkripsi in-transit | HTTPS untuk REST, WSS untuk WebSocket |
+| Enkripsi at-rest | Cloudflare R2 server-side encryption |
+| Privasi input | Input hook hanya menghitung event, tidak menyimpan isi ketikan |
+| Kontrol pekerja | Hapus blok waktu sendiri (self-service) |
+| Kontrol Admin | Override blok waktu pekerja lain wajib alasan tertulis & memicu notifikasi — dibatasi ke Admin saja, bukan tiap Manager, agar mudah diaudit dengan sedikit titik kewenangan |
+| Audit trail | Semua override & perubahan status tiket tercatat di `time_block_audit_logs` dengan pelaku & waktu |
+| Retensi data | Screenshot dihapus otomatis setelah 12 bulan (§13) |
+| Model instalasi | Single-tenant tanpa entitas organisasi — permukaan risiko lebih kecil dibanding model SaaS multi-tenant |
+
+---
+
+## 12. Strategi Pemrosesan & Sinkronisasi (Tanpa Redis/Queue)
+
+*(Tidak berubah dari revisi MVP Lean sebelumnya — tetap relevan untuk versi internal ini.)*
+
+| Kebutuhan | Pendekatan | Catatan Migrasi |
+|---|---|---|
+| Kompresi/thumbnail screenshot | Diproses langsung saat endpoint upload dipanggil (mis. `sharp`) | Pindahkan ke BullMQ + Redis jika latensi mulai terasa |
+| Generate laporan PDF/CSV | Dieksekusi langsung di request `/reports/hours` | Pindahkan ke job async untuk skala besar |
+| Retensi screenshot | Lihat §13 | — |
+| Cache query yang sering diakses | Mengandalkan index PostgreSQL yang tepat | Redis cache bila terbukti jadi bottleneck |
+
+---
+
+## 13. Strategi Penyimpanan File & Retensi (Disederhanakan — 1 Mekanisme)
+
+- Upload dari Desktop Client & Web langsung ke R2 via presigned URL (backend tidak jadi perantara file).
+- Struktur object key: `project/{projectId}/screenshots/{timeBlockId}.webp` dan `project/{projectId}/documents/{documentId}/{fileName}` (tanpa prefix `org/{organizationId}/` karena tidak ada entitas organisasi).
+- Format screenshot dikompresi WebP.
+
+### 13.1 Retensi Screenshot (12 Bulan) — 1 Lapis Saja
+
+Berbeda dari draft v1.1 yang memakai 2 lapis (R2 lifecycle rule + cron job), versi Lean Internal cukup **satu mekanisme**:
+
+- **R2 Lifecycle Rule** (native, tanpa kode tambahan) — otomatis menghapus object di path `screenshots/` setelah `screenshot_retention_days` (default 365 hari).
+- Referensi baris `screenshots` di database **tidak otomatis dibersihkan** oleh mekanisme ini — diterima sebagai trade-off MVP karena baris kosong/usang tidak signifikan membebani performa pada skala tim internal. Bisa dibersihkan manual sesekali, atau ditambah cron kecil (`retention-cleanup`, sudah disiapkan foldernya di §4) bila suatu saat dirasa perlu.
+
+---
+
+## 14. Skalabilitas & Performa
+
+| Aspek | Pendekatan MVP | Jalur Upgrade Bila Diperlukan |
+|---|---|---|
+| `time_blocks`/`activity_logs` | PostgreSQL biasa + composite index | Migrasi ke TimescaleDB hypertable tanpa mengubah struktur kolom |
+| Concurrency backend | Satu instance NestJS dalam satu container | Load balancer + multi-instance + Redis session/adapter |
+| Laporan berat | Query langsung ke PostgreSQL | Read-replica PostgreSQL |
+| Proses async | Sinkron/cron in-process (§12) | Redis + BullMQ |
+
+---
+
+## 15. Arsitektur Deployment
+
+```mermaid
+flowchart TB
+    subgraph "Production (Docker)"
+        BACKEND["Container: Backend (NestJS + Better Auth + Socket.io)"]
+        WEBC["Container: Web (Next.js)"]
+        PGPRIMARY[(PostgreSQL — 1 instance)]
+    end
+    R2["Cloudflare R2"]
+    DESKTOP["Desktop Client (Tauri, terinstal di PC karyawan)"]
+
+    WEBC --> BACKEND
+    DESKTOP --> BACKEND
+    BACKEND --> PGPRIMARY
+    BACKEND -. presigned URL .-> R2
+    DESKTOP -. direct upload .-> R2
+```
+
+### 15.1 Dev Environment (Docker Compose)
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: trackflow
+      POSTGRES_USER: trackflow
+      POSTGRES_PASSWORD: trackflow
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+  backend:
+    build: ./apps/backend
+    depends_on: [postgres]
+    environment:
+      DATABASE_URL: postgres://trackflow:trackflow@postgres:5432/trackflow
+    ports: ["3000:3000"]
+
+  web:
+    build: ./apps/web
+    depends_on: [backend]
+    ports: ["3001:3000"]
+
+volumes:
+  pgdata:
+```
+
+### 15.2 Struktur Monorepo (Turborepo)
+
+Tidak berubah dari revisi sebelumnya — `turbo.json` mengatur pipeline `build`/`dev`/`lint`/`db:migrate` lintas `apps/backend` dan `apps/web`, dengan `packages/shared-types` menjaga konsistensi tipe DTO.
+
+---
+
+## 16. Batasan Teknis & Risiko
+
+| Risiko | Mitigasi |
+|---|---|
+| Volume screenshot besar → biaya storage | Kompresi WebP + R2 lifecycle rule 12 bulan (§13.1) |
+| Beban tulis tinggi ke PostgreSQL tanpa queue | Batching insert per blok 10 menit; pantau metrik koneksi DB sebagai sinyal upgrade ke Redis/BullMQ |
+| Satu container backend = *single point of failure* | Diterima sebagai trade-off MVP; mitigasi: health check + auto-restart, backup PostgreSQL terjadwal |
+| Referensi `screenshots` di DB tidak otomatis terhapus setelah file di-purge R2 | Diterima untuk skala internal; dapat ditambah cron pembersih ringan nanti bila diperlukan |
+| Admin (flag `isAdmin` pada tabel `user`) berpotensi jadi *single point of failure* administratif | Disarankan minimal 2 user dengan `isAdmin=true` sejak awal |
+| Kolom kepegawaian (`employeeId`, `department`, dsb.) diisi tidak konsisten oleh HR/Admin | Validasi ringan di form (mis. format employeeId), namun tidak wajib diisi semua — hanya `username` yang wajib & unik |
+| Kesalahan pengisian field Issue Template (selain Environment) tidak divalidasi wajib | Diterima sebagai trade-off kecepatan; Manager dapat mengubah field mana saja jadi wajib via pengaturan template kapan saja |
+
+---
+
+## 17. Lampiran: Perbandingan Model Data v1.1 (Full) vs v2.0 (Lean Internal)
+
+| Aspek | v1.1 (Full / siap SaaS) | v2.0 (Lean Internal — dokumen ini) |
+|---|---|---|
+| Tenant | Tabel `organizations` (entitas) | `app_settings` (singleton, tanpa entitas) |
+| Otorisasi administratif | `organization_memberships` (owner/admin/member + granted_by/granted_at) | `user.isAdmin` (1 boolean, via `additionalFields` Better Auth — bukan tabel terpisah) |
+| Data profil & kepegawaian | Tidak dirancang eksplisit di v1.1 | Diperluas langsung di tabel `user` (username, foto, jabatan, departemen, employeeId, joinDate, employmentStatus) via `additionalFields` |
+| Override blok waktu | `project_memberships.can_override_timeblocks` (opt-in per-Manager) + endpoint audit lintas-proyek khusus | `user.isAdmin` saja, audit log sederhana |
+| Workflow tiket | `issue_statuses.allowed_roles` (jsonb, banyak role per status) | `issue_statuses.restricted_to_role` (1 role opsional per status) |
+| Issue Template | `default_fields` generik tanpa contoh konkret | `fields` jsonb terisi preset Bug konkret (title pattern + 7 field, 1 wajib) |
+| Retensi screenshot | R2 lifecycle rule + cron job (2 lapis) | R2 lifecycle rule saja (1 lapis) |
+| Prefix object key R2 | `org/{organizationId}/project/{projectId}/...` | `project/{projectId}/...` |
+
+**Kapan perlu "naik kelas" kembali ke model v1.1?**
+- Jika TrackFlow akan dipakai lebih dari satu perusahaan/klien dalam satu instalasi.
+- Jika suatu saat butuh mendelegasikan hak override ke beberapa Manager tertentu (bukan hanya Admin), bukan sekadar all-or-nothing.
+- Jika satu status tiket perlu diizinkan untuk **lebih dari satu** role sekaligus (model `restricted_to_role` tunggal tidak lagi cukup).
+
+Karena struktur data tetap dirancang mirip (nama tabel, relasi inti), migrasi ke v1.1 nantinya bersifat penambahan kolom/tabel, bukan perombakan total.
