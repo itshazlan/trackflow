@@ -9,6 +9,8 @@ import { IssuesModule } from './modules/issues/issues.module';
 import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module';
 import { TimesheetsModule } from './modules/timesheets/timesheets.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { ReportsModule } from './modules/reports/reports.module';
     TimeTrackingModule,
     TimesheetsModule,
     ReportsModule,
+    AdminModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
