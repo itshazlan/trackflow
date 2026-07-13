@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException, InternalServerErrorException } f
 import { eq, and, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { projects, projectMemberships } from '../../db/schema/projects';
+import { issueStatuses } from '../../db/schema/issues';
 import { CreateProjectDto } from './dto/create-project.dto';
 
 @Injectable()
@@ -29,9 +30,29 @@ export class ProjectsService {
           role: 'manager',
         });
 
+        // 3. Seed default issue statuses (FR-022)
+        const defaultStatuses = [
+          { name: 'New', orderIndex: 0, restrictedToRole: null },
+          { name: 'In Progress', orderIndex: 1, restrictedToRole: null },
+          { name: 'Testing', orderIndex: 2, restrictedToRole: null },
+          { name: 'Ready to Deploy', orderIndex: 3, restrictedToRole: null },
+          { name: 'Blocker', orderIndex: 4, restrictedToRole: null },
+          { name: 'Done', orderIndex: 5, restrictedToRole: 'reporter_qa' },
+        ];
+
+        for (const status of defaultStatuses) {
+          await tx.insert(issueStatuses).values({
+            projectId: newProject.id,
+            name: status.name,
+            orderIndex: status.orderIndex,
+            restrictedToRole: status.restrictedToRole,
+          });
+        }
+
         return newProject;
       });
     } catch (err) {
+      console.error('[ProjectsService.create Error]:', err);
       throw new InternalServerErrorException('Failed to create project');
     }
   }
