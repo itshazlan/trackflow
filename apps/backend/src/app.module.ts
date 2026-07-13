@@ -8,6 +8,7 @@ import { MembershipsModule } from './modules/memberships/memberships.module';
 import { IssuesModule } from './modules/issues/issues.module';
 import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module';
 import { TimesheetsModule } from './modules/timesheets/timesheets.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { TimesheetsModule } from './modules/timesheets/timesheets.module';
     IssuesModule,
     TimeTrackingModule,
     TimesheetsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
