@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './modules/auth/better-auth.config';
 import { json, urlencoded } from 'express';
@@ -21,6 +22,9 @@ async function bootstrap() {
   // 2. Apply body parsers globally for all subsequent NestJS routes
   app.use(json());
   app.use(urlencoded({ extended: true }));
+
+  // Register global validation pipe for request DTO validation
+  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
