@@ -5,8 +5,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './modules/auth/better-auth.config';
 import { json, urlencoded } from 'express';
+import * as fs from 'fs';
 
 async function bootstrap() {
+  // Ensure screenshots upload folder exists (Multer requires this)
+  if (!fs.existsSync('./uploads/screenshots')) {
+    fs.mkdirSync('./uploads/screenshots', { recursive: true });
+  }
+
   const app = await NestFactory.create(AppModule, { bodyParser: false });
 
   // 1. Mount Better Auth handler using a custom middleware to preserve req.url

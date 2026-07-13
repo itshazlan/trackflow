@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
 import { IssuesModule } from './modules/issues/issues.module';
+import { TimeTrackingModule } from './modules/time-tracking/time-tracking.module';
 
 @Module({
   imports: [
@@ -13,7 +14,8 @@ import { IssuesModule } from './modules/issues/issues.module';
     AuthModule,
     ProjectsModule,
     MembershipsModule,
-    IssuesModule
+    IssuesModule,
+    TimeTrackingModule
   ],
   controllers: [AppController],
   providers: [AppService],
