@@ -4,7 +4,8 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './modules/auth/better-auth.config';
-import { json, urlencoded } from 'express';
+import * as express from 'express';
+import { join } from 'path';
 import * as fs from 'fs';
 
 async function bootstrap() {
@@ -26,8 +27,11 @@ async function bootstrap() {
   });
 
   // 2. Apply body parsers globally for all subsequent NestJS routes
-  app.use(json());
-  app.use(urlencoded({ extended: true }));
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  // Serve uploads folder static assets
+  expressInstance.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
   // Register global validation pipe for request DTO validation
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));

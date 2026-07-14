@@ -39,6 +39,10 @@ const nextConfig: NextConfig = {
         source: "/admin/:path*",
         destination: "http://localhost:3000/admin/:path*",
       },
+      {
+        source: "/uploads/:path*",
+        destination: "http://localhost:3000/uploads/:path*",
+      },
     ];
   },
 };

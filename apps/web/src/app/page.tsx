@@ -26,6 +26,12 @@ import {
   IssueTemplate,
   TemplateField
 } from "@/lib/issues-service";
+import {
+  getTimeBlocks,
+  deleteTimeBlock,
+  overrideTimeBlock,
+  TimeBlock
+} from "@/lib/time-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +75,10 @@ import {
   ArrowUp,
   ArrowDown,
   Edit2,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  X,
 } from "lucide-react";
 
 type ActiveSection = "issues" | "timebook" | "reports" | "settings";
@@ -379,7 +389,7 @@ export default function Home() {
           ) : (
             <div className="p-5 max-w-7xl mx-auto space-y-6">
               {activeSection === "issues" && <IssuesSection project={selectedProject} />}
-              {activeSection === "timebook" && <TimebookSection project={selectedProject} />}
+              {activeSection === "timebook" && <TimebookSection project={selectedProject} isAdmin={session?.user?.isAdmin || false} />}
               {activeSection === "reports" && <ReportsSection project={selectedProject} />}
               {activeSection === "settings" && <SettingsSection project={selectedProject} />}
             </div>
@@ -897,98 +907,606 @@ function IssuesSection({ project }: { project: Project }) {
   );
 }
 
-function TimebookSection({ project }: { project: Project }) {
-  // Activity contribution-like logs and trackings
-  const logs = [
-    { desc: "Mengerjakan redesign halaman login & layout baru", duration: "2j 15m", date: "Hari ini, 09:12", status: "Sudah Disinkronkan" },
-    { desc: "Setting up database migration Drizzle adapter", duration: "1j 30m", date: "Kemarin, 14:22", status: "Sudah Disinkronkan" },
-    { desc: "Diskusi PRD dan target design quality bar", duration: "45m", date: "12 Jul 2026, 10:00", status: "Sudah Disinkronkan" },
-  ];
+function TimebookSection({ project, isAdmin }: { project: Project; isAdmin: boolean }) {
+  const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [activeDate, setActiveDate] = useState<string>(() => {
+    return new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+  });
+
+  // Lightbox state
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Self-delete block state
+  const [deleteModalBlockId, setDeleteModalBlockId] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteActionLoading, setDeleteActionLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  // Admin override block state
+  const [overrideModalBlock, setOverrideModalBlock] = useState<TimeBlock | null>(null);
+  const [overrideAction, setOverrideAction] = useState<"delete" | "mark_unpaid">("delete");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideActionLoading, setOverrideActionLoading] = useState(false);
+  const [overrideError, setOverrideError] = useState("");
+
+  // Helper: Get Monday and Sunday date strings for the week of activeDate
+  const getWeekRangeOfDate = React.useCallback((dateStr: string) => {
+    const d = new Date(dateStr);
+    const day = d.getDay();
+    // Adjust to Monday (1) as start of week. If Sunday (0), shift by -6
+    const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diffToMonday));
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    return {
+      startDate: monday.toLocaleDateString("en-CA"),
+      endDate: sunday.toLocaleDateString("en-CA"),
+    };
+  }, []);
+
+  const fetchTimeBookData = React.useCallback(() => {
+    const { startDate, endDate } = getWeekRangeOfDate(activeDate);
+    // Fetch time blocks for the selected week
+    return getTimeBlocks(project.id, startDate, endDate).then((blocks) => {
+      setTimeBlocks(blocks);
+    });
+  }, [project.id, activeDate, getWeekRangeOfDate]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setLoading(true);
+      setError("");
+      return fetchTimeBookData();
+    })
+    .catch((err) => {
+      if (!active) return;
+      console.error(err);
+      setError("Gagal memuat catatan pelacakan waktu.");
+    })
+    .finally(() => {
+      if (!active) return;
+      setLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [fetchTimeBookData]);
+
+  // Generate calendar days (Mon to Sun) of current activeDate week
+  const getWeekDays = () => {
+    const d = new Date(activeDate);
+    const day = d.getDay();
+    const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diffToMonday));
+
+    return Array.from({ length: 7 }).map((_, idx) => {
+      const current = new Date(monday);
+      current.setDate(monday.getDate() + idx);
+      const dateStr = current.toLocaleDateString("en-CA");
+      const name = current.toLocaleDateString("id-ID", { weekday: "short" });
+      const num = current.getDate();
+      return { dateStr, name, num };
+    });
+  };
+
+  // Filter blocks for activeDate
+  const activeDateBlocks = timeBlocks.filter((b) => b.blockStart.startsWith(activeDate));
+
+  // Compute daily hours text
+  const getDailyHoursText = () => {
+    const mins = activeDateBlocks.length * 10;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}j ${m}m` : `${m}m`;
+  };
+
+  // Compute weekly hours text
+  const getWeeklyHoursText = () => {
+    const mins = timeBlocks.length * 10;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}j ${m}m` : `${m}m`;
+  };
+
+  // self-delete submission
+  const handleConfirmDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deleteModalBlockId || !deleteReason.trim()) return;
+
+    setDeleteActionLoading(true);
+    setDeleteError("");
+
+    try {
+      await deleteTimeBlock(deleteModalBlockId, deleteReason.trim());
+      setDeleteModalBlockId(null);
+      setDeleteReason("");
+      await fetchTimeBookData();
+    } catch (err: unknown) {
+      console.error(err);
+      setDeleteError(err instanceof Error ? err.message : "Gagal menghapus blok waktu");
+    } finally {
+      setDeleteActionLoading(false);
+    }
+  };
+
+  // admin override submission
+  const handleConfirmOverride = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!overrideModalBlock || !overrideReason.trim()) return;
+
+    setOverrideActionLoading(true);
+    setOverrideError("");
+
+    try {
+      await overrideTimeBlock(overrideModalBlock.id, overrideAction, overrideReason.trim());
+      setOverrideModalBlock(null);
+      setOverrideReason("");
+      await fetchTimeBookData();
+    } catch (err: unknown) {
+      console.error(err);
+      setOverrideError(err instanceof Error ? err.message : "Gagal menyimpan aksi override");
+    } finally {
+      setOverrideActionLoading(false);
+    }
+  };
+
+  // Filter only blocks containing screenshots
+  const screenshotBlocks = activeDateBlocks.filter((b) => b.screenshot !== null);
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+        </div>
+        <div className="space-y-4">
+          <div className="h-32 w-full bg-muted animate-pulse rounded-md" />
+          <div className="h-44 w-full bg-muted animate-pulse rounded-md" />
+          <div className="h-56 w-full bg-muted animate-pulse rounded-md" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-12">
+      {/* Timebook Header */}
       <div className="flex items-center justify-between border-b border-border pb-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Time Book — {project.name}</h2>
           <p className="text-xs text-muted-foreground">Catatan pelacakan waktu kerja dan screenshot log aktivitas kerja.</p>
         </div>
-        <Button className="h-7 text-xs font-medium px-2.5 cursor-pointer">
-          <Clock className="h-3.5 w-3.5 mr-1" /> Mulai Tracker
-        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Tracker status card */}
-        <div className="border border-border bg-card p-4 rounded-md flex flex-col justify-between h-32">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Tracker Status</span>
-            <div className="h-2 w-2 rounded-full bg-muted animate-pulse" />
-          </div>
+      {error && (
+        <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Summary Statistics */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Active Date Card */}
+        <div className="border border-border bg-card p-4 rounded-md flex flex-col justify-between h-28">
+          <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Tanggal Terpilih</span>
           <div>
-            <h3 className="text-2xl font-semibold tracking-tight">00:00:00</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Tidak ada pelacak yang sedang berjalan</p>
+            <h3 className="text-lg font-semibold tracking-tight">
+              {new Date(activeDate).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Klik kalender strip di bawah untuk ganti hari</p>
           </div>
         </div>
 
         {/* Daily Stats */}
-        <div className="border border-border bg-card p-4 rounded-md flex flex-col justify-between h-32">
+        <div className="border border-border bg-card p-4 rounded-md flex flex-col justify-between h-28">
           <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Total Hari Ini</span>
           <div>
-            <h3 className="text-2xl font-semibold tracking-tight">2j 15m</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Target harian: 8 jam kerja</p>
+            <h3 className="text-2xl font-semibold tracking-tight">{getDailyHoursText()}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Dari total 10-menit slot tersinkronisasi</p>
           </div>
         </div>
 
         {/* Weekly Stats */}
-        <div className="border border-border bg-card p-4 rounded-md flex flex-col justify-between h-32">
+        <div className="border border-border bg-card p-4 rounded-md flex flex-col justify-between h-28">
           <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Total Minggu Ini</span>
           <div>
-            <h3 className="text-2xl font-semibold tracking-tight">3j 0m</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Target mingguan: 40 jam kerja</p>
+            <h3 className="text-2xl font-semibold tracking-tight">{getWeeklyHoursText()}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Senin - Minggu minggu ini</p>
           </div>
         </div>
       </div>
 
-      {/* Activity heat map mockup (Plane style) */}
+      {/* Week Calendar Strip (Linear/Plane style) */}
       <div className="border border-border bg-card p-4 rounded-md">
-        <h3 className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Aktivitas Pelacakan (Minggu Ini)</h3>
-        <div className="grid grid-cols-7 gap-2 text-center text-[10px]">
-          {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((day) => (
-            <div key={day} className="text-muted-foreground font-semibold py-1">{day}</div>
-          ))}
-          {/* Mock boxes representing time tracking densities */}
-          <div className="h-8 rounded bg-emerald-500/40 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold" title="2j 15m">Tinggi</div>
-          <div className="h-8 rounded bg-emerald-500/20 border border-emerald-500/10 flex items-center justify-center text-emerald-400/80 font-bold" title="1j 30m">Sedang</div>
-          <div className="h-8 rounded bg-border/20 border border-border flex items-center justify-center text-muted-foreground font-bold">Kosong</div>
-          <div className="h-8 rounded bg-border/20 border border-border flex items-center justify-center text-muted-foreground font-bold">Kosong</div>
-          <div className="h-8 rounded bg-border/20 border border-border flex items-center justify-center text-muted-foreground font-bold">Kosong</div>
-          <div className="h-8 rounded bg-border/20 border border-border flex items-center justify-center text-muted-foreground font-bold">Kosong</div>
-          <div className="h-8 rounded bg-border/20 border border-border flex items-center justify-center text-muted-foreground font-bold">Kosong</div>
+        <h3 className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Pilih Hari Kerja</h3>
+        <div className="grid grid-cols-7 gap-2">
+          {getWeekDays().map((day) => {
+            const isActive = day.dateStr === activeDate;
+            // Count blocks for this specific day to display indicator
+            const dayBlocks = timeBlocks.filter((b) => b.blockStart.startsWith(day.dateStr));
+            const hasData = dayBlocks.length > 0;
+            return (
+              <button
+                key={day.dateStr}
+                onClick={() => setActiveDate(day.dateStr)}
+                className={`py-2 px-1 rounded border text-center flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-primary border-primary text-primary-foreground font-bold"
+                    : "bg-secondary/20 border-border text-foreground hover:bg-secondary/40"
+                }`}
+              >
+                <span className="text-[10px] uppercase opacity-80">{day.name}</span>
+                <span className="text-sm font-semibold">{day.num}</span>
+                {hasData && (
+                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-primary-foreground" : "bg-emerald-500 animate-pulse"}`} />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Time logs */}
-      <div className="border border-border rounded-md overflow-hidden bg-card">
-        <div className="py-2 px-3 bg-secondary/50 border-b border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-          Log Aktivitas Terakhir
-        </div>
-        <div className="divide-y divide-border">
-          {logs.map((log, i) => (
-            <div key={i} className="p-3 hover:bg-accent/40 transition-colors text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="space-y-0.5">
-                <p className="font-semibold text-foreground">{log.desc}</p>
-                <p className="text-[11px] text-muted-foreground">{log.date}</p>
-              </div>
-              <div className="flex items-center gap-3 self-end sm:self-auto shrink-0 text-[11px]">
-                <span className="font-mono font-bold text-foreground">{log.duration}</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  {log.status}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Interactive Activity Timeline Strip */}
+      <div className="border border-border bg-card p-4 rounded-md">
+        <h3 className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">
+          Garis Waktu Aktivitas ({activeDateBlocks.length} slot terdeteksi)
+        </h3>
+        {activeDateBlocks.length === 0 ? (
+          <div className="text-center py-6 text-xs text-muted-foreground italic">
+            Tidak ada rekaman pelacakan waktu untuk hari terpilih.
+          </div>
+        ) : (
+          <div className="flex gap-1.5 items-end h-20 overflow-x-auto pb-2 scrollbar-thin">
+            {activeDateBlocks.map((block) => {
+              const startLocal = new Date(block.blockStart).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+              const endLocal = new Date(block.blockEnd).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+              const totalInputs = block.activity.keyboardCount + block.activity.mouseCount;
+
+              // Height calculated based on keystroke counts (capped at max 80px)
+              const height = Math.min(12 + (totalInputs / 10), 60);
+
+              // Color based on activity level
+              let colorClass = "bg-secondary border-border/40 text-muted-foreground";
+              if (block.activity.activityLevel === "high") {
+                colorClass = "bg-emerald-500/30 border-emerald-500/20 text-emerald-400";
+              } else if (block.activity.activityLevel === "medium") {
+                colorClass = "bg-emerald-500/20 border-emerald-500/10 text-emerald-400/80";
+              } else if (block.activity.activityLevel === "low") {
+                colorClass = "bg-amber-500/20 border-amber-500/10 text-amber-500/80";
+              }
+
+              return (
+                <div
+                  key={block.id}
+                  style={{ height: `${height}px` }}
+                  className={`w-14 rounded-t border text-center flex flex-col justify-end text-[9px] font-mono p-1 font-semibold group relative shrink-0 transition-all hover:scale-x-105 ${colorClass}`}
+                >
+                  <span>{startLocal}</span>
+                  
+                  {/* Timeline Tooltip */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-popover border border-border text-popover-foreground rounded-md p-2.5 shadow-md hidden group-hover:block z-50 text-left normal-case font-sans">
+                    <p className="font-semibold text-xs border-b border-border pb-1 mb-1.5 text-foreground flex justify-between">
+                      <span>{startLocal} - {endLocal}</span>
+                      <span className="font-mono text-[10px] text-muted-foreground">Level: {block.activity.activityLevel}</span>
+                    </p>
+                    <div className="space-y-1 text-[11px] leading-relaxed">
+                      <p><span className="text-muted-foreground">Aplikasi:</span> <span className="font-medium text-foreground">{block.activity.activeAppName || "-"}</span></p>
+                      <p className="truncate"><span className="text-muted-foreground">Judul:</span> <span className="text-foreground">{block.activity.activeWindowTitle || "-"}</span></p>
+                      <div className="flex justify-between border-t border-border/40 pt-1 mt-1 text-[10px] font-mono text-muted-foreground">
+                        <span>⌨️ Ketukan: {block.activity.keyboardCount}</span>
+                        <span>🖱️ Klik: {block.activity.mouseCount}</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground border-t border-border/40 pt-1 mt-1 flex justify-between">
+                        <span>Status Gaji:</span>
+                        <span className={block.isPaid ? "text-emerald-500 font-semibold" : "text-destructive font-semibold"}>
+                          {block.isPaid ? "Paid" : "Unpaid (Override)"}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {/* Screenshot Gallery Grid */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">Galeri Screenshot Kerja</h3>
+        {screenshotBlocks.length === 0 ? (
+          <div className="text-center py-12 border border-dashed border-border rounded-md text-xs text-muted-foreground bg-card/20 italic">
+            Tidak ada tangkapan layar (screenshot) untuk hari terpilih.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
+            {screenshotBlocks.map((block, index) => {
+              const startLocal = new Date(block.blockStart).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+              const endLocal = new Date(block.blockEnd).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+              const imageUrl = block.screenshot!.r2ObjectKey.startsWith("http")
+                ? block.screenshot!.r2ObjectKey
+                : `/${block.screenshot!.r2ObjectKey}`;
+
+              return (
+                <div
+                  key={block.id}
+                  className="border border-border bg-card rounded-md overflow-hidden flex flex-col group relative transition-all hover:border-muted-foreground/40 shadow-sm"
+                >
+                  {/* Thumbnail Image Container */}
+                  <div className="aspect-video w-full bg-secondary/30 relative overflow-hidden flex items-center justify-center border-b border-border">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imageUrl}
+                      alt={`Screenshot ${startLocal}`}
+                      className="object-cover h-full w-full transition-transform duration-200 group-hover:scale-105"
+                    />
+                    
+                    {/* Hover Overlay Controls */}
+                    <div className="absolute inset-0 bg-background/70 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 z-10">
+                      <Button
+                        size="icon"
+                        variant="secondary"
+                        onClick={() => setLightboxIndex(index)}
+                        className="h-8 w-8 rounded-full border border-border bg-background/80 hover:bg-background cursor-pointer"
+                        title="Perbesar"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </Button>
+                      
+                      {/* Self-delete option */}
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        onClick={() => {
+                          setDeleteModalBlockId(block.id);
+                          setDeleteReason("");
+                          setDeleteError("");
+                        }}
+                        className="h-8 w-8 rounded-full bg-destructive/80 hover:bg-destructive cursor-pointer border border-border"
+                        title="Hapus Blok Waktu"
+                      >
+                        <Trash className="h-3.5 w-3.5 text-destructive-foreground" />
+                      </Button>
+
+                      {/* Admin Override option */}
+                      {isAdmin && (
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          onClick={() => {
+                            setOverrideModalBlock(block);
+                            setOverrideAction("delete");
+                            setOverrideReason("");
+                            setOverrideError("");
+                          }}
+                          className="h-8 w-8 rounded-full border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 cursor-pointer"
+                          title="Admin Override"
+                        >
+                          <Sliders className="h-3.5 w-3.5 text-amber-500" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Metadata block */}
+                  <div className="p-2.5 space-y-1 text-[11px] leading-tight flex-1 flex flex-col justify-between bg-card">
+                    <div>
+                      <p className="font-bold text-foreground">{startLocal} - {endLocal}</p>
+                      <p className="text-muted-foreground truncate mt-0.5" title={block.activity.activeAppName}>
+                        {block.activity.activeAppName || "Unknown App"}
+                      </p>
+                    </div>
+                    
+                    <div className="flex justify-between items-center border-t border-border/40 pt-1.5 mt-1.5 text-[10px] font-mono text-muted-foreground">
+                      <span>⌨️ {block.activity.keyboardCount}</span>
+                      <span>🖱️ {block.activity.mouseCount}</span>
+                    </div>
+
+                    {!block.isPaid && (
+                      <div className="mt-1 px-1 py-0.5 border border-destructive/20 bg-destructive/10 text-destructive text-[9px] font-semibold text-center rounded font-mono">
+                        UNPAID OVERRIDE
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* LIGHTBOX MODAL */}
+      {lightboxIndex !== null && (
+        <div className="fixed inset-0 bg-background/95 z-[100] flex flex-col justify-between p-4 animate-fade-in">
+          {/* Top Bar */}
+          <div className="flex justify-between items-center text-foreground border-b border-border/40 pb-3">
+            <div>
+              <p className="font-semibold text-sm">
+                Screenshot {new Date(screenshotBlocks[lightboxIndex].blockStart).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {screenshotBlocks[lightboxIndex].activity.activeAppName} &mdash; {screenshotBlocks[lightboxIndex].activity.activeWindowTitle}
+              </p>
+            </div>
+            <button
+              onClick={() => setLightboxIndex(null)}
+              className="h-8 w-8 rounded-full border border-border bg-secondary/20 hover:bg-secondary/40 cursor-pointer flex items-center justify-center"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Main Visual Image Area */}
+          <div className="flex-1 flex items-center justify-center relative my-4">
+            {/* Left Navigate */}
+            <button
+              disabled={lightboxIndex === 0}
+              onClick={() => setLightboxIndex((prev) => prev! - 1)}
+              className="absolute left-2 h-10 w-10 rounded-full border border-border bg-secondary/35 hover:bg-secondary/60 cursor-pointer flex items-center justify-center text-foreground disabled:opacity-20 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+
+            {/* Real Screenshot Image */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={
+                screenshotBlocks[lightboxIndex].screenshot!.r2ObjectKey.startsWith("http")
+                  ? screenshotBlocks[lightboxIndex].screenshot!.r2ObjectKey
+                  : `/${screenshotBlocks[lightboxIndex].screenshot!.r2ObjectKey}`
+              }
+              alt="Lightbox Screenshot"
+              className="max-h-[75vh] max-w-[85vw] object-contain rounded-md border border-border shadow-xl"
+            />
+
+            {/* Right Navigate */}
+            <button
+              disabled={lightboxIndex === screenshotBlocks.length - 1}
+              onClick={() => setLightboxIndex((prev) => prev! + 1)}
+              className="absolute right-2 h-10 w-10 rounded-full border border-border bg-secondary/35 hover:bg-secondary/60 cursor-pointer flex items-center justify-center text-foreground disabled:opacity-20 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Bottom Bar Details */}
+          <div className="border-t border-border/40 pt-3 text-center text-xs text-muted-foreground font-mono flex justify-center gap-6">
+            <span>⌨️ Keyboard Keystrokes: {screenshotBlocks[lightboxIndex].activity.keyboardCount}</span>
+            <span>🖱️ Mouse Clicks: {screenshotBlocks[lightboxIndex].activity.mouseCount}</span>
+            <span>Level: {screenshotBlocks[lightboxIndex].activity.activityLevel}</span>
+          </div>
+        </div>
+      )}
+
+      {/* DIALOG SELF-DELETE TIMEBLOCK */}
+      <Dialog open={deleteModalBlockId !== null} onOpenChange={(open) => !open && setDeleteModalBlockId(null)}>
+        <DialogContent className="sm:max-w-[425px] bg-background border-border text-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Hapus Blok Waktu Kerja</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleConfirmDelete} className="space-y-4">
+            {deleteError && (
+              <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+            
+            <p className="text-xs text-muted-foreground leading-normal">
+              Menghapus blok waktu ini juga akan menghapus screenshot yang bersangkutan. Waktu kerja terhapus tidak akan dihitung dalam pembayaran/gaji. Tindakan ini tidak bisa dibatalkan.
+            </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="del-reason" className="text-xs text-muted-foreground">Alasan Penghapusan <span className="text-destructive">*</span></Label>
+              <textarea
+                id="del-reason"
+                required
+                placeholder="Tulis alasan penghapusan (mis. Membuka perbankan pribadi / urusan pribadi)"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-border bg-input p-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring placeholder-muted-foreground resize-none"
+              />
+            </div>
+
+            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeleteModalBlockId(null)}
+                className="h-8 text-xs border-border bg-transparent hover:bg-accent cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button type="submit" variant="destructive" disabled={deleteActionLoading} className="h-8 text-xs font-medium cursor-pointer">
+                {deleteActionLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menghapus...
+                  </>
+                ) : (
+                  "Hapus Waktu Kerja"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG ADMIN OVERRIDE TIMEBLOCK */}
+      <Dialog open={overrideModalBlock !== null} onOpenChange={(open) => !open && setOverrideModalBlock(null)}>
+        <DialogContent className="sm:max-w-[425px] bg-background border-border text-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold text-amber-500">Admin Override Blok Waktu</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleConfirmOverride} className="space-y-4">
+            {overrideError && (
+              <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+                <span>{overrideError}</span>
+              </div>
+            )}
+            
+            <div className="space-y-1.5">
+              <Label htmlFor="ovr-action" className="text-xs text-muted-foreground">Tindakan Override <span className="text-destructive">*</span></Label>
+              <select
+                id="ovr-action"
+                required
+                value={overrideAction}
+                onChange={(e) => setOverrideAction(e.target.value as "delete" | "mark_unpaid")}
+                className="w-full text-xs h-8 rounded-md border border-border bg-input px-2.5 focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="delete">Hapus Blok Waktu Permanen</option>
+                <option value="mark_unpaid">Tandai Tidak Dibayar (Unpaid)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ovr-reason" className="text-xs text-muted-foreground">Alasan Admin Override <span className="text-destructive">*</span></Label>
+              <textarea
+                id="ovr-reason"
+                required
+                placeholder="Tulis alasan administratif override (mis. Terdeteksi idle / tidak ada aktivitas)"
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-border bg-input p-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring placeholder-muted-foreground resize-none"
+              />
+            </div>
+
+            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOverrideModalBlock(null)}
+                className="h-8 text-xs border-border bg-transparent hover:bg-accent cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button type="submit" disabled={overrideActionLoading} className="h-8 text-xs font-medium cursor-pointer bg-amber-600 text-white hover:bg-amber-700 border-amber-600">
+                {overrideActionLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Terapkan Override"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
