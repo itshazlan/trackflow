@@ -8,6 +8,12 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
+interface TimerStateResponse {
+  status: 'Idle' | 'Running' | 'Paused';
+  start_time: number | null;
+  accumulated_seconds: number;
+}
+
 export function Dashboard({ user, onLogout }: DashboardProps) {
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -19,6 +25,31 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingIssues, setLoadingIssues] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Slicing: Timer states
+  const [timerStatus, setTimerStatus] = useState<'Idle' | 'Running' | 'Paused'>('Idle');
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [accumulatedSeconds, setAccumulatedSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Sync / restore timer state helper
+  const syncTimerState = async () => {
+    try {
+      const state = await invoke<TimerStateResponse>('get_timer_state');
+      setTimerStatus(state.status);
+      setStartTime(state.start_time);
+      setAccumulatedSeconds(state.accumulated_seconds);
+
+      if (state.status === 'Running' && state.start_time) {
+        const now = Math.floor(Date.now() / 1000);
+        setElapsedSeconds(state.accumulated_seconds + (now - state.start_time));
+      } else {
+        setElapsedSeconds(state.accumulated_seconds);
+      }
+    } catch (err) {
+      console.error('[Dashboard Timer] Failed to sync timer state:', err);
+    }
+  };
 
   // Initialize and restore active state on mount
   useEffect(() => {
@@ -63,13 +94,30 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
         }
       } catch (err) {
         console.error('[Dashboard Init] Failed to restore active task:', err);
-      } finally {
-        setLoadingProjects(false);
       }
+
+      // 3. Load active timer state from Rust core
+      await syncTimerState();
+
+      setLoadingProjects(false);
     }
 
     void initDashboard();
   }, [user.id]);
+
+  // Real-time UI elapsed counter effect
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (timerStatus === 'Running' && startTime) {
+      interval = setInterval(() => {
+        const now = Math.floor(Date.now() / 1000);
+        setElapsedSeconds(accumulatedSeconds + (now - startTime));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [timerStatus, startTime, accumulatedSeconds]);
 
   const handleProjectChange = async (projectId: string) => {
     setSelectedProjectId(projectId);
@@ -117,8 +165,45 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     }
   };
 
+  const handleStartTimer = async () => {
+    setError(null);
+    try {
+      await invoke('start_timer');
+      await syncTimerState();
+    } catch (err: any) {
+      setError(String(err));
+    }
+  };
+
+  const handlePauseTimer = async () => {
+    setError(null);
+    try {
+      await invoke('pause_timer');
+      await syncTimerState();
+    } catch (err: any) {
+      setError(String(err));
+    }
+  };
+
+  const handleStopTimer = async () => {
+    setError(null);
+    try {
+      await invoke('stop_timer');
+      await syncTimerState();
+    } catch (err: any) {
+      setError(String(err));
+    }
+  };
+
   const handleLogout = async () => {
     setLoggingOut(true);
+    try {
+      // Best effort timer stop on logout
+      await invoke('stop_timer');
+    } catch (e) {
+      console.warn('[Dashboard] Stop timer on logout error:', e);
+    }
+
     try {
       // Call backend sign-out (optional, best effort)
       await api.post('/api/auth/sign-out');
@@ -139,8 +224,17 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     onLogout();
   };
 
+  const formatTime = (totalSeconds: number) => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const pad = (num: number) => String(num).padStart(2, '0');
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  };
+
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col bg-background text-foreground animate-in fade-in duration-300">
       {/* Header bar */}
       <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <div className="flex items-center space-x-2">
@@ -213,6 +307,69 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         </div>
 
+        {/* Interactive Timer Card */}
+        <div className="rounded-lg border border-border bg-card p-4 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Time Tracker
+            </h3>
+            <div className="flex items-center space-x-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${
+                timerStatus === 'Running' ? 'bg-emerald-500 animate-pulse' :
+                timerStatus === 'Paused' ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground'
+              }`} />
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {timerStatus}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center justify-center py-4 space-y-2">
+            <div className="text-3xl font-mono tracking-wider font-semibold text-foreground">
+              {formatTime(elapsedSeconds)}
+            </div>
+            <p className="text-[10px] text-muted-foreground text-center max-w-[220px]">
+              {timerStatus === 'Idle'
+                ? 'Select a task below to start tracking your block time.'
+                : timerStatus === 'Running'
+                ? 'Tracking time... Blocks will be auto-saved every 10s.'
+                : 'Timer paused. Your partial block has been saved.'}
+            </p>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex space-x-2.5">
+            {timerStatus === 'Idle' || timerStatus === 'Paused' ? (
+              <button
+                onClick={handleStartTimer}
+                disabled={!selectedProjectId || !selectedIssueId}
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-foreground text-background font-semibold py-2 px-4 rounded text-xs hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+                <span>{timerStatus === 'Paused' ? 'Resume' : 'Start'}</span>
+              </button>
+            ) : (
+              <button
+                onClick={handlePauseTimer}
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-secondary hover:bg-secondary/80 text-foreground font-semibold py-2 px-4 rounded text-xs transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><rect x="14" y="4" width="4" height="16" rx="1"></rect><rect x="6" y="4" width="4" height="16" rx="1"></rect></svg>
+                <span>Pause</span>
+              </button>
+            )}
+
+            {timerStatus !== 'Idle' && (
+              <button
+                onClick={handleStopTimer}
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-destructive/10 hover:bg-destructive/25 text-destructive-foreground font-semibold py-2 px-4 rounded text-xs transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><rect x="4" y="4" width="16" height="16" rx="1"></rect></svg>
+                <span>Stop</span>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Project & Task Selector Card */}
         <div className="rounded-lg border border-border bg-card p-4 space-y-4 shadow-sm">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -237,7 +394,8 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
                 <select
                   value={selectedProjectId}
                   onChange={(e) => handleProjectChange(e.target.value)}
-                  className="w-full appearance-none rounded border border-input bg-background py-2 pl-3 pr-10 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none transition-colors cursor-pointer"
+                  disabled={timerStatus !== 'Idle'}
+                  className="w-full appearance-none rounded border border-input bg-background py-2 pl-3 pr-10 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none transition-colors cursor-pointer disabled:opacity-50"
                 >
                   <option value="" className="bg-[#0a0a0c]">Select a project...</option>
                   {projects.map((project) => (
@@ -265,7 +423,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
                 <select
                   value={selectedIssueId}
                   onChange={(e) => handleIssueChange(e.target.value)}
-                  disabled={!selectedProjectId || issues.length === 0}
+                  disabled={timerStatus !== 'Idle' || !selectedProjectId || issues.length === 0}
                   className="w-full appearance-none rounded border border-input bg-background py-2 pl-3 pr-10 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   {!selectedProjectId ? (
@@ -289,23 +447,6 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
               </div>
             )}
           </div>
-
-          {/* Active Tracker Feedback */}
-          {selectedIssueId && (
-            <div className="flex items-center space-x-3 pt-3 border-t border-border">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Play className="h-3.5 w-3.5 text-emerald-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium text-foreground truncate">
-                  Active Task Configured
-                </p>
-                <p className="text-[9px] text-muted-foreground truncate">
-                  Rust Core tracking state synchronized successfully.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
       </main>
 
