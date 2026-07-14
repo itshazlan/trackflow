@@ -17,12 +17,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
   DropdownMenuGroup,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar";
+import { useTheme } from "next-themes";
 import {
+  LayoutGrid,
   Loader2,
   LogOut,
   Clock,
@@ -34,6 +39,8 @@ import {
   Timer,
   User as UserIcon,
   FileText,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -44,6 +51,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const params = useParams();
   const pathname = usePathname();
+  const { setTheme } = useTheme();
   const projectId = params?.id as string | undefined;
 
   const [session, setSession] = useState<UserSession | null>(null);
@@ -103,6 +111,12 @@ export default function DashboardLayout({
   const currentProject = projects.find((p) => p.id === projectId);
 
   const navigationItems = [
+    {
+      id: "projects",
+      label: "Projects",
+      icon: LayoutGrid,
+      href: "/projects",
+    },
     {
       id: "issues",
       label: "Issues",
@@ -173,7 +187,9 @@ export default function DashboardLayout({
             const Icon = item.icon;
             const disabled = !item.href;
             const isActive = item.href && (
-              item.id === "timesheets"
+              item.id === "projects"
+                ? pathname === "/projects"
+                : item.id === "timesheets"
                 ? pathname.startsWith("/timesheets")
                 : item.id === "reports"
                 ? pathname.startsWith("/reports")
@@ -287,6 +303,28 @@ export default function DashboardLayout({
                   Profil Saya
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="text-[13px] cursor-pointer">
+                    <Sun className="h-4 w-4 mr-2 dark:hidden" />
+                    <Moon className="h-4 w-4 mr-2 hidden dark:block" />
+                    Tema Tampilan
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-36">
+                    <DropdownMenuItem onClick={() => setTheme("light")} className="text-[13px] cursor-pointer">
+                      <Sun className="h-4 w-4 mr-2" />
+                      Terang
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("dark")} className="text-[13px] cursor-pointer">
+                      <Moon className="h-4 w-4 mr-2" />
+                      Gelap
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("system")} className="text-[13px] cursor-pointer">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Sistem
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive text-[13px] cursor-pointer">
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign Out
@@ -319,6 +357,28 @@ export default function DashboardLayout({
                   <UserIcon className="h-4 w-4 mr-2" />
                   Profil Saya
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="text-[13px] cursor-pointer">
+                    <Sun className="h-4 w-4 mr-2 dark:hidden" />
+                    <Moon className="h-4 w-4 mr-2 hidden dark:block" />
+                    Tema
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-36">
+                    <DropdownMenuItem onClick={() => setTheme("light")} className="text-[13px] cursor-pointer">
+                      <Sun className="h-4 w-4 mr-2" />
+                      Terang
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("dark")} className="text-[13px] cursor-pointer">
+                      <Moon className="h-4 w-4 mr-2" />
+                      Gelap
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("system")} className="text-[13px] cursor-pointer">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Sistem
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive text-[13px] cursor-pointer">
                   <LogOut className="h-4 w-4 mr-2" />

@@ -433,8 +433,8 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
                           <XAxis dataKey="name" hide />
                           <YAxis hide />
                           <RechartsTooltip cursor={{ fill: "transparent" }} />
-                          <Bar dataKey="Keyboard" fill="var(--color-primary, #3b82f6)" radius={[2, 2, 0, 0]} barSize={14} />
-                          <Bar dataKey="Mouse" fill="#10b981" radius={[2, 2, 0, 0]} barSize={14} />
+                          <Bar dataKey="Keyboard" fill="var(--primary)" radius={[2, 2, 0, 0]} barSize={14} />
+                          <Bar dataKey="Mouse" fill="var(--success)" radius={[2, 2, 0, 0]} barSize={14} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>

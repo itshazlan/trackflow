@@ -43,3 +43,7 @@ This rule is easy to forget because it's a one-line aspiration in the PRD, not a
 - Don't build spacious "SaaS marketing" layouts (big padding, hero sections, oversized headings) for internal product screens.
 - Don't skip dark-mode verification on new components.
 - Don't change `components.json` (style/baseColor/aliases) without flagging it — it's the shared contract all Shadcn components are generated against.
+
+## Dark Mode
+- SELALU pakai token warna semantik (`bg-background`, `text-foreground`, `border-border`, dst), TIDAK PERNAH hardcode hex atau warna Tailwind mentah (`bg-blue-500`) tanpa varian `dark:`.
+- Komponen baru wajib diuji visual di kedua mode sebelum dianggap selesai.

@@ -49,8 +49,10 @@ import {
   XCircle,
   Clock3,
 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export default function TimesheetsPage() {
+  const confirm = useConfirm();
   const [session, setSession] = useState<UserSession | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -223,12 +225,24 @@ export default function TimesheetsPage() {
   };
 
   const handleSubmitTimesheetTrigger = async (tsId: string) => {
-    if (!confirm("Kirim timesheet ini untuk diajukan ke manajer proyek?")) return;
+    const ok = await confirm({
+      title: "Kirim Timesheet",
+      description: "Kirim timesheet ini untuk diajukan ke manajer proyek?",
+      confirmLabel: "Ya, Kirim",
+      variant: "default",
+    });
+    if (!ok) return;
     try {
       await submitTimesheet(tsId);
       await loadProjectData();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Gagal mengirimkan timesheet.");
+      await confirm({
+        title: "Gagal Mengirim",
+        description: err instanceof Error ? err.message : "Gagal mengirimkan timesheet.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
     }
   };
 
@@ -247,7 +261,14 @@ export default function TimesheetsPage() {
 
   const handleReviewTimesheet = async (decision: "approved" | "rejected") => {
     if (!timesheetDetail) return;
-    if (!confirm(`Apakah Anda yakin ingin ${decision === "approved" ? "menyetujui" : "menolak"} timesheet ini?`)) return;
+    const label = decision === "approved" ? "menyetujui" : "menolak";
+    const ok = await confirm({
+      title: decision === "approved" ? "Setujui Timesheet" : "Tolak Timesheet",
+      description: `Apakah Anda yakin ingin ${label} timesheet ini?`,
+      confirmLabel: decision === "approved" ? "Ya, Setujui" : "Ya, Tolak",
+      variant: decision === "approved" ? "default" : "destructive",
+    });
+    if (!ok) return;
 
     setReviewLoading(true);
     try {
@@ -259,7 +280,13 @@ export default function TimesheetsPage() {
         void loadTimesheetDetail(selectedTimesheetId);
       }
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Gagal memproses persetujuan timesheet.");
+      await confirm({
+        title: "Gagal Memproses",
+        description: err instanceof Error ? err.message : "Gagal memproses persetujuan timesheet.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
     } finally {
       setReviewLoading(false);
     }

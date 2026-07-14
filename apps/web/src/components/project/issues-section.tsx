@@ -48,12 +48,14 @@ import {
   Trash2,
   Calendar,
 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface IssuesSectionProps {
   projectId: string;
 }
 
 export default function IssuesSection({ projectId }: IssuesSectionProps) {
+  const confirm = useConfirm();
   const [session, setSession] = useState<UserSession | null>(null);
   const [issuesList, setIssuesList] = useState<Issue[]>([]);
   const [statuses, setStatuses] = useState<IssueStatus[]>([]);
@@ -238,7 +240,13 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   };
 
   const handleDeleteIssue = async (issueId: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus tiket ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Tiket",
+      description: "Apakah Anda yakin ingin menghapus tiket ini? Tindakan ini tidak dapat dibatalkan.",
+      confirmLabel: "Ya, Hapus",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await deleteIssue(projectId, issueId);
       setIssuesList((prev) => prev.filter((iss) => iss.id !== issueId));
@@ -246,7 +254,13 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       setSelectedIssue(null);
     } catch (err) {
       console.error(err);
-      alert("Gagal menghapus tiket.");
+      await confirm({
+        title: "Gagal Menghapus",
+        description: "Gagal menghapus tiket. Silakan coba lagi.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
     }
   };
 

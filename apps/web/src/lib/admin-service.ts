@@ -73,7 +73,27 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
     throw new Error("Failed to fetch user list");
   }
 
-  return res.json();
+  // Backend stores employment fields flat on the user table.
+  // We reshape them into the nested `employment` object the UI expects.
+  const raw: Array<Record<string, unknown>> = await res.json();
+  return raw.map((u) => ({
+    id: u.id as string,
+    name: u.name as string,
+    email: u.email as string,
+    username: u.username as string,
+    image: (u.image ?? null) as string | null,
+    isAdmin: u.isAdmin as boolean,
+    employment: {
+      id: u.id as string,
+      userId: u.id as string,
+      position: (u.position ?? null) as string | null,
+      department: (u.department ?? null) as string | null,
+      employeeId: (u.employeeId ?? null) as string | null,
+      joinDate: u.joinDate ? String(u.joinDate) : null,
+      employmentStatus: ((u.employmentStatus ?? "active") as UserEmployment["employmentStatus"]),
+      updatedAt: (u.updatedAt ?? "") as string,
+    },
+  }));
 }
 
 export async function updateAdminUser(

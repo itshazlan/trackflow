@@ -47,12 +47,14 @@ import {
   Sliders,
   FileText,
 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface SettingsSectionProps {
   projectId: string;
 }
 
 export default function SettingsSection({ projectId }: SettingsSectionProps) {
+  const confirm = useConfirm();
   const [statuses, setStatuses] = useState<IssueStatus[]>([]);
   const [templates, setTemplates] = useState<IssueTemplate[]>([]);
   const [trackers, setTrackers] = useState<Tracker[]>([]);
@@ -127,19 +129,37 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
       await reorderProjectStatuses(projectId, statusIds);
     } catch (err) {
       console.error(err);
-      alert("Gagal memperbarui urutan status.");
+      await confirm({
+        title: "Gagal Mengubah Urutan",
+        description: "Gagal memperbarui urutan status.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
       void fetchData();
     }
   };
 
   const handleDeleteStatus = async (statusId: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus status ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Status",
+      description: "Apakah Anda yakin ingin menghapus status ini?",
+      confirmLabel: "Ya, Hapus",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await deleteProjectStatus(projectId, statusId);
       setStatuses((prev) => prev.filter((s) => s.id !== statusId));
     } catch (err) {
       console.error(err);
-      alert("Gagal menghapus status. Pastikan tidak ada issue yang dikaitkan dengan status ini.");
+      await confirm({
+        title: "Gagal Menghapus",
+        description: "Gagal menghapus status. Pastikan tidak ada issue yang dikaitkan dengan status ini.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
     }
   };
 
@@ -192,13 +212,25 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
 
   // --- Template Actions ---
   const handleDeleteTemplate = async (templateId: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus template ini?")) return;
+    const ok = await confirm({
+      title: "Hapus Template",
+      description: "Apakah Anda yakin ingin menghapus template ini?",
+      confirmLabel: "Ya, Hapus",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await deleteProjectTemplate(projectId, templateId);
       setTemplates((prev) => prev.filter((t) => t.id !== templateId));
     } catch (err) {
       console.error(err);
-      alert("Gagal menghapus template.");
+      await confirm({
+        title: "Gagal Menghapus",
+        description: "Gagal menghapus template.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
     }
   };
 

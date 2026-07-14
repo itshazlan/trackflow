@@ -37,8 +37,10 @@ import {
   X,
   UserCheck,
 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export default function AdminUsersPage() {
+  const confirm = useConfirm();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -82,15 +84,13 @@ export default function AdminUsersPage() {
 
   const handleToggleAdmin = async (userObj: AdminUser) => {
     const nextVal = !userObj.isAdmin;
-    if (
-      !confirm(
-        `Apakah Anda yakin ingin ${
-          nextVal ? "memberikan" : "mencabut"
-        } akses Administrator untuk ${userObj.name}?`
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: nextVal ? "Berikan Akses Admin" : "Cabut Akses Admin",
+      description: `Apakah Anda yakin ingin ${nextVal ? "memberikan" : "mencabut"} akses Administrator untuk ${userObj.name}?`,
+      confirmLabel: nextVal ? "Ya, Berikan" : "Ya, Cabut",
+      variant: nextVal ? "default" : "destructive",
+    });
+    if (!ok) return;
 
     try {
       setError("");
