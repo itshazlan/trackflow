@@ -32,8 +32,8 @@ async function bootstrap() {
   app.use(express.urlencoded({ extended: true }));
 
   // Mount mock-r2 handler for local file upload testing
-  expressInstance.put('/mock-r2/:bucket/*', (req: any, res: any) => {
-    const key = req.params[0]; // e.g. avatars/xxx.png or project/xxx/screenshots/xxx.webp
+  expressInstance.put('/mock-r2/:bucket/:key*', (req: any, res: any) => {
+    const key = req.params.key; // e.g. avatars/xxx.png or project/xxx/screenshots/xxx.webp
     const filePath = join(process.cwd(), 'uploads', key);
     
     // Ensure parent directory exists
