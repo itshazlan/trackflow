@@ -174,7 +174,7 @@ fn start_background_tick_loop(
 }
 
 #[tauri::command]
-fn start_timer(
+async fn start_timer(
     app_handle: tauri::AppHandle,
     tracking_state: tauri::State<'_, ActiveTrackingState>,
     timer_state: tauri::State<'_, ActiveTimerState>,
@@ -216,7 +216,7 @@ fn start_timer(
 }
 
 #[tauri::command]
-fn pause_timer(
+async fn pause_timer(
     tracking_state: tauri::State<'_, ActiveTrackingState>,
     timer_state: tauri::State<'_, ActiveTimerState>,
     db_state: tauri::State<'_, DbState>,
@@ -257,7 +257,7 @@ fn pause_timer(
 }
 
 #[tauri::command]
-fn stop_timer(
+async fn stop_timer(
     tracking_state: tauri::State<'_, ActiveTrackingState>,
     timer_state: tauri::State<'_, ActiveTimerState>,
     db_state: tauri::State<'_, DbState>,
@@ -310,7 +310,7 @@ struct TimerStatePayload {
 }
 
 #[tauri::command]
-fn get_timer_state(
+async fn get_timer_state(
     timer_state: tauri::State<'_, ActiveTimerState>,
 ) -> Result<TimerStatePayload, String> {
     let status = timer_state.status.lock().unwrap().clone();
