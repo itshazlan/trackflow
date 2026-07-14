@@ -77,9 +77,6 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
 
-  // Dynamic template fields state
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const [titleValues, setTitleValues] = useState<Record<string, string>>({});
 
   // Detail Issue Dialog state
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
@@ -136,25 +133,26 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     };
   }, [fetchData]);
 
-  // Find the selected tracker
-  const activeTracker = trackers.find((t) => t.id === selectedTrackerId);
-  const isBugTracker = activeTracker?.name === "Bug";
   // Find matching template
   const bugTemplate = templates.find((t) => t.trackerId === selectedTrackerId);
 
-  // Extract placeholder keys from titlePattern
-  const getTitlePatternPlaceholders = (pattern: string | null) => {
-    if (!pattern) return [];
-    const regex = /\{([a-zA-Z0-9_-]+)\}/g;
-    const placeholders = [];
-    let match;
-    while ((match = regex.exec(pattern)) !== null) {
-      placeholders.push(match[1]);
+  const handleOpenCreateModal = () => {
+    const defaultTrackerId = selectedTrackerId || (trackers.length > 0 ? trackers[0].id : "");
+    if (defaultTrackerId && !selectedTrackerId) {
+      setSelectedTrackerId(defaultTrackerId);
     }
-    return placeholders;
-  };
 
-  const titlePlaceholders = bugTemplate ? getTitlePatternPlaceholders(bugTemplate.titlePattern) : [];
+    const template = templates.find((t) => t.trackerId === defaultTrackerId);
+    if (template) {
+      setTitle(template.titlePattern || "");
+      setDescription(template.descriptionPattern || "");
+    } else {
+      setTitle("");
+      setDescription("");
+    }
+    setCreateError("");
+    setIsCreateOpen(true);
+  };
 
   const handleCreateIssue = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,51 +162,23 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     setCreateError("");
 
     try {
-      if (isBugTracker && bugTemplate) {
-        // Validate required template fields
-        for (const field of bugTemplate.fields) {
-          if (field.required && !fieldValues[field.label]?.trim()) {
-            throw new Error(`Field "${field.label}" wajib diisi.`);
-          }
-        }
-        // Validate title placeholders
-        for (const placeholder of titlePlaceholders) {
-          if (!titleValues[placeholder]?.trim()) {
-            throw new Error(`Field judul "${placeholder}" wajib diisi.`);
-          }
-        }
-
-        await createIssue(projectId, {
-          trackerId: selectedTrackerId,
-          statusId: statusId || undefined,
-          templateId: bugTemplate.id,
-          titleValues,
-          fieldValues,
-          priority,
-          assigneeId: assigneeId || null,
-          dueDate: dueDate || null,
-        });
-      } else {
-        if (!title.trim()) {
-          throw new Error("Judul tiket wajib diisi.");
-        }
-        await createIssue(projectId, {
-          trackerId: selectedTrackerId,
-          title,
-          description,
-          statusId: statusId || undefined,
-          priority,
-          assigneeId: assigneeId || null,
-          dueDate: dueDate || null,
-        });
+      if (!title.trim()) {
+        throw new Error("Judul tiket wajib diisi.");
       }
+      await createIssue(projectId, {
+        trackerId: selectedTrackerId,
+        title,
+        description,
+        statusId: statusId || undefined,
+        priority,
+        assigneeId: assigneeId || null,
+        dueDate: dueDate || null,
+      });
 
       setIsCreateOpen(false);
       // Reset states
       setTitle("");
       setDescription("");
-      setFieldValues({});
-      setTitleValues({});
       setPriority("medium");
       setAssigneeId("");
       setDueDate("");
@@ -350,7 +320,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
               className="h-8 pl-8 text-[12px]"
             />
           </div>
-          <Button size="sm" className="h-8 text-[12px] shrink-0 font-medium" onClick={() => setIsCreateOpen(true)}>
+          <Button size="sm" className="h-8 text-[12px] shrink-0 font-medium" onClick={handleOpenCreateModal}>
             <Plus className="mr-1 h-3.5 w-3.5" />
             Buat Tiket
           </Button>
@@ -485,11 +455,16 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   id="tracker-select"
                   value={selectedTrackerId}
                   onChange={(e) => {
-                    setSelectedTrackerId(e.target.value);
-                    setFieldValues({});
-                    setTitleValues({});
-                    setTitle("");
-                    setDescription("");
+                    const newTrackerId = e.target.value;
+                    setSelectedTrackerId(newTrackerId);
+                    const template = templates.find((t) => t.trackerId === newTrackerId);
+                    if (template) {
+                      setTitle(template.titlePattern || "");
+                      setDescription(template.descriptionPattern || "");
+                    } else {
+                      setTitle("");
+                      setDescription("");
+                    }
                   }}
                   className="h-8 w-full rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
                   disabled={createLoading}
@@ -502,96 +477,41 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                 </select>
               </div>
 
-              {/* Dynamic form from template if Bug tracker and bugTemplate exists */}
-              {isBugTracker && bugTemplate ? (
-                <>
-                  <div className="rounded border border-primary/20 bg-primary/5 p-2.5 text-[11.5px] text-muted-foreground leading-relaxed">
-                    Menampilkan form laporan Bug kustom. Judul akan otomatis digenerate dari pattern template.
-                  </div>
-
-                  {/* Title Placeholders Inputs */}
-                  {titlePlaceholders.map((ph) => (
-                    <div key={ph} className="flex flex-col gap-1.5">
-                      <Label htmlFor={`title-ph-${ph}`} className="text-[11px] font-medium text-muted-foreground capitalize">
-                        {ph} <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id={`title-ph-${ph}`}
-                        type="text"
-                        placeholder={`Masukkan ${ph}...`}
-                        value={titleValues[ph] || ""}
-                        onChange={(e) => setTitleValues({ ...titleValues, [ph]: e.target.value })}
-                        required
-                        className="h-8 text-[12.5px]"
-                        disabled={createLoading}
-                      />
-                    </div>
-                  ))}
-
-                  {/* Dynamic Template Fields */}
-                  {bugTemplate.fields.map((field) => (
-                    <div key={field.label} className="flex flex-col gap-1.5">
-                      <Label htmlFor={`field-${field.label}`} className="text-[11px] font-medium text-muted-foreground">
-                        {field.label} {field.required && <span className="text-red-500">*</span>}
-                      </Label>
-                      {field.label.toLowerCase().includes("reproduce") || field.label.toLowerCase().includes("result") || field.label.toLowerCase().includes("description") ? (
-                        <textarea
-                          id={`field-${field.label}`}
-                          placeholder={field.helperText || `Masukkan ${field.label}...`}
-                          required={field.required}
-                          value={fieldValues[field.label] || ""}
-                          onChange={(e) => setFieldValues({ ...fieldValues, [field.label]: e.target.value })}
-                          className="min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                          disabled={createLoading}
-                        />
-                      ) : (
-                        <Input
-                          id={`field-${field.label}`}
-                          type="text"
-                          placeholder={field.helperText || `Masukkan ${field.label}...`}
-                          required={field.required}
-                          value={fieldValues[field.label] || ""}
-                          onChange={(e) => setFieldValues({ ...fieldValues, [field.label]: e.target.value })}
-                          className="h-8 text-[12.5px]"
-                          disabled={createLoading}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="issue-title" className="text-[11px] font-medium text-muted-foreground">
-                      Judul Tiket
-                    </Label>
-                    <Input
-                      id="issue-title"
-                      type="text"
-                      placeholder="Masukkan judul singkat..."
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      required
-                      className="h-8 text-[12.5px]"
-                      disabled={createLoading}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="issue-desc" className="text-[11px] font-medium text-muted-foreground">
-                      Deskripsi Masalah
-                    </Label>
-                    <textarea
-                      id="issue-desc"
-                      placeholder="Detail deskripsi tugas atau tiket..."
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      disabled={createLoading}
-                    />
-                  </div>
-                </>
+              {bugTemplate && (
+                <div className="rounded border border-primary/20 bg-primary/5 p-2.5 text-[11.5px] text-muted-foreground leading-relaxed">
+                  Prefill teks dari template &quot;{bugTemplate.name}&quot; dimuat. Anda bebas mengubah judul dan deskripsi di bawah.
+                </div>
               )}
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="issue-title" className="text-[11px] font-medium text-muted-foreground">
+                  Judul Tiket
+                </Label>
+                <Input
+                  id="issue-title"
+                  type="text"
+                  placeholder="Masukkan judul singkat..."
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                  className="h-8 text-[12.5px]"
+                  disabled={createLoading}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="issue-desc" className="text-[11px] font-medium text-muted-foreground">
+                  Deskripsi Masalah
+                </Label>
+                <textarea
+                  id="issue-desc"
+                  placeholder="Detail deskripsi tugas atau tiket..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  disabled={createLoading}
+                />
+              </div>
 
               <div className="h-px bg-border my-1" />
 

@@ -88,27 +88,35 @@ async function seed() {
       )
       .limit(1);
 
-    if (!existingTemplate) {
-      const bugFields = [
-        { label: 'Role User', required: false },
-        { label: 'Current Condition', required: false },
-        { label: 'Expected Result', required: false },
-        { label: 'Link Halaman', required: false },
-        { label: 'Step to Reproduce', required: false },
-        { label: 'Evidence', required: false },
-        { label: 'Environment', required: true, helperText: 'Wajib diisi bug terjadi di mana' }
-      ];
+    const bugDescriptionPattern = `Role User: 
+Current Condition: 
+Expected Result: 
+Link Halaman: 
+Step to Reproduce: 
+Evidence: 
+Environment: (wajib diisi bug terjadi di mana)`;
 
+    if (!existingTemplate) {
       await db.insert(issueTemplates).values({
         name: 'Bug Report',
         trackerId: bugTrackerId,
         projectId: null, // global
-        titlePattern: '[BUG] {feature} - {bugName}',
-        fields: bugFields,
+        titlePattern: '[BUG] Nama Fitur - Nama Bug',
+        descriptionPattern: bugDescriptionPattern,
       });
       console.log('✅ Seeded default global Bug Report template.');
     } else {
-      console.log('ℹ️ Default global Bug Report template already exists, skipping.');
+      if (!existingTemplate.descriptionPattern || existingTemplate.titlePattern?.includes('{feature}')) {
+        await db.update(issueTemplates)
+          .set({
+            descriptionPattern: bugDescriptionPattern,
+            titlePattern: '[BUG] Nama Fitur - Nama Bug',
+          })
+          .where(eq(issueTemplates.id, existingTemplate.id));
+        console.log('✅ Updated default global Bug Report template with descriptionPattern and new titlePattern.');
+      } else {
+        console.log('ℹ️ Default global Bug Report template already exists, skipping.');
+      }
     }
   }
 

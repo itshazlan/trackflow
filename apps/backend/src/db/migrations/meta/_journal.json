@@ -64,6 +64,20 @@
       "when": 1784022714860,
       "tag": "0008_tired_captain_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784026143081,
+      "tag": "0009_daily_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784026150231,
+      "tag": "0010_uneven_sentinel",
+      "breakpoints": true
     }
   ]
 }

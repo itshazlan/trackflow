@@ -4,7 +4,6 @@ import {
   IsOptional,
   IsUUID,
   IsIn,
-  IsObject,
   IsNumber,
 } from 'class-validator';
 
@@ -18,24 +17,12 @@ export class CreateIssueDto {
   statusId?: string;
 
   @IsString()
-  @IsOptional()
-  title?: string;
+  @IsNotEmpty()
+  title: string;
 
   @IsString()
   @IsOptional()
   description?: string;
-
-  @IsUUID()
-  @IsOptional()
-  templateId?: string;
-
-  @IsObject()
-  @IsOptional()
-  titleValues?: Record<string, string>;
-
-  @IsObject()
-  @IsOptional()
-  fieldValues?: Record<string, string>;
 
   @IsString()
   @IsOptional()

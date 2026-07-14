@@ -39,7 +39,7 @@ export const issueTemplates = pgTable('issue_templates', {
     .references(() => issueTrackers.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
   titlePattern: varchar('title_pattern', { length: 255 }),
-  fields: jsonb('fields').notNull(),
+  descriptionPattern: text('description_pattern'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

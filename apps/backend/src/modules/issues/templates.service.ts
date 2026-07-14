@@ -49,7 +49,7 @@ export class TemplatesService {
         trackerId: createTemplateDto.trackerId,
         projectId: createTemplateDto.projectId ?? null,
         titlePattern: createTemplateDto.titlePattern,
-        fields: createTemplateDto.fields,
+        descriptionPattern: createTemplateDto.descriptionPattern,
       })
       .returning();
 

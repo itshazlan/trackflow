@@ -229,41 +229,31 @@ describe('Issues and Workflow Statuses (e2e)', () => {
   });
 
   describe('Issue Creation and Title/Field Validation', () => {
-    it('should reject creating a template-based issue if Environment is omitted (400)', async () => {
+    it('should reject creating an issue if title is omitted (400)', async () => {
       await request(app.getHttpServer())
         .post(`/projects/${projectId}/issues`)
         .set('x-mock-user-id', mockUsers.developer.id)
         .send({
           trackerId: bugTrackerId,
-          templateId: bugTemplateId,
-          titleValues: { feature: 'Authentication', bugName: 'Crash on login' },
-          fieldValues: {
-            'Role User': 'Reporter',
-            'Current Condition': 'App crash',
-          },
+          description: 'Some description',
         })
         .expect(400);
     });
 
-    it('should successfully create an issue with composed title and parsed description', async () => {
+    it('should successfully create an issue with plain title and description', async () => {
       const res = await request(app.getHttpServer())
         .post(`/projects/${projectId}/issues`)
         .set('x-mock-user-id', mockUsers.developer.id)
         .send({
           trackerId: bugTrackerId,
-          templateId: bugTemplateId,
-          titleValues: { feature: 'Authentication', bugName: 'Crash on login' },
-          fieldValues: {
-            'Role User': 'Reporter',
-            'Current Condition': 'App crash',
-            Environment: 'Staging iOS App',
-          },
+          title: '[BUG] Authentication - Crash on login',
+          description: 'Role User: Reporter\nCurrent Condition: App crash\nEnvironment: Staging iOS App',
         })
         .expect(201);
 
       expect(res.body.title).toBe('[BUG] Authentication - Crash on login');
-      expect(res.body.description).toContain(
-        '**Environment**:\nStaging iOS App',
+      expect(res.body.description).toBe(
+        'Role User: Reporter\nCurrent Condition: App crash\nEnvironment: Staging iOS App',
       );
       expect(res.body.statusId).toBe(defaultStatuses[0].id); // defaults to 'New'
       expect(res.body.number).toBe(1);

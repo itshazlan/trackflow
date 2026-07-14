@@ -86,7 +86,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
   const [templateName, setTemplateName] = useState("");
   const [templateTrackerId, setTemplateTrackerId] = useState("");
   const [templateTitlePattern, setTemplateTitlePattern] = useState("");
-  const [templateFields, setTemplateFields] = useState<TemplateField[]>([]);
+  const [templateDescriptionPattern, setTemplateDescriptionPattern] = useState("");
   const [templateActionLoading, setTemplateActionLoading] = useState(false);
   const [templateError, setTemplateError] = useState("");
 
@@ -264,37 +264,21 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
       setTemplateName(template.name);
       setTemplateTrackerId(template.trackerId);
       setTemplateTitlePattern(template.titlePattern || "");
-      setTemplateFields(template.fields || []);
+      setTemplateDescriptionPattern(template.descriptionPattern || "");
     } else {
       setTemplateEditing(null);
       setTemplateName("");
       setTemplateTrackerId(trackers.length > 0 ? trackers[0].id : "");
       setTemplateTitlePattern("");
-      setTemplateFields([]);
+      setTemplateDescriptionPattern("");
     }
     setTemplateError("");
     setIsTemplateModalOpen(true);
   };
 
-  const handleAddFieldRow = () => {
-    setTemplateFields((prev) => [...prev, { label: "", required: false, helperText: "" }]);
-  };
-
-  const handleRemoveFieldRow = (idx: number) => {
-    setTemplateFields((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleFieldRowChange = (idx: number, key: keyof TemplateField, val: string | boolean) => {
-    setTemplateFields((prev) =>
-      prev.map((f, i) => (i === idx ? { ...f, [key]: val } : f))
-    );
-  };
-
   const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!templateName.trim() || !templateTrackerId) return;
-
-    const validFields = templateFields.filter((f) => f.label.trim() !== "");
 
     setTemplateActionLoading(true);
     setTemplateError("");
@@ -304,11 +288,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
         name: templateName.trim(),
         trackerId: templateTrackerId,
         titlePattern: templateTitlePattern.trim() || undefined,
-        fields: validFields.map((f) => ({
-          label: f.label.trim(),
-          required: f.required,
-          helperText: f.helperText?.trim() || undefined,
-        })),
+        descriptionPattern: templateDescriptionPattern.trim() || undefined,
       };
 
       if (templateEditing) {
@@ -316,7 +296,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
           name: payload.name,
           trackerId: payload.trackerId,
           titlePattern: payload.titlePattern || null,
-          fields: payload.fields,
+          descriptionPattern: payload.descriptionPattern || null,
         });
         setTemplates((prev) => prev.map((t) => (t.id === templateEditing.id ? updated : t)));
       } else {
@@ -544,36 +524,43 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
                   <div>
                     <div className="flex items-center justify-between">
                       <h4 className="text-[13px] font-semibold text-foreground">{tpl.name}</h4>
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        {tpl.tracker?.name || "Tugas"}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {tpl.projectId === null && (
+                          <span className="rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary uppercase tracking-wider">
+                            Global
+                          </span>
+                        )}
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
+                          {tpl.tracker?.name || "Tugas"}
+                        </span>
+                      </div>
                     </div>
                     {tpl.titlePattern && (
                       <p className="text-[11.5px] text-muted-foreground mt-2 leading-relaxed">
                         <span className="font-semibold">Pattern Judul:</span> <code className="font-mono bg-muted/60 px-1 py-0.25 rounded text-[10.5px]">{tpl.titlePattern}</code>
                       </p>
                     )}
-                    <div className="mt-3">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                        Daftar Bidang ({tpl.fields?.length || 0})
-                      </span>
-                      <div className="flex flex-wrap gap-1.5 mt-1.5">
-                        {tpl.fields?.map((f) => (
-                          <span key={f.label} className="rounded border border-border bg-muted/30 px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
-                            {f.label} {f.required && <span className="text-red-500 font-bold">*</span>}
-                          </span>
-                        ))}
+                    {tpl.descriptionPattern && (
+                      <div className="mt-3 bg-muted/20 border border-border/60 rounded p-2 px-2.5 max-h-[120px] overflow-y-auto">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Prefill Deskripsi (Markdown)
+                        </span>
+                        <pre className="text-[11px] text-muted-foreground font-mono whitespace-pre-wrap leading-relaxed">
+                          {tpl.descriptionPattern}
+                        </pre>
                       </div>
+                    )}
+                  </div>
+                  {tpl.projectId !== null && (
+                    <div className="border-t border-border mt-4 pt-3 flex items-center justify-end gap-2">
+                      <Button variant="outline" size="sm" className="h-7 text-[11px] font-medium px-2.5" onClick={() => handleOpenTemplateModal(tpl)}>
+                        Edit Template
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-[11px] font-medium text-destructive hover:bg-destructive/10 hover:text-destructive px-2.5" onClick={() => handleDeleteTemplate(tpl.id)}>
+                        Hapus
+                      </Button>
                     </div>
-                  </div>
-                  <div className="border-t border-border mt-4 pt-3 flex items-center justify-end gap-2">
-                    <Button variant="outline" size="sm" className="h-7 text-[11px] font-medium px-2.5" onClick={() => handleOpenTemplateModal(tpl)}>
-                      Edit Template
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-7 text-[11px] font-medium text-destructive hover:bg-destructive/10 hover:text-destructive px-2.5" onClick={() => handleDeleteTemplate(tpl.id)}>
-                      Hapus
-                    </Button>
-                  </div>
+                  )}
                 </div>
               ))
             )}
@@ -824,80 +811,18 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
 
               <div className="h-px bg-border my-1" />
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Daftar Bidang Input (Fields Editor)
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] font-medium px-2"
-                    onClick={handleAddFieldRow}
-                    disabled={templateActionLoading}
-                  >
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                    Tambah Bidang
-                  </Button>
-                </div>
-
-                <div className="flex flex-col gap-2.5 max-h-[220px] overflow-y-auto pr-1">
-                  {templateFields.length === 0 ? (
-                    <span className="text-[11.5px] text-muted-foreground italic text-center py-4 bg-muted/10 border border-dashed border-border rounded">
-                      Belum ada bidang khusus. Klik Tambah Bidang.
-                    </span>
-                  ) : (
-                    templateFields.map((field, idx) => (
-                      <div key={idx} className="flex items-start gap-2 border border-border bg-card/60 p-2 rounded-lg relative group">
-                        <div className="flex-1 flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="text"
-                              placeholder="Nama Bidang (contoh: Environment)"
-                              value={field.label}
-                              onChange={(e) => handleFieldRowChange(idx, "label", e.target.value)}
-                              className="h-7 text-[12px] flex-1"
-                              required
-                              disabled={templateActionLoading}
-                            />
-                            <div className="flex items-center gap-1.5 shrink-0 select-none">
-                              <input
-                                id={`req-${idx}`}
-                                type="checkbox"
-                                checked={field.required}
-                                onChange={(e) => handleFieldRowChange(idx, "required", e.target.checked)}
-                                className="h-3.5 w-3.5 border-border rounded accent-primary cursor-pointer"
-                                disabled={templateActionLoading}
-                              />
-                              <Label htmlFor={`req-${idx}`} className="text-[11px] font-medium text-muted-foreground cursor-pointer select-none">
-                                Wajib
-                              </Label>
-                            </div>
-                          </div>
-                          <Input
-                            type="text"
-                            placeholder="Helper text/deskripsi pengisian..."
-                            value={field.helperText || ""}
-                            onChange={(e) => handleFieldRowChange(idx, "helperText", e.target.value)}
-                            className="h-7 text-[11px] text-muted-foreground"
-                            disabled={templateActionLoading}
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
-                          onClick={() => handleRemoveFieldRow(idx)}
-                          disabled={templateActionLoading}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="template-desc-pattern" className="text-[11px] font-medium text-muted-foreground">
+                  Template Deskripsi / Prefill Masalah (Opsional)
+                </Label>
+                <textarea
+                  id="template-desc-pattern"
+                  placeholder="Masukkan teks awal deskripsi (Markdown)..."
+                  value={templateDescriptionPattern}
+                  onChange={(e) => setTemplateDescriptionPattern(e.target.value)}
+                  className="min-h-[160px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  disabled={templateActionLoading}
+                />
               </div>
             </div>
 

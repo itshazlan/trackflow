@@ -11,7 +11,6 @@ import { DRIZZLE } from '../../db/drizzle.provider';
 import {
   issues,
   issueStatuses,
-  issueTemplates,
   issueTrackers,
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
@@ -31,53 +30,10 @@ export class IssuesService {
     createIssueDto: CreateIssueDto,
     userId: string,
   ) {
-    let title = createIssueDto.title;
-    let description = createIssueDto.description;
+    const title = createIssueDto.title;
+    const description = createIssueDto.description;
 
-    // 1. Template Resolution and Compiler (if templateId provided)
-    if (createIssueDto.templateId) {
-      const [template] = await this.db
-        .select()
-        .from(issueTemplates)
-        .where(eq(issueTemplates.id, createIssueDto.templateId))
-        .limit(1);
-
-      if (!template) {
-        throw new NotFoundException(
-          `Issue template with ID ${createIssueDto.templateId} not found`,
-        );
-      }
-
-      const fields = template.fields as any[];
-      const fieldValues = createIssueDto.fieldValues || {};
-      const titleValues = createIssueDto.titleValues || {};
-
-      // Validate required template fields
-      for (const field of fields) {
-        if (field.required && !fieldValues[field.label]) {
-          throw new BadRequestException(
-            `Template field "${field.label}" is required. ${field.helperText || ''}`,
-          );
-        }
-      }
-
-      // Render Title
-      let pattern = template.titlePattern || '';
-      for (const [key, val] of Object.entries(titleValues)) {
-        pattern = pattern.replace(new RegExp(`{${key}}`, 'g'), val);
-      }
-      title = pattern || `${template.name} - Created`;
-
-      // Render Description
-      let mdDesc = '';
-      for (const field of fields) {
-        const val = fieldValues[field.label] || '';
-        mdDesc += `**${field.label}**:\n${val}\n\n`;
-      }
-      description = mdDesc.trim();
-    }
-
-    if (!title) {
+    if (!title || !title.trim()) {
       throw new BadRequestException('Issue title is required');
     }
 

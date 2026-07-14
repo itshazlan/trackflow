@@ -1,0 +1,1 @@
+ALTER TABLE "issue_templates" DROP COLUMN "fields";

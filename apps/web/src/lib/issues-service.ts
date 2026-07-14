@@ -63,7 +63,7 @@ export interface IssueTemplate {
   trackerId: string;
   name: string;
   titlePattern: string | null;
-  fields: TemplateField[];
+  descriptionPattern: string | null;
   createdAt: string;
   tracker?: {
     id: string;
@@ -91,11 +91,8 @@ export async function createIssue(
   payload: {
     trackerId: string;
     statusId?: string;
-    title?: string;
+    title: string;
     description?: string;
-    templateId?: string;
-    titleValues?: Record<string, string>;
-    fieldValues?: Record<string, string>;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
     assigneeId?: string | null;
     dueDate?: string | null;
@@ -380,7 +377,7 @@ export async function getProjectTemplates(projectId: string): Promise<IssueTempl
 
 export async function createProjectTemplate(
   projectId: string,
-  payload: { name: string; trackerId: string; titlePattern?: string; fields: TemplateField[] }
+  payload: { name: string; trackerId: string; titlePattern?: string; descriptionPattern?: string }
 ): Promise<IssueTemplate> {
   const res = await fetch(`/api/projects/${projectId}/templates`, {
     method: "POST",
@@ -401,7 +398,7 @@ export async function createProjectTemplate(
 export async function updateProjectTemplate(
   projectId: string,
   templateId: string,
-  payload: Partial<{ name: string; trackerId: string; titlePattern: string | null; fields: TemplateField[] }>
+  payload: Partial<{ name: string; trackerId: string; titlePattern: string | null; descriptionPattern: string | null }>
 ): Promise<IssueTemplate> {
   const res = await fetch(`/api/projects/${projectId}/templates/${templateId}`, {
     method: "PATCH",
