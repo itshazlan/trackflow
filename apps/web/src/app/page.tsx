@@ -442,7 +442,7 @@ export default function Home() {
                 className="text-xs h-8 border-border bg-input"
               />
             </div>
-            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+            <DialogFooter className="mt-6">
               <Button
                 type="button"
                 variant="outline"
@@ -891,7 +891,7 @@ function IssuesSection({ project }: { project: Project }) {
               />
             </div>
 
-            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+            <DialogFooter className="mt-6">
               <Button
                 type="button"
                 variant="outline"
@@ -2807,7 +2807,7 @@ function SettingsSection({ project }: { project: Project }) {
               </p>
             </div>
 
-            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+            <DialogFooter className="mt-6">
               <Button
                 type="button"
                 variant="outline"
@@ -2956,7 +2956,7 @@ function SettingsSection({ project }: { project: Project }) {
               )}
             </div>
 
-            <DialogFooter className="p-0 mt-6 flex justify-end gap-2 border-t border-border pt-4">
+            <DialogFooter className="mt-6">
               <Button
                 type="button"
                 variant="outline"
