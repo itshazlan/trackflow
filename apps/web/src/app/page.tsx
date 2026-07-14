@@ -653,7 +653,7 @@ function IssuesSection({ project }: { project: Project }) {
             <option value="all">Assignee: Semua</option>
             <option value="unassigned">Belum Ditugaskan</option>
             {members.map((m) => (
-              <option key={m.userId} value={m.userId}>{m.user.name}</option>
+              <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
         </div>
@@ -839,7 +839,7 @@ function IssuesSection({ project }: { project: Project }) {
                 >
                   <option value="">Belum Ditugaskan</option>
                   {members.map((m) => (
-                    <option key={m.userId} value={m.userId}>{m.user.name}</option>
+                    <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </select>
               </div>

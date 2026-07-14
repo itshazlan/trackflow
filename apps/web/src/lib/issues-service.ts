@@ -41,14 +41,11 @@ export interface Tracker {
 
 export interface ProjectMember {
   id: string;
-  projectId: string;
-  userId: string;
+  name: string;
+  email: string;
+  username: string;
   role: 'manager' | 'developer' | 'reporter_qa';
-  user: {
-    id: string;
-    name: string;
-    email: string;
-  };
+  invitedAt: string;
 }
 
 export async function getIssues(projectId: string): Promise<Issue[]> {
