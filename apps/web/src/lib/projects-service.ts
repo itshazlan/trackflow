@@ -4,6 +4,8 @@ export interface Project {
   description: string | null;
   createdBy: string;
   createdAt: string;
+  parentProjectId?: string | null;
+  parent_project_id?: string | null;
 }
 
 export async function getProjects(): Promise<Project[]> {

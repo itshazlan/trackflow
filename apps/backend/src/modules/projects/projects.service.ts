@@ -65,7 +65,11 @@ export class ProjectsService {
   async findAll(user: { id: string; isAdmin: boolean }) {
     if (user.isAdmin) {
       // Admins see all projects
-      return this.db.select().from(projects);
+      const all = await this.db.select().from(projects);
+      return all.map((p: any) => ({
+        ...p,
+        parent_project_id: p.parentProjectId,
+      }));
     }
 
     // Normal users only see projects they are members of
@@ -85,7 +89,10 @@ export class ProjectsService {
       )
       .where(eq(projectMemberships.userId, user.id));
 
-    return userProjects;
+    return userProjects.map((p: any) => ({
+      ...p,
+      parent_project_id: p.parentProjectId,
+    }));
   }
 
   async findOne(id: string) {

@@ -48,6 +48,26 @@ export default function DashboardLayout({
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const sortedProjects = React.useMemo(() => {
+    const roots = projects.filter((p) => !p.parentProjectId && !p.parent_project_id);
+    const result: Project[] = [];
+    
+    roots.forEach((root) => {
+      result.push(root);
+      const subs = projects.filter(
+        (p) => p.parentProjectId === root.id || p.parent_project_id === root.id
+      );
+      result.push(...subs);
+    });
+
+    projects.forEach((p) => {
+      if (!result.some((r) => r.id === p.id)) {
+        result.push(p);
+      }
+    });
+
+    return result;
+  }, [projects]);
 
   useEffect(() => {
     async function loadData() {
@@ -162,18 +182,21 @@ export default function DashboardLayout({
                   Daftar Proyek
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {projects.map((p) => (
-                  <DropdownMenuItem
-                    key={p.id}
-                    onClick={() => router.push(`/projects/${p.id}`)}
-                    className="text-[13px]"
-                  >
-                    <div className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-medium mr-2">
-                      {p.name[0].toUpperCase()}
-                    </div>
-                    <span className="truncate">{p.name}</span>
-                  </DropdownMenuItem>
-                ))}
+                {sortedProjects.map((p) => {
+                  const isSub = p.parentProjectId || p.parent_project_id;
+                  return (
+                    <DropdownMenuItem
+                      key={p.id}
+                      onClick={() => router.push(`/projects/${p.id}`)}
+                      className={`text-[13px] ${isSub ? "pl-6" : ""}`}
+                    >
+                      <div className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-medium mr-2">
+                        {p.name[0].toUpperCase()}
+                      </div>
+                      <span className="truncate">{p.name}</span>
+                    </DropdownMenuItem>
+                  );
+                })}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => router.push("/projects")}
