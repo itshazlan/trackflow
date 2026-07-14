@@ -1,15 +1,18 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
-  UseGuards 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { MembershipsService } from './memberships.service';
-import { AddMembershipDto, UpdateMembershipDto } from './dto/add-membership.dto';
+import {
+  AddMembershipDto,
+  UpdateMembershipDto,
+} from './dto/add-membership.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { ProjectRoleGuard } from '../../common/guards/project-role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -22,10 +25,14 @@ export class MembershipsController {
   @Post()
   @Roles('manager')
   addMember(
-    @Param('projectId') projectId: string, 
-    @Body() addMembershipDto: AddMembershipDto
+    @Param('projectId') projectId: string,
+    @Body() addMembershipDto: AddMembershipDto,
   ) {
-    return this.membershipsService.addMember(projectId, addMembershipDto.userId, addMembershipDto.role);
+    return this.membershipsService.addMember(
+      projectId,
+      addMembershipDto.userId,
+      addMembershipDto.role,
+    );
   }
 
   @Get()
@@ -38,16 +45,20 @@ export class MembershipsController {
   updateRole(
     @Param('projectId') projectId: string,
     @Param('userId') userId: string,
-    @Body() updateMembershipDto: UpdateMembershipDto
+    @Body() updateMembershipDto: UpdateMembershipDto,
   ) {
-    return this.membershipsService.updateRole(projectId, userId, updateMembershipDto.role);
+    return this.membershipsService.updateRole(
+      projectId,
+      userId,
+      updateMembershipDto.role,
+    );
   }
 
   @Delete(':userId')
   @Roles('manager')
   removeMember(
     @Param('projectId') projectId: string,
-    @Param('userId') userId: string
+    @Param('userId') userId: string,
   ) {
     return this.membershipsService.removeMember(projectId, userId);
   }

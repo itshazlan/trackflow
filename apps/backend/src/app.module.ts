@@ -14,7 +14,7 @@ import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
-    DbModule, 
+    DbModule,
     AuthModule,
     ProjectsModule,
     MembershipsModule,

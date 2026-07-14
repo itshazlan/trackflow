@@ -1,13 +1,13 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
-  UseGuards, 
-  Req 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -45,7 +45,10 @@ export class ProjectsController {
   @Patch(':id')
   @UseGuards(ProjectRoleGuard)
   @Roles('manager')
-  update(@Param('id') id: string, @Body() updateProjectDto: Partial<CreateProjectDto>) {
+  update(
+    @Param('id') id: string,
+    @Body() updateProjectDto: Partial<CreateProjectDto>,
+  ) {
     return this.projectsService.update(id, updateProjectDto);
   }
 

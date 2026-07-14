@@ -1,4 +1,10 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Inject,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
@@ -13,7 +19,10 @@ export class ProjectRoleGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredRoles = this.reflector.get<ProjectRole[]>('roles', context.getHandler());
+    const requiredRoles = this.reflector.get<ProjectRole[]>(
+      'roles',
+      context.getHandler(),
+    );
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
@@ -37,8 +46,8 @@ export class ProjectRoleGuard implements CanActivate {
       .where(
         and(
           eq(projectMemberships.projectId, projectId),
-          eq(projectMemberships.userId, user.id)
-        )
+          eq(projectMemberships.userId, user.id),
+        ),
       )
       .limit(1);
 
@@ -47,7 +56,11 @@ export class ProjectRoleGuard implements CanActivate {
     }
 
     const userRole = membership[0].role as ProjectRole;
-    if (requiredRoles && requiredRoles.length > 0 && !requiredRoles.includes(userRole)) {
+    if (
+      requiredRoles &&
+      requiredRoles.length > 0 &&
+      !requiredRoles.includes(userRole)
+    ) {
       throw new ForbiddenException('Insufficient project permissions');
     }
 

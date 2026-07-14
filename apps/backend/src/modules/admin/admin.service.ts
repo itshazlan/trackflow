@@ -1,10 +1,19 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { appSettings } from '../../db/schema/settings';
 import { user } from '../../db/schema/auth';
 import { UpdateSettingsDto } from './dto/admin-settings.dto';
-import { AdminCreateUserDto, AdminUpdateUserDto, UpdateEmploymentDto } from './dto/admin-user.dto';
+import {
+  AdminCreateUserDto,
+  AdminUpdateUserDto,
+  UpdateEmploymentDto,
+} from './dto/admin-user.dto';
 import { auth } from '../auth/better-auth.config';
 
 @Injectable()
@@ -24,7 +33,10 @@ export class AdminService {
   async updateSettings(dto: UpdateSettingsDto) {
     const [settings] = await this.db.select().from(appSettings).limit(1);
     if (!settings) {
-      const [inserted] = await this.db.insert(appSettings).values(dto).returning();
+      const [inserted] = await this.db
+        .insert(appSettings)
+        .values(dto)
+        .returning();
       return inserted;
     }
 

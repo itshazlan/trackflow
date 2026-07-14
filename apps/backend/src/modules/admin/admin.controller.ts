@@ -1,15 +1,19 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Patch, 
-  Body, 
-  Param, 
-  UseGuards 
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { UpdateSettingsDto } from './dto/admin-settings.dto';
-import { AdminCreateUserDto, AdminUpdateUserDto, UpdateEmploymentDto } from './dto/admin-user.dto';
+import {
+  AdminCreateUserDto,
+  AdminUpdateUserDto,
+  UpdateEmploymentDto,
+} from './dto/admin-user.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
 

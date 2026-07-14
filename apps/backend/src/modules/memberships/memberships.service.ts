@@ -1,9 +1,9 @@
-import { 
-  Injectable, 
-  Inject, 
-  NotFoundException, 
-  ConflictException, 
-  BadRequestException 
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
@@ -34,8 +34,8 @@ export class MembershipsService {
       .where(
         and(
           eq(projectMemberships.projectId, projectId),
-          eq(projectMemberships.userId, userId)
-        )
+          eq(projectMemberships.userId, userId),
+        ),
       )
       .limit(1);
 
@@ -79,8 +79,8 @@ export class MembershipsService {
       .where(
         and(
           eq(projectMemberships.projectId, projectId),
-          eq(projectMemberships.userId, userId)
-        )
+          eq(projectMemberships.userId, userId),
+        ),
       )
       .limit(1);
 
@@ -97,8 +97,8 @@ export class MembershipsService {
         .where(
           and(
             eq(projectMemberships.projectId, projectId),
-            eq(projectMemberships.role, 'manager')
-          )
+            eq(projectMemberships.role, 'manager'),
+          ),
         );
 
       if (managers.length <= 1) {
@@ -112,8 +112,8 @@ export class MembershipsService {
       .where(
         and(
           eq(projectMemberships.projectId, projectId),
-          eq(projectMemberships.userId, userId)
-        )
+          eq(projectMemberships.userId, userId),
+        ),
       )
       .returning();
 
@@ -127,8 +127,8 @@ export class MembershipsService {
       .where(
         and(
           eq(projectMemberships.projectId, projectId),
-          eq(projectMemberships.userId, userId)
-        )
+          eq(projectMemberships.userId, userId),
+        ),
       )
       .limit(1);
 
@@ -144,8 +144,8 @@ export class MembershipsService {
         .where(
           and(
             eq(projectMemberships.projectId, projectId),
-            eq(projectMemberships.role, 'manager')
-          )
+            eq(projectMemberships.role, 'manager'),
+          ),
         );
 
       if (managers.length <= 1) {
@@ -158,8 +158,8 @@ export class MembershipsService {
       .where(
         and(
           eq(projectMemberships.projectId, projectId),
-          eq(projectMemberships.userId, userId)
-        )
+          eq(projectMemberships.userId, userId),
+        ),
       )
       .returning();
 

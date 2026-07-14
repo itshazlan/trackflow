@@ -1,13 +1,13 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
-  UseGuards, 
-  ForbiddenException 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { TemplatesService } from './templates.service';
 import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto';
@@ -36,7 +36,10 @@ export class TemplatesController {
 
   @Patch(':id')
   @UseGuards(AdminGuard)
-  updateGlobal(@Param('id') id: string, @Body() updateTemplateDto: UpdateTemplateDto) {
+  updateGlobal(
+    @Param('id') id: string,
+    @Body() updateTemplateDto: UpdateTemplateDto,
+  ) {
     return this.templatesService.update(id, updateTemplateDto);
   }
 
@@ -62,7 +65,7 @@ export class ProjectTemplatesController {
   @Roles('manager')
   createProjectTemplate(
     @Param('projectId') projectId: string,
-    @Body() createTemplateDto: CreateTemplateDto
+    @Body() createTemplateDto: CreateTemplateDto,
   ) {
     createTemplateDto.projectId = projectId; // force project-level
     return this.templatesService.create(createTemplateDto);
@@ -73,7 +76,7 @@ export class ProjectTemplatesController {
   async updateProjectTemplate(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
-    @Body() updateTemplateDto: UpdateTemplateDto
+    @Body() updateTemplateDto: UpdateTemplateDto,
   ) {
     // Verify template belongs to the project before updating
     const template = await this.templatesService.findOne(id);
@@ -87,7 +90,7 @@ export class ProjectTemplatesController {
   @Roles('manager')
   async removeProjectTemplate(
     @Param('projectId') projectId: string,
-    @Param('id') id: string
+    @Param('id') id: string,
   ) {
     // Verify template belongs to the project before deleting
     const template = await this.templatesService.findOne(id);

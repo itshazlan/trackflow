@@ -1,13 +1,13 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
-  UseGuards, 
-  Req 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { IssuesService } from './issues.service';
 import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
@@ -37,7 +37,7 @@ export class IssuesController {
   create(
     @Param('projectId') projectId: string,
     @Body() createIssueDto: CreateIssueDto,
-    @Req() req: any
+    @Req() req: any,
   ) {
     return this.issuesService.create(projectId, createIssueDto, req.user.id);
   }
@@ -57,17 +57,19 @@ export class IssuesController {
     @Param('projectId') projectId: string,
     @Param('id') id: string,
     @Body() updateIssueDto: UpdateIssueDto,
-    @Req() req: any
+    @Req() req: any,
   ) {
-    return this.issuesService.update(projectId, id, updateIssueDto, req.user.id);
+    return this.issuesService.update(
+      projectId,
+      id,
+      updateIssueDto,
+      req.user.id,
+    );
   }
 
   @Delete(':id')
   @Roles('manager')
-  remove(
-    @Param('projectId') projectId: string,
-    @Param('id') id: string
-  ) {
+  remove(@Param('projectId') projectId: string, @Param('id') id: string) {
     return this.issuesService.remove(projectId, id);
   }
 }

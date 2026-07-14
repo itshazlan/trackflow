@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsIn, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsInt,
+  IsIn,
+  IsArray,
+} from 'class-validator';
 import type { ProjectRole } from '@trackflow/shared-types';
 
 export class CreateStatusDto {

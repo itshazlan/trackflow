@@ -1,4 +1,9 @@
-import { Injectable, Inject, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { projects, projectMemberships } from '../../db/schema/projects';
@@ -74,7 +79,10 @@ export class ProjectsService {
         createdAt: projects.createdAt,
       })
       .from(projects)
-      .innerJoin(projectMemberships, eq(projects.id, projectMemberships.projectId))
+      .innerJoin(
+        projectMemberships,
+        eq(projects.id, projectMemberships.projectId),
+      )
       .where(eq(projectMemberships.userId, user.id));
 
     return userProjects;

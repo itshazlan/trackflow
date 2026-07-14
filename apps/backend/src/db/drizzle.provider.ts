@@ -8,7 +8,9 @@ export const DRIZZLE = 'DRIZZLE';
 export const DrizzleProvider: Provider = {
   provide: DRIZZLE,
   useFactory: () => {
-    const connectionString = process.env.DATABASE_URL || 'postgres://trackflow:trackflow@localhost:5432/trackflow';
+    const connectionString =
+      process.env.DATABASE_URL ||
+      'postgres://trackflow:trackflow@localhost:5432/trackflow';
     const client = postgres(connectionString);
     return drizzle(client, { schema });
   },

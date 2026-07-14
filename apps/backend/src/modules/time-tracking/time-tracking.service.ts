@@ -1,14 +1,19 @@
-import { 
-  Injectable, 
-  Inject, 
-  NotFoundException, 
-  BadRequestException, 
-  ForbiddenException, 
-  InternalServerErrorException 
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { eq, and, or, gte, lte, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
-import { timeBlocks, activityLogs, screenshots, timeBlockAuditLogs } from '../../db/schema/time-tracking';
+import {
+  timeBlocks,
+  activityLogs,
+  screenshots,
+  timeBlockAuditLogs,
+} from '../../db/schema/time-tracking';
 import { appSettings } from '../../db/schema/settings';
 import { projectMemberships } from '../../db/schema/projects';
 import { SyncTimeBlockDto } from './dto/sync-time-block.dto';
@@ -29,8 +34,8 @@ export class TimeTrackingService {
         .where(
           and(
             eq(projectMemberships.projectId, dto.projectId),
-            eq(projectMemberships.userId, userId)
-          )
+            eq(projectMemberships.userId, userId),
+          ),
         )
         .limit(1);
 
@@ -46,7 +51,9 @@ export class TimeTrackingService {
     // 2. Compute purgeAfter date
     const start = new Date(dto.blockStart);
     const end = new Date(dto.blockEnd);
-    const purgeAfter = new Date(start.getTime() + retentionDays * 24 * 60 * 60 * 1000);
+    const purgeAfter = new Date(
+      start.getTime() + retentionDays * 24 * 60 * 60 * 1000,
+    );
 
     // 3. Determine activityLevel
     const totalInputs = dto.activity.keyboardCount + dto.activity.mouseCount;
@@ -96,7 +103,11 @@ export class TimeTrackingService {
     }
   }
 
-  async saveScreenshot(timeBlockId: string, filePath: string, capturedAt: string) {
+  async saveScreenshot(
+    timeBlockId: string,
+    filePath: string,
+    capturedAt: string,
+  ) {
     const [timeBlock] = await this.db
       .select()
       .from(timeBlocks)
@@ -104,7 +115,9 @@ export class TimeTrackingService {
       .limit(1);
 
     if (!timeBlock) {
-      throw new NotFoundException(`Time block with ID ${timeBlockId} not found`);
+      throw new NotFoundException(
+        `Time block with ID ${timeBlockId} not found`,
+      );
     }
 
     const [screenshot] = await this.db
@@ -119,9 +132,17 @@ export class TimeTrackingService {
     return screenshot;
   }
 
-  async findAllForUser(userId: string, projectId?: string, startDate?: string, endDate?: string) {
-    const queryConditions = [eq(timeBlocks.userId, userId), eq(timeBlocks.isDeleted, false)];
-    
+  async findAllForUser(
+    userId: string,
+    projectId?: string,
+    startDate?: string,
+    endDate?: string,
+  ) {
+    const queryConditions = [
+      eq(timeBlocks.userId, userId),
+      eq(timeBlocks.isDeleted, false),
+    ];
+
     if (projectId) {
       queryConditions.push(eq(timeBlocks.projectId, projectId));
     }
@@ -167,13 +188,15 @@ export class TimeTrackingService {
         and(
           eq(timeBlocks.id, timeBlockId),
           eq(timeBlocks.userId, userId),
-          eq(timeBlocks.isDeleted, false)
-        )
+          eq(timeBlocks.isDeleted, false),
+        ),
       )
       .limit(1);
 
     if (!existing) {
-      throw new NotFoundException(`Active time block with ID ${timeBlockId} not found for this user`);
+      throw new NotFoundException(
+        `Active time block with ID ${timeBlockId} not found for this user`,
+      );
     }
 
     return this.db.transaction(async (tx: any) => {
@@ -203,7 +226,12 @@ export class TimeTrackingService {
     });
   }
 
-  async adminOverride(timeBlockId: string, actorId: string, action: 'delete' | 'mark_unpaid', reason: string) {
+  async adminOverride(
+    timeBlockId: string,
+    actorId: string,
+    action: 'delete' | 'mark_unpaid',
+    reason: string,
+  ) {
     const [existing] = await this.db
       .select()
       .from(timeBlocks)
@@ -211,12 +239,14 @@ export class TimeTrackingService {
       .limit(1);
 
     if (!existing) {
-      throw new NotFoundException(`Time block with ID ${timeBlockId} not found`);
+      throw new NotFoundException(
+        `Time block with ID ${timeBlockId} not found`,
+      );
     }
 
     return this.db.transaction(async (tx: any) => {
       let updated;
-      
+
       if (action === 'delete') {
         [updated] = await tx
           .update(timeBlocks)

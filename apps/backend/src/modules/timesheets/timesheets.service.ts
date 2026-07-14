@@ -90,7 +90,10 @@ export class TimesheetsService {
     const end = new Date(dto.periodEnd + 'T23:59:59Z');
 
     const timeBlockRows = await this.db
-      .select({ blockStart: timeBlocks.blockStart, blockEnd: timeBlocks.blockEnd })
+      .select({
+        blockStart: timeBlocks.blockStart,
+        blockEnd: timeBlocks.blockEnd,
+      })
       .from(timeBlocks)
       .where(
         and(
@@ -117,7 +120,8 @@ export class TimesheetsService {
     // Calculate total minutes from time blocks
     let totalMinutes = 0;
     for (const row of timeBlockRows) {
-      const diffMs = new Date(row.blockEnd).getTime() - new Date(row.blockStart).getTime();
+      const diffMs =
+        new Date(row.blockEnd).getTime() - new Date(row.blockStart).getTime();
       totalMinutes += Math.round(diffMs / 60000);
     }
     // Add manual entries
@@ -144,7 +148,10 @@ export class TimesheetsService {
     if (projectId) {
       conditions.push(eq(timesheets.projectId, projectId));
     }
-    return this.db.select().from(timesheets).where(and(...conditions));
+    return this.db
+      .select()
+      .from(timesheets)
+      .where(and(...conditions));
   }
 
   async submitTimesheet(timesheetId: string, userId: string) {
@@ -161,7 +168,9 @@ export class TimesheetsService {
       throw new ForbiddenException('You can only submit your own timesheets');
     }
     if (existing.status !== 'draft') {
-      throw new BadRequestException(`Timesheet is already in status "${existing.status}"`);
+      throw new BadRequestException(
+        `Timesheet is already in status "${existing.status}"`,
+      );
     }
 
     const [updated] = await this.db
@@ -191,7 +200,9 @@ export class TimesheetsService {
 
     // Only managers or admins of the project can approve
     if (reviewerRole !== 'manager' && reviewerRole !== 'admin') {
-      throw new ForbiddenException('Only managers or admins can approve timesheets');
+      throw new ForbiddenException(
+        'Only managers or admins can approve timesheets',
+      );
     }
     if (existing.status !== 'submitted') {
       throw new BadRequestException(
@@ -219,7 +230,11 @@ export class TimesheetsService {
     });
   }
 
-  async getTimesheetDetail(timesheetId: string, userId: string, isAdmin: boolean) {
+  async getTimesheetDetail(
+    timesheetId: string,
+    userId: string,
+    isAdmin: boolean,
+  ) {
     const [timesheet] = await this.db
       .select()
       .from(timesheets)
@@ -239,8 +254,8 @@ export class TimesheetsService {
           and(
             eq(projectMemberships.projectId, timesheet.projectId),
             eq(projectMemberships.userId, userId),
-            eq(projectMemberships.role, 'manager')
-          )
+            eq(projectMemberships.role, 'manager'),
+          ),
         )
         .limit(1);
 

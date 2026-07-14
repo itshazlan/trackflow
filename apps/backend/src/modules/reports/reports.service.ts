@@ -16,13 +16,22 @@ export class ReportsService {
     return d.toISOString().split('T')[0];
   }
 
-  async getReportData(projectId?: string, userId?: string, startDate?: string, endDate?: string) {
+  async getReportData(
+    projectId?: string,
+    userId?: string,
+    startDate?: string,
+    endDate?: string,
+  ) {
     // 1. Fetch Time Blocks
     const blockConditions: any[] = [eq(timeBlocks.isDeleted, false)];
     if (projectId) blockConditions.push(eq(timeBlocks.projectId, projectId));
     if (userId) blockConditions.push(eq(timeBlocks.userId, userId));
-    if (startDate) blockConditions.push(gte(timeBlocks.blockStart, new Date(startDate)));
-    if (endDate) blockConditions.push(lte(timeBlocks.blockEnd, new Date(endDate + 'T23:59:59.999Z')));
+    if (startDate)
+      blockConditions.push(gte(timeBlocks.blockStart, new Date(startDate)));
+    if (endDate)
+      blockConditions.push(
+        lte(timeBlocks.blockEnd, new Date(endDate + 'T23:59:59.999Z')),
+      );
 
     const blocks = await this.db
       .select({
@@ -43,10 +52,13 @@ export class ReportsService {
 
     // 2. Fetch Manual Time Entries
     const manualConditions: any[] = [];
-    if (projectId) manualConditions.push(eq(manualTimeEntries.projectId, projectId));
+    if (projectId)
+      manualConditions.push(eq(manualTimeEntries.projectId, projectId));
     if (userId) manualConditions.push(eq(manualTimeEntries.userId, userId));
-    if (startDate) manualConditions.push(gte(manualTimeEntries.entryDate, startDate));
-    if (endDate) manualConditions.push(lte(manualTimeEntries.entryDate, endDate));
+    if (startDate)
+      manualConditions.push(gte(manualTimeEntries.entryDate, startDate));
+    if (endDate)
+      manualConditions.push(lte(manualTimeEntries.entryDate, endDate));
 
     const manuals = await this.db
       .select({
@@ -64,14 +76,17 @@ export class ReportsService {
       .innerJoin(user, eq(manualTimeEntries.userId, user.id))
       .innerJoin(projects, eq(manualTimeEntries.projectId, projects.id))
       .leftJoin(issues, eq(manualTimeEntries.issueId, issues.id))
-      .where(manualConditions.length > 0 ? and(...manualConditions) : undefined);
+      .where(
+        manualConditions.length > 0 ? and(...manualConditions) : undefined,
+      );
 
     // 3. Format & Combine Data
     const formattedData: any[] = [];
     let totalMinutes = 0;
 
     for (const b of blocks) {
-      const diffMs = new Date(b.blockEnd).getTime() - new Date(b.blockStart).getTime();
+      const diffMs =
+        new Date(b.blockEnd).getTime() - new Date(b.blockStart).getTime();
       const minutes = Math.round(diffMs / 60000);
       totalMinutes += minutes;
 
@@ -100,7 +115,9 @@ export class ReportsService {
     }
 
     // Sort report rows chronologically
-    formattedData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    formattedData.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
 
     return {
       rows: formattedData,
@@ -109,7 +126,11 @@ export class ReportsService {
     };
   }
 
-  generateCsv(report: { rows: any[]; totalMinutes: number; totalHours: string }): string {
+  generateCsv(report: {
+    rows: any[];
+    totalMinutes: number;
+    totalHours: string;
+  }): string {
     let csv = 'Date,User,Project,Issue,Type,Duration (Mins),Status\n';
     for (const row of report.rows) {
       csv += `"${row.date}","${row.user}","${row.project}","${row.issue}","${row.type}",${row.durationMins},"${row.status}"\n`;
@@ -120,7 +141,11 @@ export class ReportsService {
     return csv;
   }
 
-  async generatePdf(report: { rows: any[]; totalMinutes: number; totalHours: string }): Promise<Buffer> {
+  async generatePdf(report: {
+    rows: any[];
+    totalMinutes: number;
+    totalHours: string;
+  }): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50, size: 'A4' });
       const buffers: Buffer[] = [];
@@ -130,13 +155,15 @@ export class ReportsService {
       doc.on('error', (err: any) => reject(err));
 
       // --- Header Design ---
-      doc.fillColor('#1e293b')
+      doc
+        .fillColor('#1e293b')
         .fontSize(22)
         .text('TrackFlow Work Hours Report', { align: 'center' });
       doc.moveDown(0.2);
-      
+
       const generatedAt = new Date().toLocaleString();
-      doc.fillColor('#64748b')
+      doc
+        .fillColor('#64748b')
         .fontSize(10)
         .text(`Generated at: ${generatedAt}`, { align: 'center' });
       doc.moveDown(1.5);
@@ -144,12 +171,24 @@ export class ReportsService {
       // --- Summary Cards ---
       const summaryTop = doc.y;
       doc.rect(50, summaryTop, 240, 60).fill('#f8fafc');
-      doc.fillColor('#475569').fontSize(10).text('TOTAL MINUTES TRACKED', 65, summaryTop + 15);
-      doc.fillColor('#0f172a').fontSize(16).text(String(report.totalMinutes), 65, summaryTop + 32);
+      doc
+        .fillColor('#475569')
+        .fontSize(10)
+        .text('TOTAL MINUTES TRACKED', 65, summaryTop + 15);
+      doc
+        .fillColor('#0f172a')
+        .fontSize(16)
+        .text(String(report.totalMinutes), 65, summaryTop + 32);
 
       doc.rect(305, summaryTop, 240, 60).fill('#f8fafc');
-      doc.fillColor('#475569').fontSize(10).text('TOTAL HOURS TRACKED', 320, summaryTop + 15);
-      doc.fillColor('#0f172a').fontSize(16).text(`${report.totalHours} hrs`, 320, summaryTop + 32);
+      doc
+        .fillColor('#475569')
+        .fontSize(10)
+        .text('TOTAL HOURS TRACKED', 320, summaryTop + 15);
+      doc
+        .fillColor('#0f172a')
+        .fontSize(16)
+        .text(`${report.totalHours} hrs`, 320, summaryTop + 32);
       doc.moveDown(4.5);
 
       // --- Table Headers ---
@@ -192,10 +231,25 @@ export class ReportsService {
         }
         doc.fillColor('#334155').fontSize(8);
         doc.text(row.date, 55, currentY + 6, { width: 60 });
-        doc.text(row.user.length > 22 ? row.user.substring(0, 22) + '..' : row.user, 120, currentY + 6, { width: 120 });
-        doc.text(row.project.length > 18 ? row.project.substring(0, 18) + '..' : row.project, 245, currentY + 6, { width: 90 });
+        doc.text(
+          row.user.length > 22 ? row.user.substring(0, 22) + '..' : row.user,
+          120,
+          currentY + 6,
+          { width: 120 },
+        );
+        doc.text(
+          row.project.length > 18
+            ? row.project.substring(0, 18) + '..'
+            : row.project,
+          245,
+          currentY + 6,
+          { width: 90 },
+        );
         doc.text(row.type, 340, currentY + 6, { width: 60 });
-        doc.text(String(row.durationMins), 415, currentY + 6, { width: 40, align: 'right' });
+        doc.text(String(row.durationMins), 415, currentY + 6, {
+          width: 40,
+          align: 'right',
+        });
         doc.text(row.status, 465, currentY + 6, { width: 75, align: 'right' });
 
         currentY += 20;

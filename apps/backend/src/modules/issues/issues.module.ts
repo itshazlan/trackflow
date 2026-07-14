@@ -5,7 +5,10 @@ import { TrackersController } from './trackers.controller';
 import { StatusesService } from './statuses.service';
 import { StatusesController } from './statuses.controller';
 import { TemplatesService } from './templates.service';
-import { TemplatesController, ProjectTemplatesController } from './templates.controller';
+import {
+  TemplatesController,
+  ProjectTemplatesController,
+} from './templates.controller';
 import { IssuesService } from './issues.service';
 import { UserIssuesController, IssuesController } from './issues.controller';
 
@@ -25,11 +28,6 @@ import { UserIssuesController, IssuesController } from './issues.controller';
     TemplatesService,
     IssuesService,
   ],
-  exports: [
-    TrackersService,
-    StatusesService,
-    TemplatesService,
-    IssuesService,
-  ],
+  exports: [TrackersService, StatusesService, TemplatesService, IssuesService],
 })
 export class IssuesModule {}

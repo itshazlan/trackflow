@@ -1,21 +1,24 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Param, 
-  Delete, 
-  UseGuards, 
-  Req, 
-  Query, 
-  UseInterceptors, 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  UseGuards,
+  Req,
+  Query,
+  UseInterceptors,
   UploadedFile,
-  BadRequestException
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TimeTrackingService } from './time-tracking.service';
 import { SyncTimeBlockDto } from './dto/sync-time-block.dto';
-import { OverrideTimeBlockDto, SelfDeleteTimeBlockDto } from './dto/override-time-block.dto';
+import {
+  OverrideTimeBlockDto,
+  SelfDeleteTimeBlockDto,
+} from './dto/override-time-block.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { diskStorage } from 'multer';
@@ -50,7 +53,11 @@ export class TimeTrackingController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.timeTrackingService.saveScreenshot(id, file.path, new Date().toISOString());
+    return this.timeTrackingService.saveScreenshot(
+      id,
+      file.path,
+      new Date().toISOString(),
+    );
   }
 
   @Get()
@@ -58,16 +65,21 @@ export class TimeTrackingController {
     @Req() req: any,
     @Query('projectId') projectId?: string,
     @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string
+    @Query('endDate') endDate?: string,
   ) {
-    return this.timeTrackingService.findAllForUser(req.user.id, projectId, startDate, endDate);
+    return this.timeTrackingService.findAllForUser(
+      req.user.id,
+      projectId,
+      startDate,
+      endDate,
+    );
   }
 
   @Delete(':id')
   selfDelete(
     @Param('id') id: string,
     @Body() dto: SelfDeleteTimeBlockDto,
-    @Req() req: any
+    @Req() req: any,
   ) {
     return this.timeTrackingService.selfDelete(id, req.user.id, dto.reason);
   }
@@ -77,8 +89,13 @@ export class TimeTrackingController {
   override(
     @Param('id') id: string,
     @Body() dto: OverrideTimeBlockDto,
-    @Req() req: any
+    @Req() req: any,
   ) {
-    return this.timeTrackingService.adminOverride(id, req.user.id, dto.action, dto.reason);
+    return this.timeTrackingService.adminOverride(
+      id,
+      req.user.id,
+      dto.action,
+      dto.reason,
+    );
   }
 }

@@ -15,8 +15,8 @@ export class TemplatesService {
       .where(
         or(
           eq(issueTemplates.projectId, projectId),
-          isNull(issueTemplates.projectId)
-        )
+          isNull(issueTemplates.projectId),
+        ),
       );
   }
 

@@ -1,13 +1,13 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Param, 
-  UseGuards, 
-  Req, 
-  Query, 
-  ForbiddenException 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+  Query,
+  ForbiddenException,
 } from '@nestjs/common';
 import { TimesheetsService } from './timesheets.service';
 import { CreateManualEntryDto } from './dto/create-manual-entry.dto';
@@ -23,7 +23,7 @@ import { eq, and } from 'drizzle-orm';
 export class TimesheetsController {
   constructor(
     private readonly timesheetsService: TimesheetsService,
-    @Inject(DRIZZLE) private readonly db: any
+    @Inject(DRIZZLE) private readonly db: any,
   ) {}
 
   // --- Manual Time Entries ---
@@ -50,7 +50,11 @@ export class TimesheetsController {
 
   @Get('timesheets/:id')
   getTimesheetDetail(@Param('id') id: string, @Req() req: any) {
-    return this.timesheetsService.getTimesheetDetail(id, req.user.id, req.user.isAdmin);
+    return this.timesheetsService.getTimesheetDetail(
+      id,
+      req.user.id,
+      req.user.isAdmin,
+    );
   }
 
   @Post('timesheets/:id/submit')
@@ -62,11 +66,15 @@ export class TimesheetsController {
   async approveTimesheet(
     @Param('id') id: string,
     @Body() dto: ApproveTimesheetDto,
-    @Req() req: any
+    @Req() req: any,
   ) {
     // 1. Fetch timesheet to find the projectId
-    const tsDetail = await this.timesheetsService.getTimesheetDetail(id, req.user.id, req.user.isAdmin);
-    
+    const tsDetail = await this.timesheetsService.getTimesheetDetail(
+      id,
+      req.user.id,
+      req.user.isAdmin,
+    );
+
     // 2. Resolve reviewer's role in this project
     let role = 'none';
     if (req.user.isAdmin) {
@@ -78,11 +86,11 @@ export class TimesheetsController {
         .where(
           and(
             eq(projectMemberships.projectId, tsDetail.projectId),
-            eq(projectMemberships.userId, req.user.id)
-          )
+            eq(projectMemberships.userId, req.user.id),
+          ),
         )
         .limit(1);
-      
+
       if (membership) {
         role = membership.role;
       }

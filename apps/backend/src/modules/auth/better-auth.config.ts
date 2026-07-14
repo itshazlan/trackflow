@@ -4,10 +4,18 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../../db/schema';
 
-console.log('[better-auth.config.ts] BETTER_AUTH_URL:', process.env.BETTER_AUTH_URL);
-console.log('[better-auth.config.ts] BETTER_AUTH_SECRET length:', process.env.BETTER_AUTH_SECRET?.length || 0);
+console.log(
+  '[better-auth.config.ts] BETTER_AUTH_URL:',
+  process.env.BETTER_AUTH_URL,
+);
+console.log(
+  '[better-auth.config.ts] BETTER_AUTH_SECRET length:',
+  process.env.BETTER_AUTH_SECRET?.length || 0,
+);
 
-const connectionString = process.env.DATABASE_URL || 'postgres://trackflow:trackflow@localhost:5432/trackflow';
+const connectionString =
+  process.env.DATABASE_URL ||
+  'postgres://trackflow:trackflow@localhost:5432/trackflow';
 const client = postgres(connectionString);
 const db = drizzle(client, { schema });
 
@@ -21,6 +29,7 @@ export const auth = betterAuth({
       verification: schema.verification,
     },
   }),
+  trustedOrigins: ['http://localhost:3001'],
   emailAndPassword: {
     enabled: true,
   },
@@ -32,7 +41,11 @@ export const auth = betterAuth({
       department: { type: 'string', required: false },
       employeeId: { type: 'string', required: false, unique: true },
       joinDate: { type: 'date', required: false },
-      employmentStatus: { type: 'string', required: false, defaultValue: 'active' },
+      employmentStatus: {
+        type: 'string',
+        required: false,
+        defaultValue: 'active',
+      },
       isAdmin: { type: 'boolean', required: false, defaultValue: false },
     },
   },

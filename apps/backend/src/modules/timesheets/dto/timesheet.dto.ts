@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsDateString, IsUUID, IsOptional, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsDateString,
+  IsUUID,
+  IsOptional,
+  IsIn,
+} from 'class-validator';
 
 export class CreateTimesheetDto {
   @IsUUID()

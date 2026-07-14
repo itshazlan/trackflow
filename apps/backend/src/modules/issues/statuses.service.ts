@@ -44,20 +44,23 @@ export class StatusesService {
     return newStatus;
   }
 
-  async update(projectId: string, id: string, updateStatusDto: UpdateStatusDto) {
+  async update(
+    projectId: string,
+    id: string,
+    updateStatusDto: UpdateStatusDto,
+  ) {
     const [updated] = await this.db
       .update(issueStatuses)
       .set(updateStatusDto)
       .where(
-        and(
-          eq(issueStatuses.id, id),
-          eq(issueStatuses.projectId, projectId)
-        )
+        and(eq(issueStatuses.id, id), eq(issueStatuses.projectId, projectId)),
       )
       .returning();
 
     if (!updated) {
-      throw new NotFoundException(`Status with ID ${id} not found in project ${projectId}`);
+      throw new NotFoundException(
+        `Status with ID ${id} not found in project ${projectId}`,
+      );
     }
 
     return updated;
@@ -67,15 +70,14 @@ export class StatusesService {
     const [deleted] = await this.db
       .delete(issueStatuses)
       .where(
-        and(
-          eq(issueStatuses.id, id),
-          eq(issueStatuses.projectId, projectId)
-        )
+        and(eq(issueStatuses.id, id), eq(issueStatuses.projectId, projectId)),
       )
       .returning();
 
     if (!deleted) {
-      throw new NotFoundException(`Status with ID ${id} not found in project ${projectId}`);
+      throw new NotFoundException(
+        `Status with ID ${id} not found in project ${projectId}`,
+      );
     }
 
     return { message: 'Status deleted successfully', deleted };
@@ -84,7 +86,7 @@ export class StatusesService {
   async reorder(projectId: string, statusIds: string[]) {
     return this.db.transaction(async (tx: any) => {
       const updatedStatuses = [];
-      
+
       for (let i = 0; i < statusIds.length; i++) {
         const [updated] = await tx
           .update(issueStatuses)
@@ -92,16 +94,16 @@ export class StatusesService {
           .where(
             and(
               eq(issueStatuses.id, statusIds[i]),
-              eq(issueStatuses.projectId, projectId)
-            )
+              eq(issueStatuses.projectId, projectId),
+            ),
           )
           .returning();
-        
+
         if (updated) {
           updatedStatuses.push(updated);
         }
       }
-      
+
       return updatedStatuses;
     });
   }

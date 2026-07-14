@@ -1,14 +1,19 @@
-import { 
-  Injectable, 
-  Inject, 
-  NotFoundException, 
-  BadRequestException, 
-  ForbiddenException, 
-  InternalServerErrorException 
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { eq, and, or, asc } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
-import { issues, issueStatuses, issueTemplates, issueTrackers } from '../../db/schema/issues';
+import {
+  issues,
+  issueStatuses,
+  issueTemplates,
+  issueTrackers,
+} from '../../db/schema/issues';
 import { projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
 import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
@@ -17,7 +22,11 @@ import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
 export class IssuesService {
   constructor(@Inject(DRIZZLE) private db: any) {}
 
-  async create(projectId: string, createIssueDto: CreateIssueDto, userId: string) {
+  async create(
+    projectId: string,
+    createIssueDto: CreateIssueDto,
+    userId: string,
+  ) {
     let title = createIssueDto.title;
     let description = createIssueDto.description;
 
@@ -30,7 +39,9 @@ export class IssuesService {
         .limit(1);
 
       if (!template) {
-        throw new NotFoundException(`Issue template with ID ${createIssueDto.templateId} not found`);
+        throw new NotFoundException(
+          `Issue template with ID ${createIssueDto.templateId} not found`,
+        );
       }
 
       const fields = template.fields as any[];
@@ -41,7 +52,7 @@ export class IssuesService {
       for (const field of fields) {
         if (field.required && !fieldValues[field.label]) {
           throw new BadRequestException(
-            `Template field "${field.label}" is required. ${field.helperText || ''}`
+            `Template field "${field.label}" is required. ${field.helperText || ''}`,
           );
         }
       }
@@ -49,7 +60,7 @@ export class IssuesService {
       // Render Title
       let pattern = template.titlePattern || '';
       for (const [key, val] of Object.entries(titleValues)) {
-        pattern = pattern.replace(new RegExp(`{${key}}`, 'g'), val as string);
+        pattern = pattern.replace(new RegExp(`{${key}}`, 'g'), val);
       }
       title = pattern || `${template.name} - Created`;
 
@@ -76,7 +87,9 @@ export class IssuesService {
         .orderBy(asc(issueStatuses.orderIndex));
 
       if (projectStatuses.length === 0) {
-        throw new InternalServerErrorException('Project has no workflow statuses seeded.');
+        throw new InternalServerErrorException(
+          'Project has no workflow statuses seeded.',
+        );
       }
       targetStatusId = projectStatuses[0].id;
     }
@@ -94,7 +107,9 @@ export class IssuesService {
         priority: createIssueDto.priority || 'medium',
         startDate: createIssueDto.startDate || null,
         dueDate: createIssueDto.dueDate || null,
-        estimatedHours: createIssueDto.estimatedHours ? String(createIssueDto.estimatedHours) : null,
+        estimatedHours: createIssueDto.estimatedHours
+          ? String(createIssueDto.estimatedHours)
+          : null,
         createdBy: userId,
       })
       .returning();
@@ -156,12 +171,7 @@ export class IssuesService {
       .from(issues)
       .innerJoin(issueTrackers, eq(issues.trackerId, issueTrackers.id))
       .innerJoin(issueStatuses, eq(issues.statusId, issueStatuses.id))
-      .where(
-        or(
-          eq(issues.assigneeId, userId),
-          eq(issues.createdBy, userId)
-        )
-      );
+      .where(or(eq(issues.assigneeId, userId), eq(issues.createdBy, userId)));
   }
 
   async findOne(id: string) {
@@ -178,7 +188,12 @@ export class IssuesService {
     return issue;
   }
 
-  async update(projectId: string, id: string, updateIssueDto: UpdateIssueDto, userId: string) {
+  async update(
+    projectId: string,
+    id: string,
+    updateIssueDto: UpdateIssueDto,
+    userId: string,
+  ) {
     const [existingIssue] = await this.db
       .select()
       .from(issues)
@@ -190,20 +205,25 @@ export class IssuesService {
     }
 
     // 1. Transition validation (if statusId is changing)
-    if (updateIssueDto.statusId && updateIssueDto.statusId !== existingIssue.statusId) {
+    if (
+      updateIssueDto.statusId &&
+      updateIssueDto.statusId !== existingIssue.statusId
+    ) {
       const [targetStatus] = await this.db
         .select()
         .from(issueStatuses)
         .where(
           and(
             eq(issueStatuses.id, updateIssueDto.statusId),
-            eq(issueStatuses.projectId, projectId)
-          )
+            eq(issueStatuses.projectId, projectId),
+          ),
         )
         .limit(1);
 
       if (!targetStatus) {
-        throw new BadRequestException('Target status does not exist in this project');
+        throw new BadRequestException(
+          'Target status does not exist in this project',
+        );
       }
 
       // Check restrictedToRole constraint
@@ -214,14 +234,14 @@ export class IssuesService {
           .where(
             and(
               eq(projectMemberships.projectId, projectId),
-              eq(projectMemberships.userId, userId)
-            )
+              eq(projectMemberships.userId, userId),
+            ),
           )
           .limit(1);
 
         if (!membership || membership.role !== targetStatus.restrictedToRole) {
           throw new ForbiddenException(
-            `Status "${targetStatus.name}" is restricted to role "${targetStatus.restrictedToRole}". Your project role: ${membership ? membership.role : 'none'}`
+            `Status "${targetStatus.name}" is restricted to role "${targetStatus.restrictedToRole}". Your project role: ${membership ? membership.role : 'none'}`,
           );
         }
       }
@@ -230,21 +250,17 @@ export class IssuesService {
     // Convert estimatedHours number to string for database compatibility if provided
     const updatePayload: any = { ...updateIssueDto };
     if (updateIssueDto.estimatedHours !== undefined) {
-      updatePayload.estimatedHours = updateIssueDto.estimatedHours === null 
-        ? null 
-        : String(updateIssueDto.estimatedHours);
+      updatePayload.estimatedHours =
+        updateIssueDto.estimatedHours === null
+          ? null
+          : String(updateIssueDto.estimatedHours);
     }
 
     // 2. Perform Update
     const [updated] = await this.db
       .update(issues)
       .set(updatePayload)
-      .where(
-        and(
-          eq(issues.id, id),
-          eq(issues.projectId, projectId)
-        )
-      )
+      .where(and(eq(issues.id, id), eq(issues.projectId, projectId)))
       .returning();
 
     return updated;
@@ -253,16 +269,13 @@ export class IssuesService {
   async remove(projectId: string, id: string) {
     const [deleted] = await this.db
       .delete(issues)
-      .where(
-        and(
-          eq(issues.id, id),
-          eq(issues.projectId, projectId)
-        )
-      )
+      .where(and(eq(issues.id, id), eq(issues.projectId, projectId)))
       .returning();
 
     if (!deleted) {
-      throw new NotFoundException(`Issue with ID ${id} not found in project ${projectId}`);
+      throw new NotFoundException(
+        `Issue with ID ${id} not found in project ${projectId}`,
+      );
     }
 
     return { message: 'Issue deleted successfully', deleted };
