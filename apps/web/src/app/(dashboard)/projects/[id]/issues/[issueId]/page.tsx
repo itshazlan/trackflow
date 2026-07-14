@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { io } from "socket.io-client";
 import {
   getIssueDetail,
@@ -62,6 +63,11 @@ import {
   Smile,
   Video,
 } from "lucide-react";
+
+const EmojiPicker = dynamic(
+  () => import("emoji-picker-react").then((mod) => mod.default),
+  { ssr: false }
+);
 
 const getFileIcon = (fileName: string) => {
   const ext = fileName.split('.').pop()?.toLowerCase();
@@ -784,40 +790,80 @@ export default function IssueDetailPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2 justify-between items-center">
-                    <div className="relative">
-                      <Button
+                  <div className="flex gap-2 justify-between items-center mt-1">
+                    <div className="flex items-center gap-1.5">
+                      <button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-muted-foreground hover:text-foreground px-2"
+                        className="rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                        onClick={() => document.getElementById("page-files-input")?.click()}
+                        title="Unggah Lampiran"
+                      >
+                        <Paperclip className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
                         onClick={(e) => {
-                          setEmojiActiveTarget(emojiActiveTarget === "description" ? null : "description");
                           const parent = e.currentTarget.closest(".flex-col");
                           const textarea = parent?.querySelector("textarea") as HTMLTextAreaElement;
-                          if (textarea) setEmojiTextareaRef(textarea);
+                          if (textarea) {
+                            const value = textarea.value;
+                            const cursor = textarea.selectionStart;
+                            const before = value.slice(0, cursor);
+                            const after = value.slice(cursor);
+                            const newValue = before + "@" + after;
+                            setEditedDesc(newValue);
+                            textarea.focus();
+                            setTimeout(() => {
+                              const newCursorPos = cursor + 1;
+                              textarea.setSelectionRange(newCursorPos, newCursorPos);
+                              const changeEvent = new Event('input', { bubbles: true }) as any;
+                              Object.defineProperty(changeEvent, 'target', {writable: false, value: textarea});
+                              handleTextareaChange(changeEvent as any, "description");
+                            }, 10);
+                          }
                         }}
+                        title="Mention Member"
                       >
-                        <Smile className="h-4 w-4" />
-                      </Button>
+                        <AtSign className="h-5 w-5" />
+                      </button>
                       
-                      {/* Emoji Picker Dropdown */}
-                      {emojiActiveTarget === "description" && (
-                        <div className="absolute left-0 top-full mt-1 z-50 w-56 bg-popover border border-border p-2 rounded-lg shadow-lg">
-                          <div className="grid grid-cols-6 gap-1">
-                            {COMMON_EMOJIS.map((emoji) => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                onClick={() => insertEmoji(emoji)}
-                                className="h-7 w-7 text-[15px] flex items-center justify-center rounded hover:bg-muted transition-colors cursor-pointer"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <div className="relative flex items-center">
+                        <button
+                          type="button"
+                          className="rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                          onClick={(e) => {
+                            setEmojiActiveTarget(emojiActiveTarget === "description" ? null : "description");
+                            const parent = e.currentTarget.closest(".flex-col");
+                            const textarea = parent?.querySelector("textarea") as HTMLTextAreaElement;
+                            if (textarea) setEmojiTextareaRef(textarea);
+                          }}
+                          title="Emoji"
+                        >
+                          <Smile className="h-5 w-5" />
+                        </button>
+
+                        {/* Emoji Picker Dropdown */}
+                        {emojiActiveTarget === "description" && (
+                          <>
+                            <div 
+                              className="fixed inset-0 z-40 bg-transparent cursor-default" 
+                              onClick={() => setEmojiActiveTarget(null)}
+                            />
+                            <div className="absolute left-0 top-full mt-1.5 z-50 bg-popover border border-border rounded-lg shadow-lg">
+                              <EmojiPicker
+                                onEmojiClick={(emojiData: any) => insertEmoji(emojiData.emoji)}
+                                autoFocusSearch={false}
+                                theme={"dark" as any}
+                                height={320}
+                                width={280}
+                                style={{ "--epr-emoji-size": "20px" } as React.CSSProperties}
+                                previewConfig={{ showPreview: false }}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="flex gap-2">
@@ -864,28 +910,17 @@ export default function IssueDetailPage() {
                   <Paperclip className="h-3.5 w-3.5" />
                   Lampiran ({attachments.length})
                 </span>
-                <div className="flex items-center">
-                  <input
-                    type="file"
-                    multiple
-                    id="page-files-input"
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files) {
-                        void handleUploadFiles(e.target.files);
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] font-medium px-2.5 text-muted-foreground hover:text-foreground"
-                    onClick={() => document.getElementById("page-files-input")?.click()}
-                  >
-                    Tambah File
-                  </Button>
-                </div>
+                <input
+                  type="file"
+                  multiple
+                  id="page-files-input"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) {
+                      void handleUploadFiles(e.target.files);
+                    }
+                  }}
+                />
               </div>
 
               {attachmentsLoading ? (
@@ -1040,20 +1075,23 @@ export default function IssueDetailPage() {
 
                       {/* Emoji Picker Dropdown */}
                       {emojiActiveTarget === "comment" && (
-                        <div className="absolute left-0 bottom-full mb-2 z-50 w-56 bg-popover border border-border p-2 rounded-lg shadow-lg">
-                          <div className="grid grid-cols-6 gap-1">
-                            {COMMON_EMOJIS.map((emoji) => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                onClick={() => insertEmoji(emoji)}
-                                className="h-7 w-7 text-[15px] flex items-center justify-center rounded hover:bg-muted transition-colors cursor-pointer"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
+                        <>
+                          <div 
+                            className="fixed inset-0 z-40 bg-transparent cursor-default" 
+                            onClick={() => setEmojiActiveTarget(null)}
+                          />
+                          <div className="absolute left-0 bottom-full mb-2 z-50 bg-popover border border-border rounded-lg shadow-lg">
+                            <EmojiPicker
+                              onEmojiClick={(emojiData: any) => insertEmoji(emojiData.emoji)}
+                              autoFocusSearch={false}
+                              theme={"dark" as any}
+                              height={320}
+                              width={280}
+                              style={{ "--epr-emoji-size": "20px" } as React.CSSProperties}
+                              previewConfig={{ showPreview: false }}
+                            />
                           </div>
-                        </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1171,20 +1209,23 @@ export default function IssueDetailPage() {
                                   
                                   {/* Emoji Picker Dropdown */}
                                   {emojiActiveTarget && typeof emojiActiveTarget === "object" && emojiActiveTarget.type === "comment-edit" && emojiActiveTarget.id === comment.id && (
-                                    <div className="absolute left-0 top-full mt-1 z-50 w-56 bg-popover border border-border p-2 rounded-lg shadow-lg">
-                                      <div className="grid grid-cols-6 gap-1">
-                                        {COMMON_EMOJIS.map((emoji) => (
-                                          <button
-                                            key={emoji}
-                                            type="button"
-                                            onClick={() => insertEmoji(emoji)}
-                                            className="h-7 w-7 text-[15px] flex items-center justify-center rounded hover:bg-muted transition-colors cursor-pointer"
-                                          >
-                                            {emoji}
-                                          </button>
-                                        ))}
+                                    <>
+                                      <div 
+                                        className="fixed inset-0 z-40 bg-transparent cursor-default" 
+                                        onClick={() => setEmojiActiveTarget(null)}
+                                      />
+                                      <div className="absolute left-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg">
+                                        <EmojiPicker
+                                          onEmojiClick={(emojiData: any) => insertEmoji(emojiData.emoji)}
+                                          autoFocusSearch={false}
+                                          theme={"dark" as any}
+                                          height={320}
+                                          width={280}
+                                          style={{ "--epr-emoji-size": "20px" } as React.CSSProperties}
+                                          previewConfig={{ showPreview: false }}
+                                        />
                                       </div>
-                                    </div>
+                                    </>
                                   )}
                                 </div>
                                 <div className="flex gap-2">
