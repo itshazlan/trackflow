@@ -169,7 +169,7 @@ describe('Realtime Gateway (e2e)', () => {
       request(app.getHttpServer())
         .post('/projects')
         .set('x-mock-user-id', mockUsers.developer.id)
-        .send({ name: 'Realtime Project' })
+        .send({ name: 'Realtime Project', key: 'REAL' })
         .end((err, res) => {
           if (err) return done(err);
           projectId = res.body.id;

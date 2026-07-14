@@ -141,6 +141,7 @@ describe('Users Profile (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/users/me/avatar')
         .set('x-mock-user-id', mockUser.id)
+        .attach('file', Buffer.from('dummy-image-content'), 'avatar.png')
         .expect(201);
 
       expect(res.body).toHaveProperty('uploadUrl');

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.0 (Lean Internal) |
+| **Versi Dokumen** | 2.1 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 |
+| **Tanggal** | 14 Juli 2026 (revisi: penambahan Kode Proyek, edit issue, lampiran, Issue Activity/komentar) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -101,7 +101,7 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-002 | Admin (`is_admin=true`) dapat menambahkan user baru dan mengatur flag admin pada user lain |
 | FR-003 | Setiap user yang ditambahkan ke sebuah proyek diberi salah satu role: **Manager**, **Developer**, atau **Reporter/QA** |
 | FR-004 | Role proyek menentukan hak akses: Manager (kelola proyek, approve timesheet, atur status tiket), Developer (kerjakan tugas, submit waktu), Reporter/QA (verifikasi tiket) |
-| FR-005 | Admin memiliki akses baca implisit ke semua proyek untuk keperluan pengawasan, tanpa perlu didaftarkan sebagai member di tiap proyek |
+| FR-005 | Admin memiliki akses **baca dan tulis** implisit ke semua proyek untuk keperluan pengawasan maupun pengelolaan tim — termasuk menambahkan/mengubah role anggota pada proyek manapun — tanpa perlu didaftarkan sebagai member terlebih dahulu di proyek tersebut |
 
 ### 7.1.1 Profil Pengguna & Informasi Kepegawaian
 
@@ -119,6 +119,8 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-010 | Pengguna dengan hak sesuai dapat membuat proyek baru |
 | FR-011 | Di dalam proyek, dapat dibuat Sub-project (mis. "Aplikasi Mobile" → "Android", "iOS") |
 | FR-012 | Setiap proyek independen: anggota tim & modul aktif diatur terpisah per proyek |
+| FR-013 | Saat membuat proyek (termasuk sub-proyek), pengguna mengisi **Kode Proyek** (project key) unik secara global — mis. `TRACK`, `MOB-AND` — dipakai sebagai prefix Issue ID (`{key}-{nomor}`, mis. `TRACK-142`). Kode bersifat **permanen** setelah proyek dibuat |
+| FR-014 | **Setiap sub-proyek memiliki Kode Proyek dan penomoran issue sendiri, independen dari proyek induknya** — bukan berbagi satu urutan nomor dengan induknya (mis. proyek "Aplikasi Mobile" berkode `MOB` dan sub-proyek "Android" berkode `AND` masing-masing mulai dari nomor 1) |
 
 ### 7.3 Sistem Tiket & Workflow (Dapat Dikustomisasi)
 
@@ -130,13 +132,18 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-023 | Setiap status **opsional** dapat dibatasi hanya boleh diset oleh satu role tertentu. Default: hanya **QA** yang boleh mengubah status menjadi **Done**; status lain bebas diset anggota proyek manapun. Aturan ini dapat diubah/dihapus per status oleh Manager/Admin |
 | FR-024 | Atribut tiket: Assignee, Priority, Tanggal mulai, Tenggat waktu, Estimasi waktu |
 | FR-025 | Tiket dapat ditampilkan sebagai List (default), Kanban, atau Calendar |
-| FR-026 | Pengguna dapat memberi komentar & lampiran pada tiket |
+| FR-026 | Tiket dapat **diedit** setelah dibuat (judul, deskripsi, assignee, priority, tanggal, lampiran) oleh Assignee, Manager proyek terkait, atau Admin |
+| FR-027 | Pengguna dapat **melampirkan file** pada tiket, baik saat pembuatan maupun setelahnya, disimpan di Cloudflare R2 |
+| FR-028 | Setiap tiket memiliki panel **Aktivitas/Komentar** ala forum — **seluruh anggota proyek (peran manapun: Manager/Developer/Reporter-QA)** dapat menulis dan membaca komentar, tanpa dibatasi role tertentu (berbeda dari transisi status yang bisa dibatasi role) |
+| FR-029 | Komentar dapat diedit/dihapus oleh penulisnya sendiri; Admin dapat menghapus komentar siapapun untuk keperluan moderasi |
 
-### 7.4 Issue Template (Preset & Dapat Diperluas)
+### 7.4 Issue Template (Preset & Dapat Diperluas — Sebagai Filler Judul & Deskripsi)
+
+> **Perubahan konsep:** template **tidak lagi** membuat form dinamis per-field dengan validasi wajib. Template kini murni mengisi **teks awal** pada input Title dan textarea Description — setelah itu keduanya adalah teks bebas biasa yang bisa diedit tanpa batasan struktur.
 
 | ID | Requirement |
 |---|---|
-| FR-030 | Sistem menyediakan template default untuk tracker **Bug**, dengan pola judul dan field berikut: |
+| FR-030 | Sistem menyediakan template default untuk tracker **Bug**, dipakai sebagai teks awal (filler) pada Title & Description, dengan pola judul dan daftar field berikut: |
 
 **Template Default — Bug:**
 
@@ -155,9 +162,9 @@ Field:
 
 | ID | Requirement |
 |---|---|
-| FR-031 | Saat membuat tiket dari template, judul otomatis mengikuti pola (`[BUG] {Nama Fitur} - {Nama Bug}`) dan deskripsi tiket otomatis terisi dengan field-field di atas sebagai form terstruktur |
-| FR-032 | Field **Environment** wajib diisi sebelum tiket bisa disimpan (validasi form) |
-| FR-033 | Manager/Admin dapat menambahkan template baru untuk tracker lain (Feature/Support), atau mengedit/menghapus field pada template Bug default (misal menambah field baru, mengubah field mana yang wajib) |
+| FR-031 | Saat memilih template, input **Title** terisi otomatis dengan pola judul template apa adanya (mis. `[BUG] Nama Fitur - Nama Bug`), dan textarea **Description** terisi otomatis dengan daftar field template sebagai teks — pengguna bebas mengedit kedua isian tersebut layaknya teks biasa |
+| FR-032 | Field yang ditandai wajib pada template (mis. **Environment**) ditampilkan dengan penanda/keterangan pada teks Description sebagai pengingat visual, **namun tidak divalidasi otomatis oleh sistem** — Description bersifat teks bebas setelah di-prefill, sehingga kelengkapan pengisiannya menjadi tanggung jawab penulis, bukan gate teknis |
+| FR-033 | Manager/Admin dapat menambahkan template baru untuk tracker lain (Feature/Support), atau mengedit/menghapus field pada template Bug default (misal menambah field baru, mengubah field mana yang ditandai wajib) |
 | FR-034 | Template bersifat **per-proyek** secara default, namun dapat pula dibuat sebagai template global yang tersedia untuk semua proyek |
 
 ### 7.5 Modul Documents & Files
@@ -234,9 +241,9 @@ Field:
 
 ### 9.2 Membuat Tiket Bug dari Template
 1. QA/Developer membuka "Buat Tiket Baru" → pilih Tracker **Bug** → pilih template default.
-2. Form otomatis menampilkan field: Role User, Current Condition, Expected Result, Link Halaman, Step to Reproduce, Evidence, Environment.
-3. Sistem memvalidasi field **Environment** wajib diisi sebelum tiket bisa disimpan.
-4. Judul tiket otomatis mengikuti pola `[BUG] {Nama Fitur} - {Nama Bug}` berdasarkan input pengguna.
+2. Input Title otomatis terisi pola `[BUG] Nama Fitur - Nama Bug`; textarea Description otomatis terisi daftar field (Role User, Current Condition, Expected Result, Link Halaman, Step to Reproduce, Evidence, Environment).
+3. Pengguna mengedit kedua isian tersebut secara bebas seperti teks biasa — field yang ditandai wajib (Environment) hanya diberi keterangan pengingat, **tidak memblokir submit** jika belum diisi.
+4. Tiket tersimpan dengan Issue ID otomatis mengikuti kode proyek (mis. `TRACK-142`).
 
 ### 9.3 Manager Mengatur Ulang Workflow Tiket Proyek
 1. Manager membuka pengaturan proyek → "Status Tiket".
@@ -249,6 +256,16 @@ Field:
 2. Admin memilih "Override Blok Waktu", mengisi alasan wajib.
 3. Sistem menandai blok sesuai aksi (hapus/tandai unpaid), mencatat log, dan mengirim notifikasi ke pekerja terkait.
 
+### 9.5 Berkolaborasi di Issue Activity
+1. Developer membuka tiket yang sedang dikerjakan, membuka panel "Aktivitas".
+2. Menulis komentar (mis. progres, pertanyaan ke QA) — komentar langsung terlihat oleh **seluruh anggota proyek**, apapun rolenya.
+3. QA membalas di panel yang sama tanpa perlu keluar dari halaman tiket, seperti thread forum.
+4. Jika ada komentar yang perlu dihapus (mis. salah kirim), penulisnya sendiri atau Admin dapat menghapusnya.
+
+### 9.6 Admin Menambahkan Anggota ke Proyek Manapun
+1. Admin membuka proyek milik tim lain (yang Admin sendiri belum terdaftar sebagai member).
+2. Karena akses baca-tulis implisit (FR-005), Admin tetap bisa membuka halaman "Anggota Proyek" dan menambahkan user baru beserta role-nya, tanpa perlu didaftarkan sebagai member terlebih dahulu.
+
 ---
 
 ## 10. Metrik Keberhasilan
@@ -257,7 +274,7 @@ Field:
 |---|---|
 | Tingkat adopsi harian desktop client | > 90% hari kerja |
 | Rata-rata waktu approval timesheet | < 24 jam setelah periode berakhir |
-| Konsistensi laporan bug (mengisi semua field wajib template) | Dipantau sebagai indikator kualitas laporan bug |
+| Kelengkapan pengisian field Environment pada laporan bug | Dipantau manual (tidak lagi divalidasi otomatis sejak template disederhanakan jadi filler teks) |
 | Waktu rata-rata muat dashboard | < 2 detik |
 
 ---
@@ -276,7 +293,7 @@ Field:
 
 | Fase | Cakupan |
 |---|---|
-| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek, Sistem tiket + status default (list view), Issue Template Bug preset, Desktop Client (tracking + screenshot + sync), Time Book dasar, Reporting PDF/CSV |
+| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen), Sistem tiket + status default (list view), Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Desktop Client (tracking + screenshot + sync), Time Book dasar, Reporting PDF/CSV |
 | **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual |
 | **Fase 3** | Notifikasi lanjutan, integrasi pihak ketiga, dashboard analitik lanjutan |
 

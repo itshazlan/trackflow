@@ -174,6 +174,7 @@ describe('Projects and Memberships (e2e)', () => {
         .set('x-mock-user-id', mockUsers.manager.id)
         .send({
           name: 'Main E2E Project',
+          key: 'MAIN',
           description: 'Top-level project for testing',
         })
         .expect(201);
@@ -299,6 +300,7 @@ describe('Projects and Memberships (e2e)', () => {
         .set('x-mock-user-id', mockUsers.manager.id)
         .send({
           name: 'Sub-Project A',
+          key: 'SUBA',
           description: 'A sub-project under main project',
         })
         .expect(201);

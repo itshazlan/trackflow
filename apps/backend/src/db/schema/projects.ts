@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   pgEnum,
+  integer,
 } from 'drizzle-orm/pg-core';
 import { user } from './auth';
 
@@ -20,6 +21,8 @@ export const projects = pgTable('projects', {
     (): any => projects.id,
     { onDelete: 'cascade' },
   ),
+  key: varchar('key', { length: 10 }).notNull().unique(),
+  issueSequence: integer('issue_sequence').notNull().default(0),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   createdBy: text('created_by')

@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
@@ -16,12 +17,25 @@ export class ProjectsService {
 
   async create(createProjectDto: CreateProjectDto, userId: string) {
     try {
+      const normalizedKey = createProjectDto.key.toUpperCase();
       return await this.db.transaction(async (tx: any) => {
+        // 0. Check if key is already taken
+        const [existing] = await tx
+          .select()
+          .from(projects)
+          .where(eq(projects.key, normalizedKey))
+          .limit(1);
+
+        if (existing) {
+          throw new BadRequestException(`Project key "${normalizedKey}" is already taken`);
+        }
+
         // 1. Insert project
         const [newProject] = await tx
           .insert(projects)
           .values({
             name: createProjectDto.name,
+            key: normalizedKey,
             description: createProjectDto.description,
             parentProjectId: createProjectDto.parentProjectId,
             createdBy: userId,
@@ -117,6 +131,10 @@ export class ProjectsService {
   }
 
   async update(id: string, updateProjectDto: Partial<CreateProjectDto>) {
+    if (updateProjectDto.key) {
+      throw new BadRequestException('Project key is immutable and cannot be updated');
+    }
+
     const [updated] = await this.db
       .update(projects)
       .set(updateProjectDto)

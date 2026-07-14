@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.0 (Lean Internal) |
+| **Versi Dokumen** | 2.1 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 |
+| **Tanggal** | 14 Juli 2026 (revisi: Kode Proyek & penomoran issue independen per sub-proyek, template jadi filler teks, lampiran, edit issue, Issue Activity/komentar, Admin bypass membership) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -129,7 +129,7 @@ Berbeda dari draft sebelumnya (RBAC dua tingkat penuh dengan Owner/Admin/Member)
 **Aturan resolusi akses:**
 1. `AdminGuard` cukup memeriksa satu boolean — tidak perlu tabel keanggotaan organisasi terpisah dengan histori pemberian peran.
 2. Admin memiliki **akses baca implisit** ke semua proyek (tanpa perlu didaftarkan sebagai member), sehingga bisa memantau seluruh tim.
-3. Aksi tulis operasional (approve timesheet, ubah status tiket non-terbatas) tetap memerlukan role proyek eksplisit via `ProjectRoleGuard` — Admin tidak otomatis bisa mengerjakan tugas operasional Manager kecuali memang didaftarkan sebagai member proyek tersebut.
+3. Aksi tulis operasional (approve timesheet, ubah status tiket non-terbatas) tetap memerlukan role proyek eksplisit via `ProjectRoleGuard` — Admin tidak otomatis bisa mengerjakan tugas operasional Manager kecuali memang didaftarkan sebagai member proyek tersebut. **Pengecualian eksplisit:** endpoint `POST/PATCH /projects/:id/members` (menambah/mengubah anggota) tetap mengizinkan Admin meski **belum** terdaftar sebagai member proyek tersebut — karena mengelola keanggotaan tim lain adalah bagian dari peran administratif, bukan operasional harian proyek.
 4. **Override blok waktu milik pekerja lain** memerlukan `AdminGuard` saja — **tidak ada lapisan izin granular per-Manager** (`can_override_timeblocks` dihapus dari draft sebelumnya), karena untuk tim internal kecil cukup satu titik kewenangan yang jelas dan mudah diaudit.
 
 ---
@@ -193,6 +193,9 @@ erDiagram
     PROJECTS ||--o{ DOCUMENTS : stores
     ISSUE_STATUSES ||--o{ ISSUES : "current status"
     USERS ||--o{ ISSUES : "assigned to"
+    ISSUES ||--o{ ISSUE_ATTACHMENTS : has
+    ISSUES ||--o{ ISSUE_COMMENTS : has
+    USERS ||--o{ ISSUE_COMMENTS : authors
     USERS ||--o{ TIME_BLOCKS : logs
     ISSUES ||--o{ TIME_BLOCKS : "tracked against"
     TIME_BLOCKS ||--o| SCREENSHOTS : has
@@ -260,11 +263,15 @@ erDiagram
 |---|---|---|
 | id | uuid (PK) | |
 | parent_project_id | uuid (FK → projects, nullable) | Struktur sub-project |
+| key | varchar(10) (unique, global) | **Kode Proyek** — dipakai sebagai prefix Issue ID (mis. `TRACK-142`). Format: uppercase alfanumerik (`^[A-Z][A-Z0-9]{1,9}$`), **immutable** setelah proyek dibuat |
+| issue_sequence | integer default 0 | Counter nomor issue berjalan untuk proyek ini — di-increment atomik di dalam transaksi yang sama dengan insert `issues` (lihat §10.6) |
 | name | varchar | |
 | description | text | |
 | created_by | uuid (FK → users) | |
 | created_at | timestamptz | |
 
+> **Sub-project punya `key` dan `issue_sequence` sendiri, independen dari proyek induknya** (keputusan bisnis dikonfirmasi) — bukan berbagi satu urutan nomor dengan induknya. Contoh: proyek "Aplikasi Mobile" (`key=MOB`) dan sub-proyek "Android" (`key=AND`) masing-masing mulai penomoran dari 1: `MOB-1`, `AND-1`, dst — **bukan** `MOB-1`, `MOB-2` (Android) menyatu dengan induk. Keunikan `key` bersifat **global** di seluruh instalasi (termasuk lintas hierarki proyek/sub-proyek), karena single-tenant tidak punya scoping organisasi untuk membatasi keunikan hanya per-cabang.
+>
 > Catatan: kolom `organization_id` yang ada di draft sebelumnya **dihapus** — tidak relevan lagi tanpa entitas organisasi.
 
 #### `project_memberships`
@@ -300,6 +307,7 @@ erDiagram
 |---|---|---|
 | id | uuid (PK) | |
 | project_id | uuid (FK) | |
+| number | integer | Nomor urut dalam proyek/sub-proyek ini (bukan global) — digabung dengan `projects.key` menjadi Issue ID tampilan (mis. `TRACK-142`). **Unique constraint gabungan `(project_id, number)`** |
 | tracker_id | uuid (FK → issue_trackers) | |
 | status_id | uuid (FK → issue_statuses) | |
 | title | varchar | |
@@ -312,15 +320,17 @@ erDiagram
 | created_by | uuid (FK) | |
 | created_at | timestamptz | |
 
-#### `issue_templates` (dipertahankan & dikonkretkan)
+#### `issue_templates` (dipertahankan & dikonkretkan — kini berperan sebagai **generator teks**, bukan form terstruktur)
+> **Perubahan desain:** template tidak lagi memicu form dinamis per-field dengan validasi backend. Kolom `fields` sekarang murni dipakai untuk **menyusun teks awal** pada `description` saat issue dibuat — setelah disusun, `description` adalah string biasa yang bebas diedit. Flag `required` pada tiap field kini bersifat **informasional saja** (ditampilkan sebagai penanda visual di teks yang di-generate), **tidak lagi ditegakkan sebagai validasi wajib oleh backend** — trade-off yang disengaja demi kesederhanaan (lihat §16).
+
 | Kolom | Tipe | Keterangan |
 |---|---|---|
 | id | uuid (PK) | |
 | project_id | uuid (FK, nullable) | `NULL` = template global, tersedia untuk semua proyek (FR-034) |
 | tracker_id | uuid (FK → issue_trackers) | |
 | name | varchar | Nama template (mis. "Bug Report Default") |
-| title_pattern | varchar | Pola judul otomatis, mis. `[BUG] {feature} - {bugName}` |
-| fields | jsonb | Array field terstruktur (lihat contoh di bawah), bukan form-builder generik penuh — cukup daftar `{label, required}` berurutan |
+| title_pattern | varchar | Teks awal untuk input Title, disalin apa adanya (bukan template variabel lagi), mis. `[BUG] Nama Fitur - Nama Bug` |
+| fields | jsonb | Daftar `{label, required, helperText}` berurutan, dipakai untuk menyusun teks awal `description` — **bukan** skema form dengan validasi |
 | created_at | timestamptz | |
 
 **Contoh isi kolom `fields` untuk template Bug default (di-seed otomatis saat instalasi):**
@@ -336,7 +346,17 @@ erDiagram
 ]
 ```
 
-> Manager/Admin dapat mengedit array `fields` ini (tambah/hapus/ubah wajib-tidaknya) melalui UI pengaturan template (FR-033), tanpa perlu migrasi skema — cukup update baris jsonb.
+> Backend menyusun teks awal `description` dari array ini, contoh hasil generate:
+> ```
+> Role User: 
+> Current Condition: 
+> Expected Result: 
+> Link Halaman: 
+> Step to Reproduce: 
+> Evidence: 
+> Environment: (wajib diisi bug terjadi di mana)
+> ```
+> Manager/Admin dapat mengedit array `fields` ini (tambah/hapus/ubah wajib-tidaknya, hanya memengaruhi teks & penanda yang di-generate) melalui UI pengaturan template (FR-033), tanpa perlu migrasi skema — cukup update baris jsonb.
 
 #### `documents`
 | Kolom | Tipe | Keterangan |
@@ -347,6 +367,28 @@ erDiagram
 | r2_object_key | varchar | |
 | uploaded_by | uuid (FK) | |
 | uploaded_at | timestamptz | |
+
+#### `issue_attachments`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| issue_id | uuid (FK → issues) | |
+| file_name | varchar | |
+| r2_object_key | varchar | `project/{projectId}/issues/{issueId}/attachments/{attachmentId}-{fileName}` |
+| uploaded_by | uuid (FK → users) | |
+| uploaded_at | timestamptz | |
+
+#### `issue_comments` (Issue Activity — ala forum)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| issue_id | uuid (FK → issues) | |
+| author_id | uuid (FK → users) | |
+| body | text | |
+| created_at | timestamptz | |
+| updated_at | timestamptz nullable | Diisi saat komentar diedit — dipakai untuk menampilkan penanda "(diedit)" di UI |
+
+> Guard: **siapapun member proyek** (peran manapun) atau Admin boleh baca & tulis komentar — sengaja tidak dibatasi role tertentu, berbeda dari transisi status tiket (FR-028). Edit hanya oleh penulis; hapus oleh penulis atau Admin (moderasi, FR-029).
 
 #### `time_blocks`
 > Tabel PostgreSQL biasa dengan composite index `(user_id, block_start)` dan `(project_id, block_start)`.
@@ -447,13 +489,17 @@ erDiagram
 | Profil | `/admin/users/:id/employment` | PATCH | Update data kepegawaian user lain (jabatan, departemen, employeeId, joinDate, employmentStatus) — **Admin only** |
 | Admin | `/admin/settings` | GET/PATCH | Pengaturan aplikasi (`company_name`, `screenshot_retention_days`) — **Admin only** |
 | Admin | `/admin/users` | GET/POST/PATCH | Kelola user & flag `is_admin` — **Admin only** |
-| Projects | `/projects` | GET/POST | List & buat proyek |
-| Projects | `/projects/:id/sub-projects` | GET/POST | Kelola sub-proyek |
-| Memberships | `/projects/:id/members` | GET/POST/PATCH | Undang & atur role anggota proyek |
+| Projects | `/projects` | GET/POST | List & buat proyek — body POST wajib sertakan `key` (Kode Proyek unik, immutable) |
+| Projects | `/projects/:id/sub-projects` | GET/POST | Kelola sub-proyek — sub-proyek juga wajib punya `key` sendiri, independen dari induk |
+| Memberships | `/projects/:id/members` | GET/POST/PATCH | Undang & atur role anggota proyek — **Admin dapat mengakses meski belum jadi member proyek ini** (§4.1) |
 | Issue Statuses | `/projects/:id/issue-statuses` | GET/POST/PATCH/DELETE | CRUD status workflow (termasuk reorder & set `restricted_to_role`) — **Manager/Admin** |
-| Issues | `/projects/:id/issues` | GET/POST | List (view=list\|kanban\|calendar) & buat tiket |
-| Issues | `/issues/:id` | GET/PATCH/DELETE | Detail & update tiket |
+| Issues | `/projects/:id/issues` | GET/POST | List (view=list\|kanban\|calendar) & buat tiket — nomor issue (`number`) di-generate otomatis, atomik per proyek |
+| Issues | `/issues/:id` | GET/PATCH/DELETE | Detail & update tiket (edit oleh Assignee/Manager/Admin) |
 | Issues | `/issues/:id/status` | PATCH | Ubah status (dicek terhadap `restricted_to_role`) |
+| Issue Attachments | `/issues/:id/attachments` | GET/POST | List & upload lampiran (presigned URL R2) |
+| Issue Attachments | `/issues/:id/attachments/:attachmentId` | DELETE | Hapus lampiran (uploader atau Admin) |
+| Issue Comments | `/issues/:id/comments` | GET/POST | List & tambah komentar — **anggota proyek peran manapun** boleh akses |
+| Issue Comments | `/issues/:id/comments/:commentId` | PATCH/DELETE | Edit (penulis saja) / Hapus (penulis atau Admin untuk moderasi) |
 | Templates | `/projects/:id/issue-templates` | GET/POST/PATCH | Kelola template (termasuk edit array `fields`) — **Manager/Admin** |
 | Documents | `/projects/:id/documents` | GET/POST | Upload/list dokumen (presigned URL R2) |
 | Time Tracking | `/time-blocks/sync` | POST | Endpoint utama sinkronisasi dari Desktop Client tiap 10 menit |
@@ -465,31 +511,44 @@ erDiagram
 | Timesheets | `/timesheets/:id/approve` | POST | Approve/reject oleh Manager |
 | Reports | `/reports/hours?format=pdf\|csv` | GET | Generate & unduh laporan |
 
-### 8.1 Contoh Payload — Buat Tiket dari Template Bug
+### 8.1 Contoh Payload — Buat Tiket dari Template Bug (Sebagai Filler Teks)
 
+Langkah 1 — frontend ambil teks awal dari template (tidak menyentuh backend, cukup dari response `GET /projects/:id/issue-templates` yang sudah di-cache):
+```
+Title (prefill)       : [BUG] Nama Fitur - Nama Bug
+Description (prefill) : Role User: 
+                         Current Condition: 
+                         Expected Result: 
+                         Link Halaman: 
+                         Step to Reproduce: 
+                         Evidence: 
+                         Environment: (wajib diisi bug terjadi di mana)
+```
+
+Langkah 2 — user mengedit teks tersebut secara bebas, lalu submit sebagai **title/description biasa** (tanpa `titleValues`/`fieldValues` terstruktur seperti draft sebelumnya):
 ```json
 POST /projects/:id/issues
 {
   "trackerId": "<uuid-tracker-bug>",
-  "templateId": "<uuid-template-bug-default>",
-  "titleValues": {
-    "feature": "Login Page",
-    "bugName": "Tombol submit tidak responsif"
-  },
-  "fieldValues": {
-    "Role User": "Karyawan (staff biasa)",
-    "Current Condition": "Tombol submit tidak bereaksi saat diklik di halaman login",
-    "Expected Result": "Form ter-submit dan redirect ke dashboard",
-    "Link Halaman": "https://app.trackflow.local/login",
-    "Step to Reproduce": "1. Buka halaman login 2. Isi email & password 3. Klik Submit",
-    "Evidence": "https://r2.trackflow.local/docs/screenshot-bug-001.png",
-    "Environment": "Chrome 126, Windows 11, resolusi 1366x768"
-  }
+  "title": "[BUG] Login Page - Tombol submit tidak responsif",
+  "description": "Role User: Karyawan (staff biasa)\nCurrent Condition: Tombol submit tidak bereaksi saat diklik di halaman login\nExpected Result: Form ter-submit dan redirect ke dashboard\nLink Halaman: https://app.trackflow.local/login\nStep to Reproduce: 1. Buka halaman login 2. Isi email & password 3. Klik Submit\nEvidence: https://r2.trackflow.local/docs/screenshot-bug-001.png\nEnvironment: Chrome 126, Windows 11, resolusi 1366x768",
+  "assigneeId": "<uuid-user>",
+  "priority": "high"
 }
 ```
-Backend menyusun `title` final menjadi `"[BUG] Login Page - Tombol submit tidak responsif"` dari `title_pattern` + `titleValues`, dan menyusun `description` dari `fieldValues` sesuai urutan `fields` pada template. Validasi menolak request jika field dengan `required: true` (mis. `Environment`) kosong.
+Backend **tidak lagi memvalidasi** kelengkapan field di dalam `description` (lihat §16 untuk trade-off). Backend hanya bertanggung jawab men-generate `number` secara atomik dan menyusun Issue ID tampilan `{projects.key}-{number}` (mis. `TRACK-142`) — lihat §10.6.
 
-### 8.2 Contoh Payload — Sinkronisasi Blok Waktu dari Desktop Client
+### 8.2 Contoh Payload — Upload Lampiran & Tambah Komentar
+
+```json
+POST /issues/:id/attachments   // presigned URL request
+{ "fileName": "screenshot-bug-001.png" }
+
+POST /issues/:id/comments
+{ "body": "Sudah saya cek, ternyata masalah di validasi form sisi client. Sedang saya perbaiki." }
+```
+
+### 8.3 Contoh Payload — Sinkronisasi Blok Waktu dari Desktop Client
 
 ```json
 POST /time-blocks/sync
@@ -519,6 +578,7 @@ POST /time-blocks/sync
 | `timeblock.synced` | Server → Web | `{userId, projectId, blockStart}` | Indikator "aktif bekerja" |
 | `timesheet.approved` | Server → Web | `{timesheetId, status}` | Notifikasi ke Developer |
 | `timeblock.overridden` | Server → Web | `{timeBlockId, actorId, targetUserId, action, reason}` | Notifikasi ke pekerja terdampak saat Admin override |
+| `issue.comment_created` | Server → Web | `{issueId, commentId, authorId, bodyPreview}` | Update panel Aktivitas/Komentar secara realtime tanpa refresh |
 
 Desktop Client menggunakan gateway ini untuk heartbeat ringan; screenshot tetap lewat REST + presigned URL.
 
@@ -586,7 +646,7 @@ sequenceDiagram
     Note over A: Jika Developer mencoba set "Done" langsung → 403 Forbidden (role tidak cocok dengan restricted_to_role)
 ```
 
-### 10.4 Alur Membuat Tiket dari Issue Template (Bug)
+### 10.4 Alur Membuat Tiket dari Issue Template (Sebagai Filler Teks)
 
 ```mermaid
 sequenceDiagram
@@ -597,17 +657,12 @@ sequenceDiagram
     U->>A: GET /projects/:id/issue-templates
     A->>PG: Query issue_templates (project_id ATAU project_id IS NULL untuk global)
     A-->>U: List template, termasuk "Bug Report Default"
-    U->>U: Pilih template Bug → form otomatis render 7 field
-    U->>A: POST /projects/:id/issues {templateId, titleValues, fieldValues}
-    A->>A: Validasi: field required (Environment) terisi?
-    alt Environment kosong
-        A-->>U: 400 Bad Request ("Environment wajib diisi")
-    else valid
-        A->>A: Susun title dari title_pattern + titleValues
-        A->>A: Susun description dari fields + fieldValues
-        A->>PG: Insert issues
-        A-->>U: 201 Created
-    end
+    U->>U: Pilih template Bug → frontend isi Title & Description dari title_pattern + fields (di sisi client, tanpa panggil backend lagi)
+    U->>U: Edit Title & Description secara bebas seperti teks biasa
+    U->>A: POST /projects/:id/issues {trackerId, title, description, assigneeId, priority}
+    A->>A: Generate nomor issue atomik (lihat §10.6) — TIDAK ada validasi kelengkapan field description
+    A->>PG: Insert issues
+    A-->>U: 201 Created {number, title}
 ```
 
 ### 10.5 Alur Override Blok Waktu oleh Admin
@@ -632,6 +687,41 @@ sequenceDiagram
     end
 ```
 
+### 10.6 Alur Generate Nomor Issue Otomatis (Atomik per Proyek/Sub-proyek)
+
+```mermaid
+sequenceDiagram
+    participant U as Pengguna (Web)
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    U->>A: POST /projects/:id/issues {title, description, ...}
+    A->>PG: BEGIN TRANSACTION
+    A->>PG: UPDATE projects SET issue_sequence = issue_sequence + 1 WHERE id = :projectId RETURNING issue_sequence
+    Note over A,PG: Row lock mencegah 2 request bersamaan dapat nomor yang sama
+    A->>PG: INSERT issues (project_id, number = issue_sequence_baru, ...)
+    A->>PG: COMMIT
+    A-->>U: 201 Created {number, displayId: "{projects.key}-{number}"}
+    Note over A: Sub-proyek punya project_id & issue_sequence sendiri — nomor TIDAK bersambung dengan proyek induk
+```
+
+### 10.7 Alur Komentar Issue Activity (Realtime)
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant QA as QA (via WS)
+
+    Dev->>A: POST /issues/:id/comments {body}
+    A->>A: Cek: pengirim member proyek manapun (role apapun) atau Admin?
+    A->>PG: Insert issue_comments (author_id, body)
+    A-->>Dev: 201 Created
+    A->>QA: emit issue.comment_created {issueId, commentId, authorId, bodyPreview}
+    Note over QA: Panel Aktivitas QA ter-update tanpa refresh jika issue yang sama sedang terbuka
+```
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -649,6 +739,7 @@ sequenceDiagram
 | Audit trail | Semua override & perubahan status tiket tercatat di `time_block_audit_logs` dengan pelaku & waktu |
 | Retensi data | Screenshot dihapus otomatis setelah 12 bulan (§13) |
 | Model instalasi | Single-tenant tanpa entitas organisasi — permukaan risiko lebih kecil dibanding model SaaS multi-tenant |
+| Moderasi komunikasi | Issue Activity terbuka untuk semua anggota proyek (tanpa batasan role), namun Admin tetap dapat menghapus komentar siapapun untuk moderasi jika terjadi penyalahgunaan |
 
 ---
 
@@ -756,6 +847,8 @@ Tidak berubah dari revisi sebelumnya — `turbo.json` mengatur pipeline `build`/
 | Admin (flag `isAdmin` pada tabel `user`) berpotensi jadi *single point of failure* administratif | Disarankan minimal 2 user dengan `isAdmin=true` sejak awal |
 | Kolom kepegawaian (`employeeId`, `department`, dsb.) diisi tidak konsisten oleh HR/Admin | Validasi ringan di form (mis. format employeeId), namun tidak wajib diisi semua — hanya `username` yang wajib & unik |
 | Kesalahan pengisian field Issue Template (selain Environment) tidak divalidasi wajib | Diterima sebagai trade-off kecepatan; Manager dapat mengubah field mana saja jadi wajib via pengaturan template kapan saja |
+| `key` proyek harus unik secara global (termasuk lintas sub-proyek) — makin banyak proyek, makin mudah terjadi konflik kode singkat | Validasi uniqueness real-time saat pengisian form (cek via API saat blur), sarankan konvensi penamaan internal (mis. selalu awali sub-proyek dengan kode induk + suffix) |
+| Description issue kini teks bebas — konsistensi laporan bug (semua field terisi) bergantung sepenuhnya pada kedisiplinan penulis, bukan validasi sistem | Diterima sebagai trade-off kesederhanaan; dapat dipantau manual oleh Manager/QA, atau ditambah linter/reminder ringan di masa depan jika kualitas laporan menurun |
 
 ---
 

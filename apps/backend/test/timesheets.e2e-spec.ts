@@ -169,6 +169,7 @@ describe('Timesheet & Approvals (e2e)', () => {
         .set('x-mock-user-id', mockUsers.manager.id)
         .send({
           name: 'Approvals Project',
+          key: 'SHEET',
         })
         .expect(201);
 

@@ -111,6 +111,7 @@ describe('Reports & Analytics (e2e)', () => {
         .set('x-mock-user-id', mockUsers.developer.id)
         .send({
           name: 'Reporting Test Project',
+          key: 'REPORT',
         })
         .expect(201);
 

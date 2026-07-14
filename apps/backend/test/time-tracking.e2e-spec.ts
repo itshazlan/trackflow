@@ -169,6 +169,7 @@ describe('Time Tracking (e2e)', () => {
         .set('x-mock-user-id', mockUsers.manager.id)
         .send({
           name: 'Time Tracking Project',
+          key: 'TIME',
         })
         .expect(201);
 

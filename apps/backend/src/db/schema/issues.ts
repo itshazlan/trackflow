@@ -9,6 +9,7 @@ import {
   text,
   date,
   numeric,
+  unique,
 } from 'drizzle-orm/pg-core';
 import { projects, projectRoleEnum } from './projects';
 import { user } from './auth';
@@ -77,4 +78,7 @@ export const issues = pgTable('issues', {
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
-});
+  number: integer('number').notNull(),
+}, (table) => [
+  unique('unique_project_issue_number').on(table.projectId, table.number),
+]);

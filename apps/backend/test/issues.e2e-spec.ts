@@ -160,6 +160,7 @@ describe('Issues and Workflow Statuses (e2e)', () => {
         .set('x-mock-user-id', mockUsers.manager.id)
         .send({
           name: 'Core Issue Project',
+          key: 'CORE',
           description: 'Project for testing tickets slice',
         })
         .expect(201);
@@ -265,6 +266,9 @@ describe('Issues and Workflow Statuses (e2e)', () => {
         '**Environment**:\nStaging iOS App',
       );
       expect(res.body.statusId).toBe(defaultStatuses[0].id); // defaults to 'New'
+      expect(res.body.number).toBe(1);
+      expect(res.body.projectKey).toBe('CORE');
+      expect(res.body.displayId).toBe('CORE-1');
       issueId = res.body.id;
     });
   });
