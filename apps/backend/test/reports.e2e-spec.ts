@@ -205,9 +205,7 @@ describe('Reports & Analytics (e2e)', () => {
       // Time block check
       expect(csvContent).toContain('"Automatic",15,"Paid"');
       // Approved entry check
-      expect(csvContent).toContain(
-        '"N/A","Manual",45,"APPROVED"',
-      );
+      expect(csvContent).toContain('"N/A","Manual",45,"APPROVED"');
       // Pending entry check MUST NOT be in the CSV
       expect(csvContent).not.toContain('Pending manual entry description');
       // Totals check (15 mins + 45 mins = 60 mins / 1.00 hour)
