@@ -115,24 +115,26 @@ export default function ProfileModal({ open, onOpenChange, onSuccess }: ProfileM
       setError("");
       setSuccessMsg("");
 
-      // 1. Get presigned upload URL
-      const res = await fetch("/api/users/me/avatar", { method: "POST" });
-      if (!res.ok) throw new Error("Gagal menginisialisasi unggahan foto");
-      const { uploadUrl, publicUrl } = await res.json();
+      // Upload via backend — avoids browser CORS against R2 entirely.
+      // Backend receives the file and pushes it to R2 server-side.
+      const formData = new FormData();
+      formData.append("file", file);
 
-      // 2. PUT file to presigned URL
-      const uploadRes = await fetch(uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
+      const res = await fetch("/api/users/me/avatar", {
+        method: "POST",
+        body: formData,
+        // Do NOT set Content-Type — browser sets it with the correct boundary automatically
       });
 
-      if (!uploadRes.ok) throw new Error("Gagal mengunggah foto ke penyimpanan cloud");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? "Gagal mengunggah foto profil");
+      }
 
-      // 3. Update local image state (backend database is updated inside /avatar endpoint already)
-      setImage(publicUrl);
+      const { publicUrl } = await res.json();
+
+      // Update local preview with cache-busting param
+      setImage(`${publicUrl}?t=${Date.now()}`);
       setSuccessMsg("Foto profil berhasil diperbarui!");
       if (onSuccess) onSuccess();
     } catch (err: unknown) {

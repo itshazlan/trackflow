@@ -12,7 +12,7 @@ import { CreateProjectDto } from './dto/create-project.dto';
 
 @Injectable()
 export class ProjectsService {
-  constructor(@Inject(DRIZZLE) private db: any) {}
+  constructor(@Inject(DRIZZLE) private db: any) { }
 
   async create(createProjectDto: CreateProjectDto, userId: string) {
     try {

@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import {
   Avatar,
@@ -275,9 +276,11 @@ export default function DashboardLayout({
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-50">
-                <DropdownMenuLabel className="text-[11px] font-medium text-muted-foreground px-2 py-1.5">
-                  Akun Anda
-                </DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="text-[11px] font-medium text-muted-foreground px-2 py-1.5">
+                    Akun Anda
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setIsProfileOpen(true)} className="text-[13px] cursor-pointer">
                   <UserIcon className="h-4 w-4 mr-2" />

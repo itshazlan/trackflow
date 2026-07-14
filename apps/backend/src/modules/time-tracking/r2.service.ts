@@ -52,6 +52,32 @@ export class R2Service {
     return getSignedUrl(this.s3Client, command, { expiresIn: 900 });
   }
 
+  async uploadBuffer(
+    objectKey: string,
+    buffer: Buffer,
+    contentType = 'image/webp',
+  ): Promise<void> {
+    if (!this.s3Client) {
+      // Mock mode: persist to local disk so /uploads/* static server can serve it
+      const { join } = await import('path');
+      const { mkdirSync, writeFileSync } = await import('fs');
+      const filePath = join(process.cwd(), 'uploads', objectKey);
+      mkdirSync(join(filePath, '..'), { recursive: true });
+      writeFileSync(filePath, buffer);
+      console.log(`[Mock R2] Saved file locally: ${filePath}`);
+      return;
+    }
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: objectKey,
+      Body: buffer,
+      ContentType: contentType,
+    });
+
+    await this.s3Client.send(command);
+  }
+
   async deleteObject(objectKey: string): Promise<void> {
     if (!this.s3Client) {
       console.log(`[Mock R2] Deleted object: ${objectKey}`);

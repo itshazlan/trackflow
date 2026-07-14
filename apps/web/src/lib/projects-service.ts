@@ -62,7 +62,8 @@ export async function getProjectDetail(id: string): Promise<Project> {
   });
 
   if (!res.ok) {
-    throw new Error("Failed to fetch project detail");
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to fetch project detail (${res.status})`);
   }
 
   return res.json();
