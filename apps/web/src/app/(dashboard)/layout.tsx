@@ -31,6 +31,7 @@ import {
   ChevronDown,
   Timer,
   User as UserIcon,
+  FileText,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -111,6 +112,12 @@ export default function DashboardLayout({
       label: "Settings",
       icon: Settings,
       href: projectId ? `/projects/${projectId}?tab=settings` : null,
+    },
+    {
+      id: "timesheets",
+      label: "Timesheets & Approval",
+      icon: FileText,
+      href: "/timesheets",
     },
   ];
 
@@ -193,7 +200,7 @@ export default function DashboardLayout({
           {navigationItems.map((item) => {
             const Icon = item.icon;
             const disabled = !item.href;
-            const isActive = item.href && pathname.startsWith(projectId ? `/projects/${projectId}` : "_") && pathname.includes(item.id);
+            const isActive = item.href && (item.id === "timesheets" ? pathname.startsWith("/timesheets") : pathname.startsWith(projectId ? `/projects/${projectId}` : "_") && pathname.includes(item.id));
 
             const content = (
               <div
