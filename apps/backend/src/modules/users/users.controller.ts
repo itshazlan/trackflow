@@ -25,6 +25,11 @@ export class UsersController {
     return this.usersService.findOne(req.user.id);
   }
 
+  @Get()
+  listAll() {
+    return this.usersService.findAll();
+  }
+
   @Patch('me')
   updateMe(@Req() req: any, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(req.user.id, dto);

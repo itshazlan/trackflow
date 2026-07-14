@@ -82,4 +82,9 @@ export class UsersService {
 
     return { publicUrl };
   }
+
+  async findAll() {
+    const users = await this.db.select().from(user);
+    return users.map(({ password, ...u }: any) => u);
+  }
 }

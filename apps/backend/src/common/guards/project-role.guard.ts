@@ -31,7 +31,9 @@ export class ProjectRoleGuard implements CanActivate {
     }
 
     // SDD §4.1: "Admin memiliki akses baca implisit ke semua proyek (tanpa perlu didaftarkan sebagai member), sehingga bisa memantau seluruh tim."
-    if (user.isAdmin && request.method === 'GET') {
+    // We extend this to allow Admin implicit manager role for all write operations as well.
+    if (user.isAdmin) {
+      request.projectRole = 'manager';
       return true;
     }
 

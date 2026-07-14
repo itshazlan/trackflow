@@ -221,6 +221,76 @@ export async function getProjectMembers(projectId: string): Promise<ProjectMembe
   return res.json();
 }
 
+export async function addProjectMember(
+  projectId: string,
+  userId: string,
+  role: 'manager' | 'developer' | 'reporter_qa',
+): Promise<ProjectMember> {
+  const res = await fetch(`/api/projects/${projectId}/members`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ userId, role }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to add project member");
+  }
+
+  return res.json();
+}
+
+export async function updateProjectMemberRole(
+  projectId: string,
+  userId: string,
+  role: 'manager' | 'developer' | 'reporter_qa',
+): Promise<ProjectMember> {
+  const res = await fetch(`/api/projects/${projectId}/members/${userId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ role }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to update project member role");
+  }
+
+  return res.json();
+}
+
+export async function removeProjectMember(projectId: string, userId: string): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/members/${userId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to remove project member");
+  }
+}
+
+export async function getSystemUsers(): Promise<Array<{ id: string; name: string; email: string; username: string }>> {
+  const res = await fetch("/api/users", {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch system users");
+  }
+
+  return res.json();
+}
+
 export async function createProjectStatus(
   projectId: string,
   payload: { name: string; orderIndex: number; restrictedToRole: string | null }

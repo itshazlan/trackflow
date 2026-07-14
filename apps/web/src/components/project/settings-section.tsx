@@ -12,11 +12,18 @@ import {
   createProjectTemplate,
   updateProjectTemplate,
   deleteProjectTemplate,
+  getProjectMembers,
+  addProjectMember,
+  updateProjectMemberRole,
+  removeProjectMember,
+  getSystemUsers,
   IssueStatus,
   IssueTemplate,
   Tracker,
   TemplateField,
+  ProjectMember,
 } from "@/lib/issues-service";
+import { getSession, UserSession } from "@/lib/auth-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +53,7 @@ import {
   AlertCircle,
   Sliders,
   FileText,
+  Users,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
@@ -55,9 +63,12 @@ interface SettingsSectionProps {
 
 export default function SettingsSection({ projectId }: SettingsSectionProps) {
   const confirm = useConfirm();
+  const [session, setSession] = useState<UserSession | null>(null);
   const [statuses, setStatuses] = useState<IssueStatus[]>([]);
   const [templates, setTemplates] = useState<IssueTemplate[]>([]);
   const [trackers, setTrackers] = useState<Tracker[]>([]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [systemUsers, setSystemUsers] = useState<Array<{ id: string; name: string; email: string; username: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -79,18 +90,31 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
   const [templateActionLoading, setTemplateActionLoading] = useState(false);
   const [templateError, setTemplateError] = useState("");
 
+  // Modals state for Members
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [memberRole, setMemberRole] = useState<'manager' | 'developer' | 'reporter_qa'>("developer");
+  const [memberActionLoading, setMemberActionLoading] = useState(false);
+  const [memberError, setMemberError] = useState("");
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
-      const [statusesData, templatesData, trackersData] = await Promise.all([
+      const [statusesData, templatesData, trackersData, sessionData, membersData, systemUsersData] = await Promise.all([
         getProjectStatuses(projectId),
         getProjectTemplates(projectId),
         getTrackers(),
+        getSession(),
+        getProjectMembers(projectId),
+        getSystemUsers().catch(() => []),
       ]);
       setStatuses(statusesData);
       setTemplates(templatesData);
       setTrackers(trackersData);
+      setSession(sessionData);
+      setMembers(membersData);
+      setSystemUsers(systemUsersData);
     } catch (err) {
       console.error(err);
       setError("Gagal memuat konfigurasi settings.");
@@ -308,6 +332,68 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
     }
   };
 
+  const currentMember = members.find(
+    (m) => m.email === session?.user?.email || m.username === session?.user?.username
+  );
+  const userRole = currentMember?.role;
+  const isAdmin = session?.user?.isAdmin;
+  const isManagerOrAdmin = userRole === "manager" || isAdmin;
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserId) return;
+    setMemberActionLoading(true);
+    setMemberError("");
+    try {
+      await addProjectMember(projectId, selectedUserId, memberRole);
+      setIsMemberModalOpen(false);
+      setSelectedUserId("");
+      setMemberRole("developer");
+      const membersData = await getProjectMembers(projectId);
+      setMembers(membersData);
+    } catch (err: unknown) {
+      setMemberError(err instanceof Error ? err.message : "Gagal menambahkan anggota.");
+    } finally {
+      setMemberActionLoading(false);
+    }
+  };
+
+  const handleUpdateMemberRole = async (userId: string, role: 'manager' | 'developer' | 'reporter_qa') => {
+    setMemberActionLoading(true);
+    setMemberError("");
+    try {
+      await updateProjectMemberRole(projectId, userId, role);
+      const membersData = await getProjectMembers(projectId);
+      setMembers(membersData);
+    } catch (err: unknown) {
+      setMemberError(err instanceof Error ? err.message : "Gagal mengubah peran anggota.");
+    } finally {
+      setMemberActionLoading(false);
+    }
+  };
+
+  const handleRemoveMember = async (userId: string) => {
+    const ok = await confirm({
+      title: "Hapus Anggota Proyek",
+      description: "Apakah Anda yakin ingin mengeluarkan anggota ini dari proyek?",
+      confirmLabel: "Ya, Keluarkan",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
+    setMemberActionLoading(true);
+    setMemberError("");
+    try {
+      await removeProjectMember(projectId, userId);
+      const membersData = await getProjectMembers(projectId);
+      setMembers(membersData);
+    } catch (err: unknown) {
+      setMemberError(err instanceof Error ? err.message : "Gagal mengeluarkan anggota.");
+    } finally {
+      setMemberActionLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
@@ -334,6 +420,10 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
           <TabsTrigger value="templates" className="text-[11.5px] font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5" />
             Template Tiket
+          </TabsTrigger>
+          <TabsTrigger value="members" className="text-[11.5px] font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5" />
+            Anggota Proyek
           </TabsTrigger>
         </TabsList>
 
@@ -487,6 +577,98 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
                 </div>
               ))
             )}
+          </div>
+        </TabsContent>
+
+        {/* Members settings content */}
+        <TabsContent value="members" className="mt-0 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-[13.5px] font-semibold text-foreground">Anggota Proyek</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Kelola anggota tim yang memiliki akses ke proyek ini beserta perannya.
+              </p>
+            </div>
+            {isManagerOrAdmin && (
+              <Button size="sm" className="h-7.5 text-[11.5px] font-medium" onClick={() => {
+                setMemberError("");
+                setIsMemberModalOpen(true);
+              }}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Tambah Anggota
+              </Button>
+            )}
+          </div>
+
+          {memberError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{memberError}</span>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-border bg-card overflow-hidden shadow-sm">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-4">Nama</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="w-40">Peran Proyek</TableHead>
+                  {isManagerOrAdmin && <TableHead className="w-24 text-right pr-4">Aksi</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {members.length === 0 ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={isManagerOrAdmin ? 4 : 3} className="h-28 text-center text-muted-foreground">
+                      Belum ada anggota tim terdaftar.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  members.map((member) => (
+                    <TableRow key={member.id} className="hover:bg-muted/40 transition-colors">
+                      <TableCell className="font-medium text-foreground pl-4">
+                        {member.name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {member.email}
+                      </TableCell>
+                      <TableCell>
+                        {isManagerOrAdmin ? (
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleUpdateMemberRole(member.id, e.target.value as any)}
+                            disabled={memberActionLoading}
+                            className="h-7.5 w-full rounded border border-input bg-card px-2 text-[11.5px] outline-none focus:ring-1 focus:ring-ring"
+                          >
+                            <option value="manager">Manager</option>
+                            <option value="developer">Developer</option>
+                            <option value="reporter_qa">Reporter / QA</option>
+                          </select>
+                        ) : (
+                          <span className="inline-flex items-center rounded border border-border px-2 py-0.5 text-[10.5px] font-medium bg-muted/40 text-muted-foreground capitalize select-none">
+                            {member.role === 'reporter_qa' ? 'Reporter / QA' : member.role}
+                          </span>
+                        )}
+                      </TableCell>
+                      {isManagerOrAdmin && (
+                        <TableCell className="text-right pr-4">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={memberActionLoading}
+                            className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleRemoveMember(member.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
         </TabsContent>
       </Tabs>
@@ -737,6 +919,82 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
                   </>
                 ) : (
                   "Simpan Template"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Member Dialog */}
+      <Dialog open={isMemberModalOpen} onOpenChange={setIsMemberModalOpen}>
+        <DialogContent className="sm:max-w-[360px]">
+          <form onSubmit={handleAddMember}>
+            <DialogHeader>
+              <DialogTitle className="text-[14px] font-semibold">Tambah Anggota Proyek</DialogTitle>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-3.5 py-4 text-xs">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="member-user" className="text-[11px] font-semibold text-muted-foreground">
+                  Pilih Pengguna <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="member-user"
+                  required
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="h-8.5 w-full rounded-md border border-input bg-card px-2 text-[12px] outline-none"
+                  disabled={memberActionLoading}
+                >
+                  <option value="">-- Pilih Pengguna --</option>
+                  {systemUsers
+                    .filter((u) => !members.some((m) => m.id === u.id))
+                    .map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.email})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="member-role" className="text-[11px] font-semibold text-muted-foreground">
+                  Peran Proyek <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="member-role"
+                  required
+                  value={memberRole}
+                  onChange={(e) => setMemberRole(e.target.value as any)}
+                  className="h-8.5 w-full rounded-md border border-input bg-card px-2 text-[12px] outline-none"
+                  disabled={memberActionLoading}
+                >
+                  <option value="developer">Developer</option>
+                  <option value="reporter_qa">Reporter / QA</option>
+                  <option value="manager">Manager</option>
+                </select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 text-[12px]"
+                onClick={() => setIsMemberModalOpen(false)}
+                disabled={memberActionLoading}
+              >
+                Batal
+              </Button>
+              <Button type="submit" className="h-8 text-[12px]" disabled={memberActionLoading || !selectedUserId}>
+                {memberActionLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Tambah Anggota"
                 )}
               </Button>
             </DialogFooter>
