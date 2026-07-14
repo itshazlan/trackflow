@@ -457,20 +457,19 @@ export async function getIssueAttachments(issueId: string): Promise<IssueAttachm
 
 export async function createIssueAttachment(
   issueId: string,
-  fileName: string,
-  contentType: string
-): Promise<{ uploadUrl: string; r2ObjectKey: string; attachment: IssueAttachment }> {
+  file: File
+): Promise<IssueAttachment> {
+  const formData = new FormData();
+  formData.append("file", file);
+
   const res = await fetch(`/api/issues/${issueId}/attachments`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ fileName, contentType }),
+    body: formData,
   });
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || "Failed to initiate attachment upload");
+    throw new Error(errorData.message || "Failed to upload attachment");
   }
 
   return res.json();

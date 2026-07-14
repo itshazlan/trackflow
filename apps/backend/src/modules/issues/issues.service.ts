@@ -382,7 +382,9 @@ export class IssuesService {
 
   async createAttachment(
     issueId: string,
-    payload: CreateAttachmentDto,
+    fileName: string,
+    contentType: string,
+    fileBuffer: Buffer,
     userId: string,
   ) {
     const [issue] = await this.db
@@ -420,13 +422,10 @@ export class IssuesService {
     }
 
     const attachmentId = randomUUID();
-    const objectKey = `project/${issue.projectId}/issues/${issueId}/attachments/${attachmentId}-${payload.fileName}`;
+    const objectKey = `project/${issue.projectId}/issues/${issueId}/attachments/${attachmentId}-${fileName}`;
 
-    // Get presigned upload URL
-    const uploadUrl = await this.r2Service.getPresignedUploadUrl(
-      objectKey,
-      payload.contentType,
-    );
+    // Upload directly to R2 (server-side, avoiding CORS issues)
+    await this.r2Service.uploadBuffer(objectKey, fileBuffer, contentType);
 
     // Save attachment in database
     const [attachment] = await this.db
@@ -434,17 +433,13 @@ export class IssuesService {
       .values({
         id: attachmentId,
         issueId,
-        fileName: payload.fileName,
+        fileName,
         r2ObjectKey: objectKey,
         uploadedBy: userId,
       })
       .returning();
 
-    return {
-      uploadUrl,
-      r2ObjectKey: objectKey,
-      attachment,
-    };
+    return attachment;
   }
 
   async findAttachmentsForIssue(issueId: string, userId: string) {

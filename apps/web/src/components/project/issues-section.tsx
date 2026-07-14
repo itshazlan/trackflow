@@ -53,8 +53,58 @@ import {
   Calendar,
   Paperclip,
   X,
+  FileImage,
+  FileText,
+  FileVideo,
+  FileAudio,
+  FileCode,
+  Archive,
+  File,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+
+const getFileIcon = (fileName: string) => {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "gif":
+    case "webp":
+    case "svg":
+      return <FileImage className="h-3.5 w-3.5 text-blue-500 shrink-0" />;
+    case "pdf":
+    case "doc":
+    case "docx":
+    case "txt":
+    case "md":
+      return <FileText className="h-3.5 w-3.5 text-orange-500 shrink-0" />;
+    case "mp4":
+    case "mov":
+    case "avi":
+    case "mkv":
+      return <FileVideo className="h-3.5 w-3.5 text-purple-500 shrink-0" />;
+    case "mp3":
+    case "wav":
+    case "ogg":
+      return <FileAudio className="h-3.5 w-3.5 text-pink-500 shrink-0" />;
+    case "zip":
+    case "rar":
+    case "tar":
+    case "gz":
+    case "7z":
+      return <Archive className="h-3.5 w-3.5 text-yellow-600 shrink-0" />;
+    case "js":
+    case "ts":
+    case "tsx":
+    case "json":
+    case "html":
+    case "css":
+      return <FileCode className="h-3.5 w-3.5 text-green-500 shrink-0" />;
+    default:
+      return <File className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
+  }
+};
 
 interface IssuesSectionProps {
   projectId: string;
@@ -85,6 +135,8 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
 
   // Create Issue Attachments state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDetailDragging, setIsDetailDragging] = useState(false);
 
   // Detail Issue Dialog state
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
@@ -173,6 +225,28 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     }
   };
 
+  const handleUploadDetailFiles = async (files: FileList) => {
+    if (!selectedIssue) return;
+    const filesArr = Array.from(files);
+    if (filesArr.length === 0) return;
+
+    setDetailLoading(true);
+    setDetailError("");
+    try {
+      const uploaded: IssueAttachment[] = [];
+      for (const file of filesArr) {
+        const attachment = await createIssueAttachment(selectedIssue.id, file);
+        uploaded.push(attachment);
+      }
+
+      setAttachments((prev) => [...prev, ...uploaded]);
+    } catch (err: unknown) {
+      setDetailError(err instanceof Error ? err.message : "Gagal mengunggah lampiran.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   // Find matching template
   const bugTemplate = templates.find((t) => t.trackerId === selectedTrackerId);
 
@@ -218,23 +292,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
 
       // Upload selected files sequentially
       for (const file of selectedFiles) {
-        const { uploadUrl } = await createIssueAttachment(
-          newIssue.id,
-          file.name,
-          file.type || "application/octet-stream"
-        );
-
-        const uploadRes = await fetch(uploadUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": file.type || "application/octet-stream",
-          },
-          body: file,
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error(`Gagal mengunggah lampiran: ${file.name}`);
-        }
+        await createIssueAttachment(newIssue.id, file);
       }
 
       setIsCreateOpen(false);
@@ -581,7 +639,24 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   <Paperclip className="h-3 w-3" />
                   Lampiran (Attachments)
                 </Label>
-                <div className="flex flex-col gap-2 rounded-md border border-input p-2 bg-card/30">
+                <div
+                  className={`flex flex-col gap-2 rounded-md border p-2.5 bg-card/30 transition-all ${
+                    isDragging ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-input"
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (e.dataTransfer.files) {
+                      const filesArr = Array.from(e.dataTransfer.files);
+                      setSelectedFiles((prev) => [...prev, ...filesArr]);
+                    }
+                  }}
+                >
                   <input
                     type="file"
                     multiple
@@ -598,7 +673,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-muted-foreground">
                       {selectedFiles.length === 0
-                        ? "Pilih file untuk dilampirkan..."
+                        ? "Pilih atau seret file ke sini..."
                         : `${selectedFiles.length} file dipilih`}
                     </span>
                     <Button
@@ -617,9 +692,12 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                       {selectedFiles.map((file, idx) => (
                         <div
                           key={idx}
-                          className="flex items-center justify-between bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded text-[11.5px] text-foreground group"
+                          className="flex items-center justify-between bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded text-[11.5px] text-foreground group gap-2"
                         >
-                          <span className="truncate max-w-[280px] font-medium">{file.name}</span>
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            {getFileIcon(file.name)}
+                            <span className="truncate font-medium">{file.name}</span>
+                          </div>
                           <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-2">
                             {(file.size / 1024).toFixed(1)} KB
                             <button
@@ -630,7 +708,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                               }
                               disabled={createLoading}
                             >
-                              <X className="h-3 w-3" />
+                              <X className="h-3.5 w-3.5" />
                             </button>
                           </span>
                         </div>
@@ -826,26 +904,69 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                 </div>
 
                 {/* Attachments Section */}
-                <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3 mt-1">
-                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                    <Paperclip className="h-3 w-3" />
-                    Lampiran ({attachments.length})
-                  </span>
+                <div
+                  className={`flex flex-col gap-1.5 border-t border-border/60 pt-3 mt-1 transition-all ${
+                    isDetailDragging ? "bg-primary/5 border-dashed border-primary p-2 rounded-md" : ""
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDetailDragging(true);
+                  }}
+                  onDragLeave={() => setIsDetailDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDetailDragging(false);
+                    if (e.dataTransfer.files) {
+                      void handleUploadDetailFiles(e.dataTransfer.files);
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                      <Paperclip className="h-3 w-3" />
+                      Lampiran ({attachments.length})
+                    </span>
+                    <div className="flex items-center">
+                      <input
+                        type="file"
+                        multiple
+                        id="detail-files-input"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files) {
+                            void handleUploadDetailFiles(e.target.files);
+                          }
+                        }}
+                        disabled={detailLoading}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[10px] font-medium px-2 text-muted-foreground hover:text-foreground"
+                        onClick={() => document.getElementById("detail-files-input")?.click()}
+                        disabled={detailLoading}
+                      >
+                        Tambah File
+                      </Button>
+                    </div>
+                  </div>
+
                   {attachmentsLoading ? (
                     <div className="flex items-center gap-1.5 py-2 text-xs text-muted-foreground">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       Memuat lampiran...
                     </div>
                   ) : attachments.length === 0 ? (
-                    <span className="text-xs text-muted-foreground italic py-1">
-                      Tidak ada lampiran untuk tiket ini.
+                    <span className="text-xs text-muted-foreground italic py-2.5 text-center border border-dashed border-border/80 rounded bg-muted/10">
+                      Seret file ke sini untuk mengunggah
                     </span>
                   ) : (
                     <div className="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto pr-1 mt-1">
                       {attachments.map((att) => (
                         <div
                           key={att.id}
-                          className="flex items-center justify-between border border-border/80 bg-muted/20 hover:bg-muted/40 px-2.5 py-1 rounded-md text-[12px] group"
+                          className="flex items-center justify-between border border-border/80 bg-muted/20 hover:bg-muted/40 px-2.5 py-1 rounded-md text-[12px] group gap-2"
                         >
                           <a
                             href={`/uploads/${att.r2ObjectKey}`}
@@ -854,7 +975,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                             download={att.fileName}
                             className="font-medium text-foreground hover:underline truncate max-w-[320px] flex items-center gap-1.5"
                           >
-                            <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                            {getFileIcon(att.fileName)}
                             {att.fileName}
                           </a>
                           {(att.uploadedBy === session?.user?.id || session?.user?.isAdmin) && (
@@ -862,6 +983,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                               type="button"
                               onClick={() => handleDeleteAttachment(att.id)}
                               className="text-muted-foreground hover:text-destructive shrink-0 ml-2"
+                              disabled={detailLoading}
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>

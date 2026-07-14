@@ -300,10 +300,7 @@ describe('Issues and Workflow Statuses (e2e)', () => {
       await request(app.getHttpServer())
         .post(`/issues/${nonExistentIssueId}/attachments`)
         .set('x-mock-user-id', mockUsers.developer.id)
-        .send({
-          fileName: 'screenshot.png',
-          contentType: 'image/png',
-        })
+        .attach('file', Buffer.from('test contents'), 'screenshot.png')
         .expect(404);
     });
 
@@ -324,33 +321,25 @@ describe('Issues and Workflow Statuses (e2e)', () => {
         await request(app.getHttpServer())
           .post(`/issues/${issueId}/attachments`)
           .set('x-mock-user-id', outsiderId)
-          .send({
-            fileName: 'screenshot.png',
-            contentType: 'image/png',
-          })
+          .attach('file', Buffer.from('test contents'), 'screenshot.png')
           .expect(403);
       } finally {
         await db.delete(user).where(eq(user.id, outsiderId));
       }
     });
 
-    it('should successfully create attachment and generate presigned URL', async () => {
+    it('should successfully create attachment', async () => {
       const res = await request(app.getHttpServer())
         .post(`/issues/${issueId}/attachments`)
         .set('x-mock-user-id', mockUsers.developer.id)
-        .send({
-          fileName: 'log.txt',
-          contentType: 'text/plain',
-        })
+        .attach('file', Buffer.from('mock logs'), 'log.txt')
         .expect(201);
 
-      expect(res.body.uploadUrl).toBeDefined();
-      expect(res.body.r2ObjectKey).toBeDefined();
-      expect(res.body.attachment).toBeDefined();
-      expect(res.body.attachment.fileName).toBe('log.txt');
-      expect(res.body.attachment.uploadedBy).toBe(mockUsers.developer.id);
+      expect(res.body.id).toBeDefined();
+      expect(res.body.fileName).toBe('log.txt');
+      expect(res.body.uploadedBy).toBe(mockUsers.developer.id);
 
-      attachmentId = res.body.attachment.id;
+      attachmentId = res.body.id;
     });
 
     it('should list attachments for the issue', async () => {

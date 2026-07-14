@@ -8,14 +8,17 @@ import {
   Delete,
   UseGuards,
   Req,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { IssuesService } from './issues.service';
 import {
   CreateIssueDto,
   UpdateIssueDto,
   UpdateIssueStatusDto,
 } from './dto/issue.dto';
-import { CreateAttachmentDto } from './dto/attachment.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { ProjectRoleGuard } from '../../common/guards/project-role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -45,14 +48,24 @@ export class UserIssuesController {
   }
 
   @Post(':id/attachments')
-  createAttachment(
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB limit
+    }),
+  )
+  async createAttachment(
     @Param('id') id: string,
-    @Body() createAttachmentDto: CreateAttachmentDto,
+    @UploadedFile() file: Express.Multer.File,
     @Req() req: any,
   ) {
+    if (!file) {
+      throw new BadRequestException('File tidak ditemukan dalam request.');
+    }
     return this.issuesService.createAttachment(
       id,
-      createAttachmentDto,
+      file.originalname,
+      file.mimetype,
+      file.buffer,
       req.user.id,
     );
   }
