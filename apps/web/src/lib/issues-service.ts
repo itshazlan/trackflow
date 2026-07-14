@@ -87,11 +87,14 @@ export async function getIssues(projectId: string): Promise<Issue[]> {
 export async function createIssue(
   projectId: string,
   payload: {
-    title: string;
-    description?: string;
-    statusId: string;
     trackerId: string;
-    priority: 'low' | 'medium' | 'high' | 'urgent';
+    statusId?: string;
+    title?: string;
+    description?: string;
+    templateId?: string;
+    titleValues?: Record<string, string>;
+    fieldValues?: Record<string, string>;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
     assigneeId?: string | null;
     dueDate?: string | null;
   }
@@ -152,6 +155,23 @@ export async function deleteIssue(projectId: string, issueId: string): Promise<v
   if (!res.ok) {
     throw new Error("Failed to delete issue");
   }
+}
+
+export async function updateIssueStatus(issueId: string, statusId: string): Promise<Issue> {
+  const res = await fetch(`/api/issues/${issueId}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ statusId }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to update issue status");
+  }
+
+  return res.json();
 }
 
 export async function getProjectStatuses(projectId: string): Promise<IssueStatus[]> {

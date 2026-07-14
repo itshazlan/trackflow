@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getProjectDetail, getSubProjects, createSubProject, Project } from "@/lib/projects-service";
+import IssuesSection from "@/components/project/issues-section";
+import SettingsSection from "@/components/project/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +21,7 @@ import {
   Plus,
   GitMerge,
   AlertCircle,
-  Briefcase,
   Layers,
-  Calendar,
   CheckSquare,
   Clock,
   LineChart,
@@ -48,7 +48,7 @@ export default function ProjectDetailPage() {
 
   const activeTab = searchParams.get("tab") || "issues";
 
-  const loadProjectData = async () => {
+  const loadProjectData = useCallback(async () => {
     if (!projectId) return;
     try {
       setLoading(true);
@@ -63,11 +63,19 @@ export default function ProjectDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
-    loadProjectData();
-  }, [projectId]);
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) {
+        void loadProjectData();
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [loadProjectData]);
 
   const handleCreateSubProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,8 +91,8 @@ export default function ProjectDetailPage() {
       // Reload sub-projects list
       const subList = await getSubProjects(projectId);
       setSubProjects(subList);
-    } catch (err: any) {
-      setSubError(err.message || "Gagal membuat sub-proyek.");
+    } catch (err: unknown) {
+      setSubError(err instanceof Error ? err.message : "Gagal membuat sub-proyek.");
     } finally {
       setSubLoading(false);
     }
@@ -194,13 +202,7 @@ export default function ProjectDetailPage() {
 
         {/* Tab Empty/Placeholder states */}
         <TabsContent value="issues" className="mt-0">
-          <div className="flex flex-col items-center justify-center border border-dashed border-border rounded-lg py-20 text-center bg-card/30">
-            <CheckSquare className="h-8 w-8 text-muted-foreground/50 mb-2.5" />
-            <p className="text-[13px] font-semibold text-foreground">Daftar Issues &amp; Tiket</p>
-            <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px]">
-              Slice fitur tiket akan dihubungkan di sini pada tahapan selanjutnya.
-            </p>
-          </div>
+          <IssuesSection projectId={projectId} />
         </TabsContent>
 
         <TabsContent value="timebook" className="mt-0">
@@ -224,13 +226,7 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="settings" className="mt-0">
-          <div className="flex flex-col items-center justify-center border border-dashed border-border rounded-lg py-20 text-center bg-card/30">
-            <Settings className="h-8 w-8 text-muted-foreground/50 mb-2.5" />
-            <p className="text-[13px] font-semibold text-foreground">Pengaturan Proyek &amp; Alur Kerja</p>
-            <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px]">
-              Slice konfigurasi status alur kerja, template tiket, dan anggota tim proyek.
-            </p>
-          </div>
+          <SettingsSection projectId={projectId} />
         </TabsContent>
       </Tabs>
 
