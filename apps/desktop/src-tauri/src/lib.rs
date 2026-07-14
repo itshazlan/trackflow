@@ -8,28 +8,62 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 fn save_token(token: &str) -> Result<(), String> {
-    let entry = Entry::new("trackflow", "auth_token").map_err(|e| e.to_string())?;
-    entry.set_password(token).map_err(|e| e.to_string())?;
+    println!("[Tauri Rust] save_token called");
+    let entry = Entry::new("trackflow", "auth_token").map_err(|e| {
+        println!("[Tauri Rust] save_token Entry::new error: {}", e);
+        e.to_string()
+    })?;
+    entry.set_password(token).map_err(|e| {
+        println!("[Tauri Rust] save_token set_password error: {}", e);
+        e.to_string()
+    })?;
+    println!("[Tauri Rust] save_token successfully stored token");
     Ok(())
 }
 
 #[tauri::command]
 fn get_token() -> Result<String, String> {
-    let entry = Entry::new("trackflow", "auth_token").map_err(|e| e.to_string())?;
+    println!("[Tauri Rust] get_token called");
+    let entry = Entry::new("trackflow", "auth_token").map_err(|e| {
+        println!("[Tauri Rust] get_token Entry::new error: {}", e);
+        e.to_string()
+    })?;
     match entry.get_password() {
-        Ok(password) => Ok(password),
-        Err(Error::NoEntry) => Ok(String::new()), // Return empty string if no token exists
-        Err(e) => Err(e.to_string()),
+        Ok(password) => {
+            println!("[Tauri Rust] get_token successfully retrieved token");
+            Ok(password)
+        }
+        Err(Error::NoEntry) => {
+            println!("[Tauri Rust] get_token: no token stored in keyring");
+            Ok(String::new())
+        }
+        Err(e) => {
+            println!("[Tauri Rust] get_token keyring error: {}", e);
+            Err(e.to_string())
+        }
     }
 }
 
 #[tauri::command]
 fn delete_token() -> Result<(), String> {
-    let entry = Entry::new("trackflow", "auth_token").map_err(|e| e.to_string())?;
+    println!("[Tauri Rust] delete_token called");
+    let entry = Entry::new("trackflow", "auth_token").map_err(|e| {
+        println!("[Tauri Rust] delete_token Entry::new error: {}", e);
+        e.to_string()
+    })?;
     match entry.delete_credential() {
-        Ok(_) => Ok(()),
-        Err(Error::NoEntry) => Ok(()), // If it's already deleted/not there, count as success
-        Err(e) => Err(e.to_string()),
+        Ok(_) => {
+            println!("[Tauri Rust] delete_token successfully deleted token");
+            Ok(())
+        }
+        Err(Error::NoEntry) => {
+            println!("[Tauri Rust] delete_token: token was already deleted or not present");
+            Ok(())
+        }
+        Err(e) => {
+            println!("[Tauri Rust] delete_token keyring error: {}", e);
+            Err(e.to_string())
+        }
     }
 }
 

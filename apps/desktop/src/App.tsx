@@ -22,15 +22,24 @@ export default function App() {
         }
 
         // 2. Verify token validity by fetching session from backend
+        console.log('[App Auth] Found token in keychain, verifying session with backend...');
         const response = await api.get<{ session: any; user: any }>('/api/auth/session');
+        console.log('[App Auth] Session response:', {
+          status: response.status,
+          hasData: !!response.data,
+          error: response.error,
+        });
 
-        if (response.error || !response.data) {
-          console.warn('[App Auth] Session invalid, clearing token.', response.error);
-          // Delete invalid token
+        if (response.status === 401) {
+          console.warn('[App Auth] Session invalid (401), clearing token from keychain.');
           await invoke('delete_token');
           setUser(null);
-        } else {
+        } else if (response.error) {
+          console.warn('[App Auth] Connection/validation error (status ' + response.status + '). Retaining token in keychain.', response.error);
+          setUser(null);
+        } else if (response.data) {
           // Session is valid
+          console.log('[App Auth] Session valid, logging in user:', response.data.user.email);
           setUser(response.data.user);
         }
       } catch (err) {
