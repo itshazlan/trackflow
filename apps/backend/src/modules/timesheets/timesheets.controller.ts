@@ -8,6 +8,7 @@ import {
   Req,
   Query,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { TimesheetsService } from './timesheets.service';
 import { CreateManualEntryDto } from './dto/create-manual-entry.dto';
@@ -16,6 +17,7 @@ import { AuthGuard } from '../../common/guards/auth.guard';
 import { Inject } from '@nestjs/common';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { projectMemberships } from '../../db/schema/projects';
+import { manualTimeEntries } from '../../db/schema/timesheets';
 import { eq, and } from 'drizzle-orm';
 
 @Controller()
@@ -101,5 +103,51 @@ export class TimesheetsController {
     }
 
     return this.timesheetsService.approveTimesheet(id, req.user.id, dto, role);
+  }
+
+  @Post('manual-time-entries/:id/approve')
+  async approveManualEntry(
+    @Param('id') id: string,
+    @Body() dto: ApproveTimesheetDto,
+    @Req() req: any,
+  ) {
+    // 1. Fetch manual entry to find project ID
+    const [entry] = await this.db
+      .select()
+      .from(manualTimeEntries)
+      .where(eq(manualTimeEntries.id, id))
+      .limit(1);
+
+    if (!entry) {
+      throw new NotFoundException(`Manual time entry ${id} not found`);
+    }
+
+    // 2. Resolve reviewer's role in this project
+    let role = 'none';
+    if (req.user.isAdmin) {
+      role = 'admin';
+    } else {
+      const [membership] = await this.db
+        .select()
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.projectId, entry.projectId),
+            eq(projectMemberships.userId, req.user.id),
+          ),
+        )
+        .limit(1);
+
+      if (membership) {
+        role = membership.role;
+      }
+    }
+
+    return this.timesheetsService.approveManualEntry(
+      id,
+      req.user.id,
+      dto,
+      role,
+    );
   }
 }

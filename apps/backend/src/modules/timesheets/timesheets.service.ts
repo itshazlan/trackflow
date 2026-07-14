@@ -113,6 +113,7 @@ export class TimesheetsService {
         and(
           eq(manualTimeEntries.userId, userId),
           eq(manualTimeEntries.projectId, dto.projectId),
+          eq(manualTimeEntries.approvalStatus, 'approved'),
           gte(manualTimeEntries.entryDate, dto.periodStart),
           lte(manualTimeEntries.entryDate, dto.periodEnd),
         ),
@@ -355,5 +356,36 @@ export class TimesheetsService {
       .where(eq(timesheetApprovals.timesheetId, timesheetId));
 
     return { ...timesheet, approvals };
+  }
+
+  async approveManualEntry(
+    entryId: string,
+    reviewerId: string,
+    dto: ApproveTimesheetDto,
+    reviewerRole: string,
+  ) {
+    const [existing] = await this.db
+      .select()
+      .from(manualTimeEntries)
+      .where(eq(manualTimeEntries.id, entryId))
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException(`Manual time entry ${entryId} not found`);
+    }
+
+    if (reviewerRole !== 'manager' && reviewerRole !== 'admin') {
+      throw new ForbiddenException(
+        'Only managers or admins can approve manual time entries',
+      );
+    }
+
+    const [updated] = await this.db
+      .update(manualTimeEntries)
+      .set({ approvalStatus: dto.decision })
+      .where(eq(manualTimeEntries.id, entryId))
+      .returning();
+
+    return updated;
   }
 }
