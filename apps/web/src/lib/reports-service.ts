@@ -4,20 +4,14 @@ export interface ReportItem {
   project: string;
   issue: string;
   type: string;
-  durationMinutes: number;
-  description: string;
+  durationMins: number;
+  status: string;
 }
 
 export interface ReportData {
+  rows: ReportItem[];
   totalMinutes: number;
-  items: ReportItem[];
-  metadata: {
-    projectId: string | null;
-    userId: string | null;
-    startDate: string | null;
-    endDate: string | null;
-    generatedAt: string;
-  };
+  totalHours: string;
 }
 
 export async function getReportPreview(

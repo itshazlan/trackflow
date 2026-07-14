@@ -235,6 +235,43 @@ export default function DashboardLayout({
           })}
         </nav>
 
+        {/* Admin Navigation */}
+        {session?.user?.isAdmin && (
+          <div className="mt-4 px-2">
+            {sidebarOpen && (
+              <span className="px-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                Administrasi
+              </span>
+            )}
+            <nav className="space-y-1">
+              <Link href="/admin/settings" className="block outline-none">
+                <div
+                  className={`flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors ${
+                    pathname.startsWith("/admin/settings")
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                  }`}
+                >
+                  <Settings className="h-4 w-4 shrink-0" />
+                  {sidebarOpen && <span>App Settings</span>}
+                </div>
+              </Link>
+              <Link href="/admin/users" className="block outline-none">
+                <div
+                  className={`flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors ${
+                    pathname.startsWith("/admin/users")
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                  }`}
+                >
+                  <UserIcon className="h-4 w-4 shrink-0" />
+                  {sidebarOpen && <span>Users &amp; Roles</span>}
+                </div>
+              </Link>
+            </nav>
+          </div>
+        )}
+
         {/* Sidebar Footer: Profile */}
         <div className="border-t border-border p-2">
           {sidebarOpen ? (

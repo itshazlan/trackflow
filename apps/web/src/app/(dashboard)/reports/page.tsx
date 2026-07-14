@@ -125,7 +125,7 @@ export default function ReportsPage() {
         startDate || undefined,
         endDate || undefined
       );
-      setReportItems(data.items);
+      setReportItems(data.rows || []);
       setTotalMinutes(data.totalMinutes);
     } catch (err: unknown) {
       console.error(err);
@@ -350,15 +350,16 @@ export default function ReportsPage() {
                 <TableHead className="pl-4">Tanggal</TableHead>
                 <TableHead>Pekerja</TableHead>
                 <TableHead>Proyek</TableHead>
+                <TableHead>Tiket / Issue</TableHead>
                 <TableHead>Tipe</TableHead>
-                <TableHead>Keterangan / Aktivitas</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right pr-4">Durasi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {previewLoading ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={6} className="h-28 text-center">
+                  <TableCell colSpan={7} className="h-28 text-center">
                     <div className="flex justify-center items-center gap-2 text-xs text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Memuat pratinjau data...
@@ -367,7 +368,7 @@ export default function ReportsPage() {
                 </TableRow>
               ) : reportItems.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={6} className="h-28 text-center text-muted-foreground text-xs">
+                  <TableCell colSpan={7} className="h-28 text-center text-muted-foreground text-xs">
                     Tidak ada data log jam kerja yang cocok dengan kriteria filter.
                   </TableCell>
                 </TableRow>
@@ -383,6 +384,9 @@ export default function ReportsPage() {
                     </TableCell>
                     <TableCell className="text-[12px] font-medium text-foreground">{item.user}</TableCell>
                     <TableCell className="text-[12px]">{item.project}</TableCell>
+                    <TableCell className="text-[12px] font-semibold text-foreground max-w-[150px] truncate" title={item.issue}>
+                      {item.issue}
+                    </TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold border uppercase tracking-wider ${
                         item.type === "Automatic"
@@ -392,11 +396,19 @@ export default function ReportsPage() {
                         {item.type}
                       </span>
                     </TableCell>
-                    <TableCell className="max-w-[250px] truncate text-[12px] text-muted-foreground" title={item.description}>
-                      {item.description}
+                    <TableCell>
+                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold border uppercase tracking-wider ${
+                        item.status === "APPROVED" || item.status === "Paid"
+                          ? "bg-green-500/10 border-green-500/20 text-green-500"
+                          : item.status === "REJECTED" || item.status === "Unpaid"
+                          ? "bg-red-500/10 border-red-500/20 text-red-500"
+                          : "bg-amber-500/10 border-amber-500/20 text-amber-500"
+                      }`}>
+                        {item.status}
+                      </span>
                     </TableCell>
                     <TableCell className="text-right pr-4 font-mono font-bold text-foreground text-[12.5px]">
-                      {formatMinutesShort(item.durationMinutes)}
+                      {formatMinutesShort(item.durationMins)}
                     </TableCell>
                   </TableRow>
                 ))
