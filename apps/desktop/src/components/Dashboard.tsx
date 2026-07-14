@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '../lib/api';
+import { api, BASE_URL } from '../lib/api';
 import { invoke } from '@tauri-apps/api/core';
 import { LogOut, Play, Shield, User, Wifi } from 'lucide-react';
 
@@ -62,7 +62,21 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
         {/* User Card */}
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
           <div className="flex items-center space-x-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary border border-border">
+            {user.image ? (
+              <img
+                src={user.image.startsWith('/') ? `${BASE_URL}${user.image}` : user.image}
+                alt={user.name || 'User Avatar'}
+                className="h-9 w-9 rounded-full object-cover border border-border"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.parentElement?.querySelector('.avatar-fallback');
+                  if (fallback) {
+                    fallback.classList.remove('hidden');
+                  }
+                }}
+              />
+            ) : null}
+            <div className={`avatar-fallback flex h-9 w-9 items-center justify-center rounded-full bg-secondary border border-border ${user.image ? 'hidden' : ''}`}>
               <User className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
