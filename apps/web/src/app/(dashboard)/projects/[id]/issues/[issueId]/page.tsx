@@ -111,6 +111,16 @@ const getFileIcon = (fileName: string) => {
   }
 };
 
+const formatCommentDate = (dateString: string) => {
+  const d = new Date(dateString);
+  const date = d.getDate();
+  const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+  const monthStr = months[d.getMonth()];
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  return `${date} ${monthStr}, ${hours}:${minutes}`;
+};
+
 export default function IssueDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -265,12 +275,12 @@ export default function IssueDetailPage() {
     target: typeof mentionTarget
   ) => {
     if (!mentionActive) return;
-    
+
     const isTargetMatch =
       typeof target === "object" && typeof mentionTarget === "object"
         ? target?.type === mentionTarget?.type && target?.id === mentionTarget?.id
         : target === mentionTarget;
-        
+
     if (!isTargetMatch) return;
 
     if (e.key === "ArrowDown") {
@@ -332,7 +342,7 @@ export default function IssueDetailPage() {
     try {
       setLoading(true);
       setError("");
-      
+
       const s = await getSession();
       setSession(s);
 
@@ -608,7 +618,7 @@ export default function IssueDetailPage() {
     return (
       <div className="p-6">
         <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-[13px] text-destructive max-w-lg mx-auto">
-          <AlertCircle className="h-4 w-4 mt-[1px] shrink-0" />
+          <AlertCircle className="h-4 w-4 mt-px shrink-0" />
           <div className="flex flex-col gap-2">
             <span>{error}</span>
             <Button
@@ -682,12 +692,11 @@ export default function IssueDetailPage() {
       {/* Main Grid View */}
       <div className="flex-1 overflow-y-auto min-h-0 bg-background/20">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 p-6 max-w-[1400px] mx-auto">
-          
+
           {/* Left / Center Column (75%) */}
-          <div 
-            className={`lg:col-span-3 flex flex-col gap-5 ${
-              isDetailDragging ? "bg-primary/5 border border-dashed border-primary rounded-lg p-3 transition-colors" : ""
-            }`}
+          <div
+            className={`lg:col-span-3 flex flex-col gap-5 ${isDetailDragging ? "bg-primary/5 border border-dashed border-primary rounded-lg p-3 transition-colors" : ""
+              }`}
             onDragOver={(e) => {
               e.preventDefault();
               setIsDetailDragging(true);
@@ -724,10 +733,9 @@ export default function IssueDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <div 
-                  className={`flex items-center justify-between group rounded p-1 -m-1 ${
-                    canEdit ? "hover:bg-muted/40 cursor-text" : ""
-                  }`}
+                <div
+                  className={`flex items-center justify-between group rounded p-1 -m-1 ${canEdit ? "hover:bg-muted/40 cursor-text" : ""
+                    }`}
                   onClick={() => canEdit && setIsEditingTitle(true)}
                 >
                   <h1 className="text-[20px] font-bold tracking-tight text-foreground leading-normal select-text">
@@ -766,7 +774,7 @@ export default function IssueDetailPage() {
                       className="w-full min-h-[140px] rounded-lg border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary text-foreground"
                       placeholder="Masukkan deskripsi rinci untuk tiket ini... Gunakan @ untuk mention member."
                     />
-                    
+
                     {/* Autocomplete Mention Popover */}
                     {mentionActive && mentionTarget === "description" && filteredMembers.length > 0 && (
                       <div className="absolute left-0 bottom-full mb-1 z-50 w-56 rounded-lg border border-border bg-popover p-1 shadow-lg text-xs flex flex-col gap-0.5">
@@ -775,9 +783,8 @@ export default function IssueDetailPage() {
                             key={m.id}
                             type="button"
                             onClick={() => insertMention(m)}
-                            className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded cursor-pointer ${
-                              idx === mentionIndex ? "bg-accent text-accent-foreground font-semibold" : "hover:bg-muted/60"
-                            }`}
+                            className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded cursor-pointer ${idx === mentionIndex ? "bg-accent text-accent-foreground font-semibold" : "hover:bg-muted/60"
+                              }`}
                           >
                             <Avatar className="h-4 w-4 shrink-0">
                               <AvatarFallback className="text-[7px] font-bold">
@@ -818,7 +825,7 @@ export default function IssueDetailPage() {
                               const newCursorPos = cursor + 1;
                               textarea.setSelectionRange(newCursorPos, newCursorPos);
                               const changeEvent = new Event('input', { bubbles: true }) as any;
-                              Object.defineProperty(changeEvent, 'target', {writable: false, value: textarea});
+                              Object.defineProperty(changeEvent, 'target', { writable: false, value: textarea });
                               handleTextareaChange(changeEvent as any, "description");
                             }, 10);
                           }
@@ -827,7 +834,7 @@ export default function IssueDetailPage() {
                       >
                         <AtSign className="h-5 w-5" />
                       </button>
-                      
+
                       <div className="relative flex items-center">
                         <button
                           type="button"
@@ -846,8 +853,8 @@ export default function IssueDetailPage() {
                         {/* Emoji Picker Dropdown */}
                         {emojiActiveTarget === "description" && (
                           <>
-                            <div 
-                              className="fixed inset-0 z-40 bg-transparent cursor-default" 
+                            <div
+                              className="fixed inset-0 z-40 bg-transparent cursor-default"
                               onClick={() => setEmojiActiveTarget(null)}
                             />
                             <div className="absolute left-0 top-full mt-1.5 z-50 bg-popover border border-border rounded-lg shadow-lg">
@@ -855,17 +862,24 @@ export default function IssueDetailPage() {
                                 onEmojiClick={(emojiData: any) => insertEmoji(emojiData.emoji)}
                                 autoFocusSearch={false}
                                 theme={"dark" as any}
-                                height={320}
-                                width={280}
-                                style={{ "--epr-emoji-size": "20px" } as React.CSSProperties}
-                                previewConfig={{ showPreview: false }}
+                                height={400}
+                                width={330}
+                                style={{
+                                  "--epr-emoji-size": "22px",
+                                  "--epr-category-navigation-button-size": "22px",
+                                  "--epr-category-title-font-size": "12px",
+                                  "--epr-emoji-padding": "6px",
+                                  "--epr-horizontal-padding": "14px",
+                                  "--epr-header-padding": "8px 14px",
+                                } as React.CSSProperties}
+                                previewConfig={{ showPreview: true }}
                               />
                             </div>
                           </>
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -886,10 +900,9 @@ export default function IssueDetailPage() {
                   </div>
                 </div>
               ) : (
-                <div 
-                  className={`text-[13px] leading-relaxed text-foreground whitespace-pre-wrap select-text mt-1.5 ${
-                    canEdit ? "hover:bg-muted/20 cursor-text rounded p-1 -m-1" : ""
-                  }`}
+                <div
+                  className={`text-[13px] leading-relaxed text-foreground whitespace-pre-wrap select-text mt-1.5 ${canEdit ? "hover:bg-muted/20 cursor-text rounded p-1 -m-1" : ""
+                    }`}
                   onClick={() => canEdit && setIsEditingDesc(true)}
                 >
                   {issue.description ? (
@@ -1004,9 +1017,8 @@ export default function IssueDetailPage() {
                         key={m.id}
                         type="button"
                         onClick={() => insertMention(m)}
-                        className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded cursor-pointer ${
-                          idx === mentionIndex ? "bg-accent text-accent-foreground font-semibold" : "hover:bg-muted/60"
-                        }`}
+                        className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded cursor-pointer ${idx === mentionIndex ? "bg-accent text-accent-foreground font-semibold" : "hover:bg-muted/60"
+                          }`}
                       >
                         <Avatar className="h-4 w-4 shrink-0">
                           <AvatarFallback className="text-[7px] font-bold">
@@ -1048,7 +1060,7 @@ export default function IssueDetailPage() {
                             const newCursorPos = cursor + 1;
                             textarea.setSelectionRange(newCursorPos, newCursorPos);
                             const changeEvent = new Event('input', { bubbles: true }) as any;
-                            Object.defineProperty(changeEvent, 'target', {writable: false, value: textarea});
+                            Object.defineProperty(changeEvent, 'target', { writable: false, value: textarea });
                             handleTextareaChange(changeEvent as any, "comment");
                           }, 10);
                         }
@@ -1057,7 +1069,7 @@ export default function IssueDetailPage() {
                     >
                       <AtSign className="h-5 w-5" />
                     </button>
-                    
+
                     <div className="relative flex items-center">
                       <button
                         type="button"
@@ -1076,8 +1088,8 @@ export default function IssueDetailPage() {
                       {/* Emoji Picker Dropdown */}
                       {emojiActiveTarget === "comment" && (
                         <>
-                          <div 
-                            className="fixed inset-0 z-40 bg-transparent cursor-default" 
+                          <div
+                            className="fixed inset-0 z-40 bg-transparent cursor-default"
                             onClick={() => setEmojiActiveTarget(null)}
                           />
                           <div className="absolute left-0 bottom-full mb-2 z-50 bg-popover border border-border rounded-lg shadow-lg">
@@ -1085,10 +1097,17 @@ export default function IssueDetailPage() {
                               onEmojiClick={(emojiData: any) => insertEmoji(emojiData.emoji)}
                               autoFocusSearch={false}
                               theme={"dark" as any}
-                              height={320}
-                              width={280}
-                              style={{ "--epr-emoji-size": "20px" } as React.CSSProperties}
-                              previewConfig={{ showPreview: false }}
+                              height={400}
+                              width={330}
+                              style={{
+                                "--epr-emoji-size": "22px",
+                                "--epr-category-navigation-button-size": "22px",
+                                "--epr-category-title-font-size": "12px",
+                                "--epr-emoji-padding": "6px",
+                                "--epr-horizontal-padding": "14px",
+                                "--epr-header-padding": "8px 14px",
+                              } as React.CSSProperties}
+                              previewConfig={{ showPreview: true }}
                             />
                           </div>
                         </>
@@ -1111,7 +1130,7 @@ export default function IssueDetailPage() {
               <div className="flex flex-col gap-4 mt-2">
                 {commentsError && (
                   <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive leading-normal">
-                    <AlertCircle className="h-4 w-4 mt-[1px] shrink-0" />
+                    <AlertCircle className="h-4 w-4 mt-px shrink-0" />
                     <span>{commentsError}</span>
                   </div>
                 )}
@@ -1128,8 +1147,8 @@ export default function IssueDetailPage() {
                 ) : (
                   <div className="flex flex-col gap-4 bg-muted/5 border border-border/50 p-4 rounded-xl">
                     {comments.map((comment) => (
-                      <div 
-                        key={comment.id} 
+                      <div
+                        key={comment.id}
                         className="flex gap-3 items-start text-xs border-b border-border/50 pb-3 last:border-b-0 last:pb-0 group"
                       >
                         <Avatar className="h-7 w-7 mt-0.5 border border-border shadow-sm">
@@ -1138,17 +1157,12 @@ export default function IssueDetailPage() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 flex flex-col gap-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-foreground truncate text-[13px]">{comment.author.name}</span>
-                            <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-1.5">
-                              {new Date(comment.createdAt).toLocaleDateString("id-ID", {
-                                day: "numeric",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit"
-                              })}
+                          <div className="flex items-baseline gap-1.5 flex-wrap">
+                            <span className="font-semibold text-foreground text-[13.5px]">{comment.author.name}</span>
+                            <span className="text-[11.5px] text-muted-foreground">
+                              left a comment at {formatCommentDate(comment.createdAt)}
                               {comment.updatedAt && (
-                                <span className="text-[9px] italic text-muted-foreground/60">(edited)</span>
+                                <span className="text-[9px] italic text-muted-foreground/60 ml-1.5">(diedit)</span>
                               )}
                             </span>
                           </div>
@@ -1171,9 +1185,8 @@ export default function IssueDetailPage() {
                                       key={m.id}
                                       type="button"
                                       onClick={() => insertMention(m)}
-                                      className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded cursor-pointer ${
-                                        idx === mentionIndex ? "bg-accent text-accent-foreground font-semibold" : "hover:bg-muted/60"
-                                      }`}
+                                      className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded cursor-pointer ${idx === mentionIndex ? "bg-accent text-accent-foreground font-semibold" : "hover:bg-muted/60"
+                                        }`}
                                     >
                                       <Avatar className="h-4 w-4 shrink-0">
                                         <AvatarFallback className="text-[7px] font-bold">
@@ -1187,46 +1200,95 @@ export default function IssueDetailPage() {
                               )}
 
                               <div className="flex justify-between items-center">
-                                <div className="relative flex items-center">
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-muted-foreground hover:text-foreground px-1.5"
+                                    onClick={() => document.getElementById("page-files-input")?.click()}
+                                    title="Unggah Lampiran"
+                                  >
+                                    <Paperclip className="h-4 w-4" />
+                                  </Button>
                                   <Button
                                     type="button"
                                     variant="ghost"
                                     size="sm"
                                     className="h-6 text-muted-foreground hover:text-foreground px-1.5"
                                     onClick={(e) => {
-                                      setEmojiActiveTarget(
-                                        emojiActiveTarget && typeof emojiActiveTarget === "object" && emojiActiveTarget.type === "comment-edit" && emojiActiveTarget.id === comment.id
-                                          ? null
-                                          : { type: "comment-edit", id: comment.id }
-                                      );
                                       const parent = e.currentTarget.closest(".flex-col");
                                       const textarea = parent?.querySelector("textarea") as HTMLTextAreaElement;
-                                      if (textarea) setEmojiTextareaRef(textarea);
+                                      if (textarea) {
+                                        const value = textarea.value;
+                                        const cursor = textarea.selectionStart;
+                                        const before = value.slice(0, cursor);
+                                        const after = value.slice(cursor);
+                                        const newValue = before + "@" + after;
+                                        setEditingCommentText(newValue);
+                                        textarea.focus();
+                                        setTimeout(() => {
+                                          const newCursorPos = cursor + 1;
+                                          textarea.setSelectionRange(newCursorPos, newCursorPos);
+                                          const changeEvent = new Event('input', { bubbles: true }) as any;
+                                          Object.defineProperty(changeEvent, 'target', { writable: false, value: textarea });
+                                          handleTextareaChange(changeEvent as any, { type: "comment-edit", id: comment.id });
+                                        }, 10);
+                                      }
                                     }}
+                                    title="Mention Member"
                                   >
-                                    <Smile className="h-[18px] w-[18px]" />
+                                    <AtSign className="h-4 w-4" />
                                   </Button>
-                                  
-                                  {/* Emoji Picker Dropdown */}
-                                  {emojiActiveTarget && typeof emojiActiveTarget === "object" && emojiActiveTarget.type === "comment-edit" && emojiActiveTarget.id === comment.id && (
-                                    <>
-                                      <div 
-                                        className="fixed inset-0 z-40 bg-transparent cursor-default" 
-                                        onClick={() => setEmojiActiveTarget(null)}
-                                      />
-                                      <div className="absolute left-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg">
-                                        <EmojiPicker
-                                          onEmojiClick={(emojiData: any) => insertEmoji(emojiData.emoji)}
-                                          autoFocusSearch={false}
-                                          theme={"dark" as any}
-                                          height={320}
-                                          width={280}
-                                          style={{ "--epr-emoji-size": "20px" } as React.CSSProperties}
-                                          previewConfig={{ showPreview: false }}
+
+                                  <div className="relative flex items-center">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 text-muted-foreground hover:text-foreground px-1.5"
+                                      onClick={(e) => {
+                                        setEmojiActiveTarget(
+                                          emojiActiveTarget && typeof emojiActiveTarget === "object" && emojiActiveTarget.type === "comment-edit" && emojiActiveTarget.id === comment.id
+                                            ? null
+                                            : { type: "comment-edit", id: comment.id }
+                                        );
+                                        const parent = e.currentTarget.closest(".flex-col");
+                                        const textarea = parent?.querySelector("textarea") as HTMLTextAreaElement;
+                                        if (textarea) setEmojiTextareaRef(textarea);
+                                      }}
+                                    >
+                                      <Smile className="h-4 w-4" />
+                                    </Button>
+
+                                    {/* Emoji Picker Dropdown */}
+                                    {emojiActiveTarget && typeof emojiActiveTarget === "object" && emojiActiveTarget.type === "comment-edit" && emojiActiveTarget.id === comment.id && (
+                                      <>
+                                        <div
+                                          className="fixed inset-0 z-40 bg-transparent cursor-default"
+                                          onClick={() => setEmojiActiveTarget(null)}
                                         />
-                                      </div>
-                                    </>
-                                  )}
+                                        <div className="absolute left-0 bottom-full mb-2 z-50 bg-popover border border-border rounded-lg shadow-lg">
+                                          <EmojiPicker
+                                            onEmojiClick={(emojiData: any) => insertEmoji(emojiData.emoji)}
+                                            autoFocusSearch={false}
+                                            theme={"dark" as any}
+                                            height={400}
+                                            width={330}
+                                            style={{
+                                              "--epr-emoji-size": "22px",
+                                              "--epr-category-navigation-button-size": "22px",
+                                              "--epr-category-title-font-size": "12px",
+                                              "--epr-emoji-padding": "6px",
+                                              "--epr-horizontal-padding": "14px",
+                                              "--epr-header-padding": "8px 14px",
+                                            } as React.CSSProperties}
+                                            previewConfig={{ showPreview: true }}
+                                          />
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex gap-2">
                                   <Button
@@ -1294,7 +1356,7 @@ export default function IssueDetailPage() {
           {/* Right Sidebar properties column (25%) */}
           <div className="lg:col-span-1 border-t lg:border-t-0 lg:border-l border-border/60 pt-6 lg:pt-0 lg:pl-6 flex flex-col gap-6 bg-background/30 rounded-xl lg:bg-transparent lg:p-0">
             <div className="flex flex-col gap-4">
-              
+
               {/* Status */}
               <div className="flex items-center justify-between min-h-[30px]">
                 <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Status</Label>
