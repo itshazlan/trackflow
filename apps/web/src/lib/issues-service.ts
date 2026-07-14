@@ -32,6 +32,7 @@ export interface IssueStatus {
   projectId: string;
   name: string;
   orderIndex: number;
+  restrictedToRole: 'manager' | 'developer' | 'reporter_qa' | null;
 }
 
 export interface Tracker {
@@ -46,6 +47,26 @@ export interface ProjectMember {
   username: string;
   role: 'manager' | 'developer' | 'reporter_qa';
   invitedAt: string;
+}
+
+export interface TemplateField {
+  label: string;
+  required: boolean;
+  helperText?: string;
+}
+
+export interface IssueTemplate {
+  id: string;
+  projectId: string | null;
+  trackerId: string;
+  name: string;
+  titlePattern: string | null;
+  fields: TemplateField[];
+  createdAt: string;
+  tracker?: {
+    id: string;
+    name: string;
+  };
 }
 
 export async function getIssues(projectId: string): Promise<Issue[]> {
@@ -176,4 +197,146 @@ export async function getProjectMembers(projectId: string): Promise<ProjectMembe
   }
 
   return res.json();
+}
+
+export async function createProjectStatus(
+  projectId: string,
+  payload: { name: string; orderIndex: number; restrictedToRole: string | null }
+): Promise<IssueStatus> {
+  const res = await fetch(`/projects/${projectId}/statuses`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to create status");
+  }
+
+  return res.json();
+}
+
+export async function updateProjectStatus(
+  projectId: string,
+  statusId: string,
+  payload: Partial<{ name: string; orderIndex: number; restrictedToRole: string | null }>
+): Promise<IssueStatus> {
+  const res = await fetch(`/projects/${projectId}/statuses/${statusId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to update status");
+  }
+
+  return res.json();
+}
+
+export async function deleteProjectStatus(projectId: string, statusId: string): Promise<void> {
+  const res = await fetch(`/projects/${projectId}/statuses/${statusId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to delete status");
+  }
+}
+
+export async function reorderProjectStatuses(projectId: string, statusIds: string[]): Promise<IssueStatus[]> {
+  const res = await fetch(`/projects/${projectId}/statuses/reorder`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ statusIds }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to reorder statuses");
+  }
+
+  return res.json();
+}
+
+export async function getProjectTemplates(projectId: string): Promise<IssueTemplate[]> {
+  const res = await fetch(`/projects/${projectId}/templates`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch project templates");
+  }
+
+  return res.json();
+}
+
+export async function createProjectTemplate(
+  projectId: string,
+  payload: { name: string; trackerId: string; titlePattern?: string; fields: TemplateField[] }
+): Promise<IssueTemplate> {
+  const res = await fetch(`/projects/${projectId}/templates`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to create project template");
+  }
+
+  return res.json();
+}
+
+export async function updateProjectTemplate(
+  projectId: string,
+  templateId: string,
+  payload: Partial<{ name: string; trackerId: string; titlePattern: string | null; fields: TemplateField[] }>
+): Promise<IssueTemplate> {
+  const res = await fetch(`/projects/${projectId}/templates/${templateId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to update template");
+  }
+
+  return res.json();
+}
+
+export async function deleteProjectTemplate(projectId: string, templateId: string): Promise<void> {
+  const res = await fetch(`/projects/${projectId}/templates/${templateId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to delete template");
+  }
 }

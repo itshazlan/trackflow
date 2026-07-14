@@ -11,10 +11,20 @@ import {
   getProjectStatuses,
   getTrackers,
   getProjectMembers,
+  createProjectStatus,
+  updateProjectStatus,
+  deleteProjectStatus,
+  reorderProjectStatuses,
+  getProjectTemplates,
+  createProjectTemplate,
+  updateProjectTemplate,
+  deleteProjectTemplate,
   Issue,
   IssueStatus,
   Tracker,
-  ProjectMember
+  ProjectMember,
+  IssueTemplate,
+  TemplateField
 } from "@/lib/issues-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +66,9 @@ import {
   Users,
   AlertCircle,
   Trash,
+  ArrowUp,
+  ArrowDown,
+  Edit2,
 } from "lucide-react";
 
 type ActiveSection = "issues" | "timebook" | "reports" | "settings";
@@ -1047,12 +1060,264 @@ function ReportsSection({ project }: { project: Project }) {
 }
 
 function SettingsSection({ project }: { project: Project }) {
+  const [statuses, setStatuses] = useState<IssueStatus[]>([]);
+  const [templates, setTemplates] = useState<IssueTemplate[]>([]);
+  const [trackers, setTrackers] = useState<Tracker[]>([]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Modals state for Statuses
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [statusEditing, setStatusEditing] = useState<IssueStatus | null>(null);
+  const [statusName, setStatusName] = useState("");
+  const [statusRoleRestriction, setStatusRoleRestriction] = useState<string>("");
+  const [statusActionLoading, setStatusActionLoading] = useState(false);
+  const [statusError, setStatusError] = useState("");
+
+  // Modals state for Templates
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateEditing, setTemplateEditing] = useState<IssueTemplate | null>(null);
+  const [templateName, setTemplateName] = useState("");
+  const [templateTrackerId, setTemplateTrackerId] = useState("");
+  const [templateTitlePattern, setTemplateTitlePattern] = useState("");
+  const [templateFields, setTemplateFields] = useState<TemplateField[]>([]);
+  const [templateActionLoading, setTemplateActionLoading] = useState(false);
+  const [templateError, setTemplateError] = useState("");
+
+  const fetchSettingsData = React.useCallback(() => {
+    return Promise.all([
+      getProjectStatuses(project.id),
+      getProjectTemplates(project.id),
+      getTrackers(),
+      getProjectMembers(project.id),
+    ]).then(([statusesData, templatesData, trackersData, membersData]) => {
+      setStatuses(statusesData);
+      setTemplates(templatesData);
+      setTrackers(trackersData);
+      setMembers(membersData);
+    });
+  }, [project.id]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setLoading(true);
+      setError("");
+      return fetchSettingsData();
+    })
+    .catch((err) => {
+      if (!active) return;
+      console.error(err);
+      setError("Gagal memuat konfigurasi settings.");
+    })
+    .finally(() => {
+      if (!active) return;
+      setLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [project.id, fetchSettingsData]);
+
+  // --- Status Actions ---
+  const handleReorderStatus = async (index: number, direction: "up" | "down") => {
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (nextIndex < 0 || nextIndex >= statuses.length) return;
+
+    const newStatuses = [...statuses];
+    const temp = newStatuses[index];
+    newStatuses[index] = newStatuses[nextIndex];
+    newStatuses[nextIndex] = temp;
+
+    // Optimistically update the UI
+    setStatuses(newStatuses);
+
+    try {
+      const statusIds = newStatuses.map((s) => s.id);
+      await reorderProjectStatuses(project.id, statusIds);
+    } catch (err) {
+      console.error(err);
+      alert("Gagal memperbarui urutan status.");
+      fetchSettingsData();
+    }
+  };
+
+  const handleDeleteStatus = async (statusId: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus status ini?")) return;
+    try {
+      await deleteProjectStatus(project.id, statusId);
+      setStatuses((prev) => prev.filter((s) => s.id !== statusId));
+    } catch (err) {
+      console.error(err);
+      alert("Gagal menghapus status. Pastikan tidak ada issue yang dikaitkan dengan status ini.");
+    }
+  };
+
+  const handleOpenStatusModal = (status?: IssueStatus) => {
+    if (status) {
+      setStatusEditing(status);
+      setStatusName(status.name);
+      setStatusRoleRestriction(status.restrictedToRole || "");
+    } else {
+      setStatusEditing(null);
+      setStatusName("");
+      setStatusRoleRestriction("");
+    }
+    setStatusError("");
+    setIsStatusModalOpen(true);
+  };
+
+  const handleSaveStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!statusName.trim()) return;
+
+    setStatusActionLoading(true);
+    setStatusError("");
+
+    try {
+      const payload = {
+        name: statusName.trim(),
+        restrictedToRole: (statusRoleRestriction || null) as 'manager' | 'developer' | 'reporter_qa' | null,
+      };
+
+      if (statusEditing) {
+        const updated = await updateProjectStatus(project.id, statusEditing.id, payload);
+        setStatuses((prev) => prev.map((s) => (s.id === statusEditing.id ? updated : s)));
+      } else {
+        const nextOrderIndex = statuses.length > 0 ? Math.max(...statuses.map((s) => s.orderIndex)) + 1 : 0;
+        const newStatus = await createProjectStatus(project.id, {
+          ...payload,
+          orderIndex: nextOrderIndex,
+        });
+        setStatuses((prev) => [...prev, newStatus]);
+      }
+      setIsStatusModalOpen(false);
+    } catch (err: unknown) {
+      console.error(err);
+      setStatusError(err instanceof Error ? err.message : "Gagal menyimpan status");
+    } finally {
+      setStatusActionLoading(false);
+    }
+  };
+
+  // --- Template Actions ---
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus template ini?")) return;
+    try {
+      await deleteProjectTemplate(project.id, templateId);
+      setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    } catch (err) {
+      console.error(err);
+      alert("Gagal menghapus template.");
+    }
+  };
+
+  const handleOpenTemplateModal = (template?: IssueTemplate) => {
+    if (template) {
+      setTemplateEditing(template);
+      setTemplateName(template.name);
+      setTemplateTrackerId(template.trackerId);
+      setTemplateTitlePattern(template.titlePattern || "");
+      setTemplateFields(template.fields || []);
+    } else {
+      setTemplateEditing(null);
+      setTemplateName("");
+      setTemplateTrackerId(trackers.length > 0 ? trackers[0].id : "");
+      setTemplateTitlePattern("");
+      setTemplateFields([]);
+    }
+    setTemplateError("");
+    setIsTemplateModalOpen(true);
+  };
+
+  const handleAddFieldRow = () => {
+    setTemplateFields((prev) => [...prev, { label: "", required: false, helperText: "" }]);
+  };
+
+  const handleRemoveFieldRow = (idx: number) => {
+    setTemplateFields((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleFieldRowChange = (idx: number, key: keyof TemplateField, val: string | boolean) => {
+    setTemplateFields((prev) =>
+      prev.map((f, i) => (i === idx ? { ...f, [key]: val } : f))
+    );
+  };
+
+  const handleSaveTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!templateName.trim() || !templateTrackerId) return;
+
+    const validFields = templateFields.filter((f) => f.label.trim() !== "");
+
+    setTemplateActionLoading(true);
+    setTemplateError("");
+
+    try {
+      const payload = {
+        name: templateName.trim(),
+        trackerId: templateTrackerId,
+        titlePattern: templateTitlePattern.trim() || undefined,
+        fields: validFields.map((f) => ({
+          label: f.label.trim(),
+          required: f.required,
+          helperText: f.helperText?.trim() || undefined,
+        })),
+      };
+
+      if (templateEditing) {
+        const updated = await updateProjectTemplate(project.id, templateEditing.id, {
+          name: payload.name,
+          trackerId: payload.trackerId,
+          titlePattern: payload.titlePattern || null,
+          fields: payload.fields,
+        });
+        setTemplates((prev) => prev.map((t) => (t.id === templateEditing.id ? updated : t)));
+      } else {
+        const newTemplate = await createProjectTemplate(project.id, payload);
+        setTemplates((prev) => [...prev, newTemplate]);
+      }
+      setIsTemplateModalOpen(false);
+    } catch (err: unknown) {
+      console.error(err);
+      setTemplateError(err instanceof Error ? err.message : "Gagal menyimpan template");
+    } finally {
+      setTemplateActionLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <SectionHeader
+          title={`Settings — ${project.name}`}
+          description="Konfigurasi detail proyek, manajemen anggota tim, dan perizinan alur kerja."
+        />
+        <div className="space-y-4">
+          <div className="h-28 w-full bg-muted animate-pulse rounded-md" />
+          <div className="h-40 w-full bg-muted animate-pulse rounded-md" />
+          <div className="h-44 w-full bg-muted animate-pulse rounded-md" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-12">
       <SectionHeader
         title={`Settings — ${project.name}`}
         description="Konfigurasi detail proyek, manajemen anggota tim, dan perizinan alur kerja."
       />
+
+      {error && (
+        <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="border border-border rounded-md bg-card divide-y divide-border">
         {/* Project detail setting row */}
@@ -1077,39 +1342,400 @@ function SettingsSection({ project }: { project: Project }) {
               <Users className="h-4 w-4 text-muted-foreground" />
               <span>Anggota Proyek</span>
             </h3>
-            <Button size="sm" variant="outline" className="h-7 text-xs border-border bg-transparent hover:bg-accent cursor-pointer">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Tambahkan
-            </Button>
           </div>
           <div className="border border-border rounded-md overflow-hidden bg-card text-xs">
-            <div className="flex items-center justify-between p-2.5 border-b border-border bg-secondary/30 font-semibold text-muted-foreground">
-              <span>Nama</span>
-              <span>Peran</span>
+            <div className="grid grid-cols-12 p-2.5 border-b border-border bg-secondary/30 font-semibold text-muted-foreground">
+              <span className="col-span-6">Nama / Email</span>
+              <span className="col-span-6 text-right">Peran</span>
             </div>
             <div className="divide-y divide-border">
-              <div className="flex items-center justify-between p-2.5">
-                <span className="font-semibold text-foreground">Hazlan (Anda)</span>
-                <span className="text-muted-foreground font-mono text-[11px] capitalize">Manager</span>
-              </div>
+              {members.length === 0 ? (
+                <div className="p-2.5 text-center text-muted-foreground italic">Tidak ada anggota proyek</div>
+              ) : (
+                members.map((member) => (
+                  <div key={member.id} className="grid grid-cols-12 p-2.5 items-center">
+                    <div className="col-span-6 flex flex-col gap-0.5">
+                      <span className="font-semibold text-foreground">{member.name}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">{member.email}</span>
+                    </div>
+                    <span className="col-span-6 text-right text-muted-foreground font-mono text-[10px] capitalize">
+                      {member.role.replace("_", " & ")}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
 
-        {/* Workflow setting row */}
+        {/* Workflow setting row (CRUD Statuses) */}
         <div className="p-4 space-y-3">
-          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Workflow &amp; Status</h3>
+          <div className="flex justify-between items-center">
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <span>Workflow &amp; Status</span>
+            </h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleOpenStatusModal()}
+              className="h-7 text-xs border-border bg-transparent hover:bg-accent cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Tambahkan Status
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground leading-normal">
             Status alur kerja issues untuk proyek ini. Anggota tim dapat melakukan transisi issues di antara status ini.
           </p>
-          <div className="flex flex-wrap gap-2 text-xs">
-            {["Backlog", "Belum Dimulai", "Dalam Proses", "Dalam Review", "Selesai"].map((status) => (
-              <span key={status} className="px-2 py-1 rounded bg-secondary text-foreground font-medium border border-border">
-                {status}
-              </span>
-            ))}
+
+          <div className="border border-border rounded-md overflow-hidden bg-card text-xs">
+            <div className="grid grid-cols-12 p-2.5 border-b border-border bg-secondary/30 font-semibold text-muted-foreground">
+              <span className="col-span-5">Nama Status</span>
+              <span className="col-span-4">Batasan Peran</span>
+              <span className="col-span-3 text-right">Aksi</span>
+            </div>
+            <div className="divide-y divide-border">
+              {statuses.map((status, index) => (
+                <div key={status.id} className="grid grid-cols-12 items-center p-2.5 group hover:bg-accent/10">
+                  <span className="col-span-5 font-semibold text-foreground">{status.name}</span>
+                  <span className="col-span-4 text-muted-foreground">
+                    {status.restrictedToRole ? (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded border border-amber-500/20 bg-amber-500/10 text-amber-500 font-mono capitalize">
+                        {status.restrictedToRole.replace("_", " ")}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground font-mono italic">None</span>
+                    )}
+                  </span>
+                  <div className="col-span-3 flex justify-end gap-1 items-center">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleReorderStatus(index, "up")}
+                      disabled={index === 0}
+                      className="h-6 w-6 border-0 text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-30"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleReorderStatus(index, "down")}
+                      disabled={index === statuses.length - 1}
+                      className="h-6 w-6 border-0 text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-30"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleOpenStatusModal(status)}
+                      className="h-6 w-6 border-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleDeleteStatus(status.id)}
+                      className="h-6 w-6 border-0 text-muted-foreground hover:text-destructive cursor-pointer"
+                    >
+                      <Trash className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Issue Templates setting row (CRUD Templates) */}
+        <div className="p-4 space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <span>Issue Templates</span>
+            </h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleOpenTemplateModal()}
+              className="h-7 text-xs border-border bg-transparent hover:bg-accent cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Buat Template
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground leading-normal">
+            Template kustom untuk mempercepat pembuatan issue baru berdasarkan kategori Tracker tertentu.
+          </p>
+
+          <div className="border border-border rounded-md overflow-hidden bg-card text-xs">
+            <div className="grid grid-cols-12 p-2.5 border-b border-border bg-secondary/30 font-semibold text-muted-foreground">
+              <span className="col-span-4">Nama Template</span>
+              <span className="col-span-3">Tracker</span>
+              <span className="col-span-2">Jumlah Fields</span>
+              <span className="col-span-3 text-right">Aksi</span>
+            </div>
+            <div className="divide-y divide-border">
+              {templates.length === 0 ? (
+                <div className="p-4 text-center text-muted-foreground italic">
+                  Belum ada template kustom proyek ini.
+                </div>
+              ) : (
+                templates.map((tpl) => {
+                  const tr = trackers.find((t) => t.id === tpl.trackerId);
+                  return (
+                    <div key={tpl.id} className="grid grid-cols-12 items-center p-2.5 group hover:bg-accent/10">
+                      <span className="col-span-4 font-semibold text-foreground">{tpl.name}</span>
+                      <span className="col-span-3 text-muted-foreground">
+                        <span className="px-1.5 py-0.5 text-[10px] rounded border border-border bg-secondary text-foreground font-mono">
+                          {tr ? tr.name : "Unknown"}
+                        </span>
+                      </span>
+                      <span className="col-span-2 text-muted-foreground">{tpl.fields?.length || 0} fields</span>
+                      <div className="col-span-3 flex justify-end gap-1 items-center">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleOpenTemplateModal(tpl)}
+                          className="h-6 w-6 border-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleDeleteTemplate(tpl.id)}
+                          className="h-6 w-6 border-0 text-muted-foreground hover:text-destructive cursor-pointer"
+                        >
+                          <Trash className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Dialog Status CRUD */}
+      <Dialog open={isStatusModalOpen} onOpenChange={setIsStatusModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-background border-border text-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">
+              {statusEditing ? "Edit Status Alur Kerja" : "Tambah Status Alur Kerja"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveStatus} className="space-y-4">
+            {statusError && (
+              <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+                <span>{statusError}</span>
+              </div>
+            )}
+            
+            <div className="space-y-1.5">
+              <Label htmlFor="status-name" className="text-xs text-muted-foreground">Nama Status <span className="text-destructive">*</span></Label>
+              <Input
+                id="status-name"
+                required
+                placeholder="Contoh: Ready for Test"
+                value={statusName}
+                onChange={(e) => setStatusName(e.target.value)}
+                className="text-xs h-8 border-border bg-input"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="status-restriction" className="text-xs text-muted-foreground">Batasan Peran Transisi</Label>
+              <select
+                id="status-restriction"
+                value={statusRoleRestriction}
+                onChange={(e) => setStatusRoleRestriction(e.target.value)}
+                className="w-full text-xs h-8 rounded-md border border-border bg-input px-2.5 focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">Tidak Ada Batasan (Bisa diubah siapa saja)</option>
+                <option value="manager">Hanya Manager</option>
+                <option value="developer">Hanya Developer &amp; Manager</option>
+                <option value="reporter_qa">Hanya Reporter / QA &amp; Manager</option>
+              </select>
+              <p className="text-[10px] text-muted-foreground leading-normal">
+                Membatasi anggota tim dengan peran tertentu untuk memindahkan tiket ke status ini.
+              </p>
+            </div>
+
+            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsStatusModalOpen(false)}
+                className="h-8 text-xs border-border bg-transparent hover:bg-accent hover:text-accent-foreground cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button type="submit" disabled={statusActionLoading} className="h-8 text-xs font-medium cursor-pointer">
+                {statusActionLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Simpan"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Template Builder */}
+      <Dialog open={isTemplateModalOpen} onOpenChange={setIsTemplateModalOpen}>
+        <DialogContent className="sm:max-w-[550px] bg-background border-border text-foreground max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">
+              {templateEditing ? "Edit Issue Template" : "Buat Issue Template Baru"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveTemplate} className="space-y-4">
+            {templateError && (
+              <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+                <span>{templateError}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="template-name" className="text-xs text-muted-foreground">Nama Template <span className="text-destructive">*</span></Label>
+                <Input
+                  id="template-name"
+                  required
+                  placeholder="Contoh: Bug Report Mobile"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  className="text-xs h-8 border-border bg-input"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="template-tracker" className="text-xs text-muted-foreground">Tracker Terkait <span className="text-destructive">*</span></Label>
+                <select
+                  id="template-tracker"
+                  required
+                  value={templateTrackerId}
+                  onChange={(e) => setTemplateTrackerId(e.target.value)}
+                  className="w-full text-xs h-8 rounded-md border border-border bg-input px-2.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {trackers.map((tr) => (
+                    <option key={tr.id} value={tr.id}>{tr.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="template-pattern" className="text-xs text-muted-foreground">Pola Judul Otomatis (Optional)</Label>
+              <Input
+                id="template-pattern"
+                placeholder="Contoh: [BUG] {feature} - {bugName}"
+                value={templateTitlePattern}
+                onChange={(e) => setTemplateTitlePattern(e.target.value)}
+                className="text-xs h-8 border-border bg-input"
+              />
+              <p className="text-[10px] text-muted-foreground leading-normal">
+                Gunakan tag variabel `{`nama_field`}` untuk menghasilkan judul tiket otomatis.
+              </p>
+            </div>
+
+            {/* Custom fields builder */}
+            <div className="space-y-2 border-t border-border pt-4">
+              <div className="flex justify-between items-center">
+                <Label className="text-xs font-semibold text-foreground">Custom Fields (Konstruktor Form)</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddFieldRow}
+                  className="h-6 text-[10px] border-border bg-transparent hover:bg-accent cursor-pointer"
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Tambah Field
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-normal">
+                Buat kolom isian terstruktur yang harus diisi pengguna saat membuat issue dengan template ini.
+              </p>
+
+              {templateFields.length === 0 ? (
+                <div className="text-center py-4 text-[11px] text-muted-foreground border border-dashed border-border rounded bg-secondary/10">
+                  Tidak ada custom fields. Klik &quot;+ Tambah Field&quot; untuk membuat field baru.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                  {templateFields.map((field, idx) => (
+                    <div key={idx} className="flex gap-2 items-center bg-secondary/15 p-2 rounded border border-border">
+                      <div className="flex-1 space-y-1">
+                        <Input
+                          placeholder="Label Field (mis. OS Version)"
+                          required
+                          value={field.label}
+                          onChange={(e) => handleFieldRowChange(idx, "label", e.target.value)}
+                          className="text-[11px] h-7 border-border bg-input"
+                        />
+                        <Input
+                          placeholder="Petunjuk (mis. Android 13/iOS 16)"
+                          value={field.helperText || ""}
+                          onChange={(e) => handleFieldRowChange(idx, "helperText", e.target.value)}
+                          className="text-[10px] h-6 border-border bg-input/50"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 px-2">
+                        <input
+                          type="checkbox"
+                          id={`req-${idx}`}
+                          checked={field.required}
+                          onChange={(e) => handleFieldRowChange(idx, "required", e.target.checked)}
+                          className="rounded border-border text-primary focus:ring-0 cursor-pointer h-3.5 w-3.5"
+                        />
+                        <Label htmlFor={`req-${idx}`} className="text-[10px] cursor-pointer text-muted-foreground select-none">Wajib</Label>
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleRemoveFieldRow(idx)}
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
+                      >
+                        <Trash className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="p-0 mt-6 flex justify-end gap-2 border-t border-border pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsTemplateModalOpen(false)}
+                className="h-8 text-xs border-border bg-transparent hover:bg-accent hover:text-accent-foreground cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button type="submit" disabled={templateActionLoading} className="h-8 text-xs font-medium cursor-pointer">
+                {templateActionLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Simpan"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
