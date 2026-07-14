@@ -99,7 +99,19 @@ export default function ProjectDetailPage() {
     }
   };
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && !searchParams.get("tab")) {
+      const savedTab = localStorage.getItem(`trackflow:last-tab:${projectId}`);
+      if (savedTab && savedTab !== "issues") {
+        router.replace(`/projects/${projectId}?tab=${savedTab}`);
+      }
+    }
+  }, [projectId, searchParams, router]);
+
   const handleTabChange = (val: string) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`trackflow:last-tab:${projectId}`, val);
+    }
     router.push(`/projects/${projectId}?tab=${val}`);
   };
 

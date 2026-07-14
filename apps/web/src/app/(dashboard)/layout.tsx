@@ -5,6 +5,8 @@ import { useRouter, useParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { getSession, logout, UserSession } from "@/lib/auth-service";
 import { getProjects, Project } from "@/lib/projects-service";
+import { useQuery } from "@tanstack/react-query";
+import ProjectSwitcher from "@/components/project/project-switcher";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,29 +47,13 @@ export default function DashboardLayout({
   const projectId = params?.id as string | undefined;
 
   const [session, setSession] = useState<UserSession | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const sortedProjects = React.useMemo(() => {
-    const roots = projects.filter((p) => !p.parentProjectId && !p.parent_project_id);
-    const result: Project[] = [];
-    
-    roots.forEach((root) => {
-      result.push(root);
-      const subs = projects.filter(
-        (p) => p.parentProjectId === root.id || p.parent_project_id === root.id
-      );
-      result.push(...subs);
-    });
 
-    projects.forEach((p) => {
-      if (!result.some((r) => r.id === p.id)) {
-        result.push(p);
-      }
-    });
-
-    return result;
-  }, [projects]);
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ["projects"],
+    queryFn: getProjects,
+  });
 
   useEffect(() => {
     async function loadData() {
@@ -78,8 +64,6 @@ export default function DashboardLayout({
           return;
         }
         setSession(s);
-        const plist = await getProjects();
-        setProjects(plist);
       } catch (err) {
         console.error("Failed to load dashboard data", err);
       } finally {
@@ -161,52 +145,7 @@ export default function DashboardLayout({
         {/* Sidebar Header: Project Switcher */}
         <div className="flex h-12 items-center justify-between border-b border-border px-3">
           {sidebarOpen ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button className="flex w-full items-center justify-between rounded-md p-1.5 hover:bg-accent hover:text-accent-foreground text-left text-[13px] font-medium outline-none truncate gap-1" />
-                }
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground font-semibold text-[10px]">
-                    {currentProject ? currentProject.name[0].toUpperCase() : <Timer className="h-3 w-3" />}
-                  </div>
-                  <span className="truncate">
-                    {currentProject ? currentProject.name : "Pilih Proyek..."}
-                  </span>
-                </div>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-52">
-                <DropdownMenuLabel className="text-[11px] font-medium text-muted-foreground px-2 py-1.5">
-                  Daftar Proyek
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {sortedProjects.map((p) => {
-                  const isSub = p.parentProjectId || p.parent_project_id;
-                  return (
-                    <DropdownMenuItem
-                      key={p.id}
-                      onClick={() => router.push(`/projects/${p.id}`)}
-                      className={`text-[13px] ${isSub ? "pl-6" : ""}`}
-                    >
-                      <div className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-medium mr-2">
-                        {p.name[0].toUpperCase()}
-                      </div>
-                      <span className="truncate">{p.name}</span>
-                    </DropdownMenuItem>
-                  );
-                })}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => router.push("/projects")}
-                  className="text-[13px] text-primary"
-                >
-                  <Folder className="h-4 w-4 mr-2" />
-                  Semua Proyek
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ProjectSwitcher />
           ) : (
             <button
               onClick={() => router.push("/projects")}

@@ -23,13 +23,13 @@ export async function getProjects(): Promise<Project[]> {
   return res.json();
 }
 
-export async function createProject(name: string, description?: string): Promise<Project> {
+export async function createProject(name: string, description?: string, parentProjectId?: string): Promise<Project> {
   const res = await fetch("/api/projects", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, description, parentProjectId }),
   });
 
   if (!res.ok) {

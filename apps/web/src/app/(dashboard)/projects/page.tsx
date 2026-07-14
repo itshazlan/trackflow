@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProjects, createProject, Project } from "@/lib/projects-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,58 +24,69 @@ import {
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
-  const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
 
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      const plist = await getProjects();
-      setProjects(plist);
-    } catch (err) {
-      setError("Gagal memuat daftar proyek.");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fetch projects via TanStack Query
+  const { data: projects = [], isLoading, error: queryError } = useQuery<Project[]>({
+    queryKey: ["projects"],
+    queryFn: getProjects,
+  });
 
-  useEffect(() => {
-    loadProjects();
-  }, []);
-
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProjectName.trim()) return;
-
-    setCreateLoading(true);
-    setCreateError("");
-    try {
-      await createProject(newProjectName, newProjectDesc);
+  // Create project mutation
+  const createMutation = useMutation({
+    mutationFn: ({ name, description }: { name: string; description?: string }) =>
+      createProject(name, description),
+    onSuccess: (newProj) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setIsDialogOpen(false);
       setNewProjectName("");
       setNewProjectDesc("");
-      setIsDialogOpen(false);
-      // Reload projects list
-      await loadProjects();
-    } catch (err: any) {
+      setCreateError("");
+      // Navigate to the newly created project tab
+      router.push(`/projects/${newProj.id}?tab=issues`);
+    },
+    onError: (err: Error) => {
       setCreateError(err.message || "Gagal membuat proyek baru.");
-    } finally {
-      setCreateLoading(false);
+    },
+  });
+
+  const handleCreateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) return;
+    createMutation.mutate({
+      name: newProjectName.trim(),
+      description: newProjectDesc.trim() || undefined,
+    });
+  };
+
+  const handleSelectProject = (projectId: string) => {
+    let lastTab = "issues";
+    if (typeof window !== "undefined") {
+      lastTab = localStorage.getItem(`trackflow:last-tab:${projectId}`) || "issues";
     }
+    router.push(`/projects/${projectId}?tab=${lastTab}`);
   };
 
   return (
     <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6">
+      {/* Premium CTA Banner */}
+      <div className="rounded-lg border border-border bg-gradient-to-r from-accent/40 via-accent/15 to-transparent p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-[17px] font-bold text-foreground">Pilih atau buat proyek untuk mulai</h1>
+          <p className="text-[12.5px] text-muted-foreground mt-1 max-w-xl">
+            Untuk mulai menggunakan menu-menu seperti Issues, Time Book, dan Settings di sidebar, silakan pilih salah satu proyek di bawah ini atau buat proyek baru.
+          </p>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mt-2">
         <div>
           <h2 className="text-[16px] font-semibold text-foreground">Proyek Kerja</h2>
           <p className="text-[12px] text-muted-foreground mt-0.5">
@@ -94,15 +106,15 @@ export default function ProjectsPage() {
         </Button>
       </div>
 
-      {error && (
+      {(queryError || createError) && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{error}</span>
+          <span>{queryError ? "Gagal memuat daftar proyek." : createError}</span>
         </div>
       )}
 
       {/* Projects Grid / Table */}
-      {loading ? (
+      {isLoading ? (
         <div className="flex h-36 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
@@ -127,7 +139,7 @@ export default function ProjectsPage() {
           {projects.map((project) => (
             <div
               key={project.id}
-              onClick={() => router.push(`/projects/${project.id}`)}
+              onClick={() => handleSelectProject(project.id)}
               className="flex flex-col justify-between rounded-lg border border-border bg-card p-4 hover:border-foreground/30 transition-all cursor-pointer group shadow-sm"
             >
               <div>
@@ -186,7 +198,7 @@ export default function ProjectsPage() {
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   required
-                  disabled={createLoading}
+                  disabled={createMutation.isPending}
                 />
               </div>
 
@@ -200,7 +212,7 @@ export default function ProjectsPage() {
                   className="min-h-[70px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   value={newProjectDesc}
                   onChange={(e) => setNewProjectDesc(e.target.value)}
-                  disabled={createLoading}
+                  disabled={createMutation.isPending}
                 />
               </div>
             </div>
@@ -211,16 +223,16 @@ export default function ProjectsPage() {
                 variant="outline"
                 className="h-8 text-[12px]"
                 onClick={() => setIsDialogOpen(false)}
-                disabled={createLoading}
+                disabled={createMutation.isPending}
               >
                 Batal
               </Button>
               <Button
                 type="submit"
                 className="h-8 text-[12px]"
-                disabled={createLoading || !newProjectName.trim()}
+                disabled={createMutation.isPending || !newProjectName.trim()}
               >
-                {createLoading ? (
+                {createMutation.isPending ? (
                   <>
                     <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
                     Membuat...
