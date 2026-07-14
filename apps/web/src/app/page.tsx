@@ -4,6 +4,18 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSession, logout, UserSession } from "@/lib/auth-service";
 import { getProjects, createProject, Project } from "@/lib/projects-service";
+import {
+  getIssues,
+  createIssue,
+  deleteIssue,
+  getProjectStatuses,
+  getTrackers,
+  getProjectMembers,
+  Issue,
+  IssueStatus,
+  Tracker,
+  ProjectMember
+} from "@/lib/issues-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +55,7 @@ import {
   Sliders,
   Users,
   AlertCircle,
+  Trash,
 } from "lucide-react";
 
 type ActiveSection = "issues" | "timebook" | "reports" | "settings";
@@ -436,66 +449,437 @@ function SectionHeader({ title, description }: { title: string; description: str
 }
 
 function IssuesSection({ project }: { project: Project }) {
-  // Dense List layout mirroring Linear rows
-  const mockIssues = [
-    { key: "TRA-1", title: "Implementasi Better Auth Client-Side", status: "Selesai", priority: "Tinggi", assignee: "Hazlan", due: "15 Jul 2026" },
-    { key: "TRA-2", title: "Integrasi Desain UI/UX Setara Linear/Plane", status: "Dalam Proses", priority: "Tinggi", assignee: "Hazlan", due: "18 Jul 2026" },
-    { key: "TRA-3", title: "Tambahkan Fitur Manual Time Entry & Screen Capture", status: "Belum Dimulai", priority: "Sedang", assignee: "Unassigned", due: "22 Jul 2026" },
-    { key: "TRA-4", title: "Optimasi Query Database PostgreSQL Drizzle ORM", status: "Belum Dimulai", priority: "Rendah", assignee: "Budi", due: "30 Jul 2026" },
-  ];
+  const [issuesList, setIssuesList] = useState<Issue[]>([]);
+  const [statuses, setStatuses] = useState<IssueStatus[]>([]);
+  const [trackers, setTrackers] = useState<Tracker[]>([]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Create Issue state
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [statusId, setStatusId] = useState("");
+  const [trackerId, setTrackerId] = useState("");
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>("medium");
+  const [assigneeId, setAssigneeId] = useState<string>("");
+  const [dueDate, setDueDate] = useState("");
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState("");
+
+  // Filter states
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [filterAssignee, setFilterAssignee] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Load issues and configuration details helper
+  const fetchProjectData = React.useCallback(() => {
+    return Promise.all([
+      getIssues(project.id),
+      getProjectStatuses(project.id),
+      getTrackers(),
+      getProjectMembers(project.id),
+    ]).then(([issuesData, statusesData, trackersData, membersData]) => {
+      setIssuesList(issuesData);
+      setStatuses(statusesData);
+      setTrackers(trackersData);
+      setMembers(membersData);
+      return { statusesData, trackersData };
+    });
+  }, [project.id]);
+
+  useEffect(() => {
+    let active = true;
+
+    // Use asynchronous promise chain to avoid synchronous setState inside useEffect body
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setLoading(true);
+      setError("");
+      return fetchProjectData();
+    })
+    .then((res) => {
+      if (!res || !active) return;
+      const { statusesData, trackersData } = res;
+      if (statusesData.length > 0) setStatusId(statusesData[0].id);
+      if (trackersData.length > 0) setTrackerId(trackersData[0].id);
+    })
+    .catch((err) => {
+      if (!active) return;
+      console.error(err);
+      setError("Gagal memuat data issues.");
+    })
+    .finally(() => {
+      if (!active) return;
+      setLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [project.id, fetchProjectData]);
+
+  const handleCreateIssue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !statusId || !trackerId) return;
+    setCreateLoading(true);
+    setCreateError("");
+    try {
+      await createIssue(project.id, {
+        title,
+        description: description || undefined,
+        statusId,
+        trackerId,
+        priority,
+        assigneeId: assigneeId || null,
+        dueDate: dueDate || null,
+      });
+      setIsCreateOpen(false);
+      // Reset form
+      setTitle("");
+      setDescription("");
+      setPriority("medium");
+      setAssigneeId("");
+      setDueDate("");
+      // Reload issues
+      await fetchProjectData();
+    } catch (err: unknown) {
+      setCreateError(err instanceof Error ? err.message : "Gagal membuat issue");
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const handleDeleteIssue = async (issueId: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus issue ini?")) return;
+    try {
+      await deleteIssue(project.id, issueId);
+      setIssuesList((prev) => prev.filter((iss) => iss.id !== issueId));
+    } catch (err) {
+      console.error(err);
+      alert("Gagal menghapus issue");
+    }
+  };
+
+  const filteredIssues = issuesList.filter((iss) => {
+    const matchesStatus = filterStatus === "all" || iss.statusId === filterStatus;
+    const matchesPriority = filterPriority === "all" || iss.priority === filterPriority;
+    const matchesAssignee =
+      filterAssignee === "all" ||
+      (filterAssignee === "unassigned" && !iss.assigneeId) ||
+      iss.assigneeId === filterAssignee;
+    const matchesSearch =
+      iss.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (iss.description && iss.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesStatus && matchesPriority && matchesAssignee && matchesSearch;
+  });
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+          <div className="h-7 w-20 bg-muted animate-pulse rounded" />
+        </div>
+        <div className="h-9 w-full bg-muted animate-pulse rounded" />
+        <div className="space-y-2">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="h-10 w-full bg-muted animate-pulse rounded" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
+      {/* Issues Header */}
       <div className="flex items-center justify-between border-b border-border pb-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Issues — {project.name}</h2>
           <p className="text-xs text-muted-foreground">Kelola backlog tugas dan status development proyek.</p>
         </div>
-        <Button className="h-7 text-xs font-medium px-2.5 cursor-pointer">
+        <Button onClick={() => setIsCreateOpen(true)} className="h-7 text-xs font-medium px-2.5 cursor-pointer">
           <Plus className="h-3.5 w-3.5 mr-1" /> Buat Issue
         </Button>
       </div>
 
+      {error && (
+        <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* Filters Toolbar */}
-      <div className="flex items-center gap-2 text-xs border border-border bg-card/40 p-2 rounded-md">
-        <Sliders className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-muted-foreground">Filter:</span>
-        <button className="hover:bg-accent px-2 py-1 rounded transition-colors text-[11px] font-medium border border-border">Status: Semua</button>
-        <button className="hover:bg-accent px-2 py-1 rounded transition-colors text-[11px] font-medium border border-border">Prioritas: Semua</button>
-        <button className="hover:bg-accent px-2 py-1 rounded transition-colors text-[11px] font-medium border border-border">Assignee: Semua</button>
+      <div className="flex flex-col sm:flex-row gap-2 text-xs border border-border bg-card/40 p-2 rounded-md justify-between items-start sm:items-center">
+        <div className="flex flex-wrap items-center gap-2">
+          <Sliders className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground mr-1">Filter:</span>
+          
+          {/* Status filter */}
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="bg-input border border-border text-[11px] rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="all">Status: Semua</option>
+            {statuses.map((st) => (
+              <option key={st.id} value={st.id}>{st.name}</option>
+            ))}
+          </select>
+
+          {/* Priority filter */}
+          <select
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+            className="bg-input border border-border text-[11px] rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="all">Prioritas: Semua</option>
+            <option value="low">Rendah</option>
+            <option value="medium">Sedang</option>
+            <option value="high">Tinggi</option>
+            <option value="urgent">Mendesak</option>
+          </select>
+
+          {/* Assignee filter */}
+          <select
+            value={filterAssignee}
+            onChange={(e) => setFilterAssignee(e.target.value)}
+            className="bg-input border border-border text-[11px] rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="all">Assignee: Semua</option>
+            <option value="unassigned">Belum Ditugaskan</option>
+            {members.map((m) => (
+              <option key={m.userId} value={m.userId}>{m.user.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Local search in issues */}
+        <div className="relative w-full sm:w-48 shrink-0 mt-1 sm:mt-0">
+          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Cari issue..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full text-[11px] h-6 pl-7 pr-2 border border-border bg-input rounded focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
       </div>
 
       {/* High Density Issue List */}
       <div className="border border-border rounded-md overflow-hidden bg-card">
-        <div className="divide-y divide-border">
-          {mockIssues.map((issue) => (
-            <div key={issue.key} className="flex items-center justify-between py-2 px-3 hover:bg-accent/40 transition-colors text-xs group cursor-pointer">
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="font-mono text-muted-foreground select-all w-14 shrink-0 font-medium">{issue.key}</span>
-                <span className="font-medium text-foreground truncate">{issue.title}</span>
+        {filteredIssues.length === 0 ? (
+          <div className="text-center py-8 text-xs text-muted-foreground">
+            Tidak ada issue yang cocok dengan filter atau pencarian Anda.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filteredIssues.map((issue) => (
+              <div
+                key={issue.id}
+                className="flex items-center justify-between py-2 px-3 hover:bg-accent/40 transition-colors text-xs group cursor-pointer"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="font-mono text-[10px] text-muted-foreground select-all w-16 shrink-0 font-medium">
+                    #{issue.id.slice(0, 6)}
+                  </span>
+                  {/* Tracker indicator */}
+                  <span className="text-[10px] text-muted-foreground border border-border px-1 py-0.25 rounded bg-muted/30 shrink-0 select-none">
+                    {issue.tracker?.name || "Task"}
+                  </span>
+                  <span className="font-medium text-foreground truncate">{issue.title}</span>
+                </div>
+                
+                <div className="flex items-center gap-4 shrink-0 ml-4 text-[11px]">
+                  {/* Status Badge */}
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold border border-border bg-secondary text-muted-foreground">
+                    {issue.status?.name || "Baru"}
+                  </span>
+                  
+                  {/* Priority indicator */}
+                  <span className={`font-semibold capitalize text-[10px] ${
+                    issue.priority === "urgent" ? "text-red-500 font-bold" :
+                    issue.priority === "high" ? "text-red-400" :
+                    issue.priority === "medium" ? "text-amber-400" :
+                    "text-muted-foreground"
+                  }`}>
+                    {issue.priority}
+                  </span>
+
+                  {/* Assignee initials */}
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-secondary-foreground text-[9px] font-bold border border-border" title={issue.assignee?.name || "Belum Ditugaskan"}>
+                    {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+                  </div>
+
+                  {/* Due date */}
+                  <span className="text-muted-foreground/80 font-mono text-[10px] hidden sm:inline select-none">
+                    {issue.dueDate ? new Date(issue.dueDate).toLocaleDateString("id-ID", { day: 'numeric', month: 'short' }) : "-"}
+                  </span>
+
+                  {/* Delete action visible on hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteIssue(issue.id);
+                    }}
+                    className="p-1 hover:bg-destructive/10 hover:text-destructive text-muted-foreground rounded transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                    title="Hapus Issue"
+                  >
+                    <Trash className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-4 shrink-0 ml-4 text-[11px]">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
-                  issue.status === "Selesai" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400" :
-                  issue.status === "Dalam Proses" ? "border-amber-500/20 bg-amber-500/10 text-amber-400" :
-                  "border-border bg-secondary text-muted-foreground"
-                }`}>
-                  {issue.status}
-                </span>
-                <span className={`font-semibold ${
-                  issue.priority === "Tinggi" ? "text-red-400" :
-                  issue.priority === "Sedang" ? "text-amber-400" :
-                  "text-muted-foreground"
-                }`}>
-                  {issue.priority}
-                </span>
-                <span className="text-muted-foreground">{issue.assignee}</span>
-                <span className="text-muted-foreground/80 font-mono hidden sm:inline">{issue.due}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── CREATE ISSUE DIALOG ── */}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="sm:max-w-[480px] border-border bg-popover text-popover-foreground p-5">
+          <DialogHeader className="p-0 mb-4">
+            <DialogTitle className="text-sm font-semibold">Buat Issue Baru</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateIssue} className="space-y-4">
+            {createError && (
+              <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+                <span>{createError}</span>
+              </div>
+            )}
+            
+            {/* Title */}
+            <div className="space-y-1.5">
+              <Label htmlFor="issue-title" className="text-xs text-muted-foreground">Judul Issue <span className="text-destructive">*</span></Label>
+              <Input
+                id="issue-title"
+                required
+                placeholder="Contoh: Perbaikan UI/UX Input Form"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="text-xs h-8 border-border bg-input"
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1.5">
+              <Label htmlFor="issue-desc" className="text-xs text-muted-foreground">Deskripsi (Opsional)</Label>
+              <textarea
+                id="issue-desc"
+                placeholder="Masukkan rincian deskripsi issue..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-border bg-input p-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring placeholder-muted-foreground resize-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Tracker */}
+              <div className="space-y-1.5">
+                <Label htmlFor="issue-tracker" className="text-xs text-muted-foreground">Tracker <span className="text-destructive">*</span></Label>
+                <select
+                  id="issue-tracker"
+                  required
+                  value={trackerId}
+                  onChange={(e) => setTrackerId(e.target.value)}
+                  className="w-full text-xs h-8 rounded-md border border-border bg-input px-2.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {trackers.map((tr) => (
+                    <option key={tr.id} value={tr.id}>{tr.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status */}
+              <div className="space-y-1.5">
+                <Label htmlFor="issue-status" className="text-xs text-muted-foreground">Status <span className="text-destructive">*</span></Label>
+                <select
+                  id="issue-status"
+                  required
+                  value={statusId}
+                  onChange={(e) => setStatusId(e.target.value)}
+                  className="w-full text-xs h-8 rounded-md border border-border bg-input px-2.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {statuses.map((st) => (
+                    <option key={st.id} value={st.id}>{st.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Priority */}
+              <div className="space-y-1.5">
+                <Label htmlFor="issue-priority" className="text-xs text-muted-foreground">Prioritas</Label>
+                <select
+                  id="issue-priority"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high' | 'urgent')}
+                  className="w-full text-xs h-8 rounded-md border border-border bg-input px-2.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="low">Rendah</option>
+                  <option value="medium">Sedang</option>
+                  <option value="high">Tinggi</option>
+                  <option value="urgent">Mendesak</option>
+                </select>
+              </div>
+
+              {/* Assignee */}
+              <div className="space-y-1.5">
+                <Label htmlFor="issue-assignee" className="text-xs text-muted-foreground">Assignee</Label>
+                <select
+                  id="issue-assignee"
+                  value={assigneeId}
+                  onChange={(e) => setAssigneeId(e.target.value)}
+                  className="w-full text-xs h-8 rounded-md border border-border bg-input px-2.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Belum Ditugaskan</option>
+                  {members.map((m) => (
+                    <option key={m.userId} value={m.userId}>{m.user.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
+
+            {/* Due date */}
+            <div className="space-y-1.5">
+              <Label htmlFor="issue-due" className="text-xs text-muted-foreground">Tanggal Tenggat (Due Date)</Label>
+              <Input
+                id="issue-due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="text-xs h-8 border-border bg-input block w-full"
+              />
+            </div>
+
+            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateOpen(false)}
+                className="h-8 text-xs border-border bg-transparent hover:bg-accent hover:text-accent-foreground cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button type="submit" disabled={createLoading} className="h-8 text-xs font-medium cursor-pointer">
+                {createLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Buat Issue"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
