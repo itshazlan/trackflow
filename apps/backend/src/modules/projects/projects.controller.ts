@@ -30,6 +30,12 @@ export class ProjectsController {
     return this.projectsService.findAll(req.user);
   }
 
+  @Get('check-key/:key')
+  async checkKey(@Param('key') key: string) {
+    const exists = await this.projectsService.checkKeyExists(key);
+    return { available: !exists };
+  }
+
   @Get(':id')
   @UseGuards(ProjectRoleGuard)
   findOne(@Param('id') id: string) {

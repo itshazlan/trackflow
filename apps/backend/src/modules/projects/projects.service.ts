@@ -148,6 +148,15 @@ export class ProjectsService {
     return updated;
   }
 
+  async checkKeyExists(key: string): Promise<boolean> {
+    const [project] = await this.db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.key, key.toUpperCase()))
+      .limit(1);
+    return !!project;
+  }
+
   async remove(id: string) {
     const [deleted] = await this.db
       .delete(projects)

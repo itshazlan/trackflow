@@ -7,8 +7,8 @@ export class CreateProjectDto {
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^[A-Z][A-Z0-9]{1,9}$/, {
-    message: 'Project key must be uppercase, alphanumeric, 2-10 characters, and start with an uppercase letter.',
+  @Matches(/^[A-Z][A-Z0-9_-]{1,9}$/, {
+    message: 'Project key must be uppercase, alphanumeric, hyphen or underscore, 2-10 characters, and start with an uppercase letter.',
   })
   key: string;
 

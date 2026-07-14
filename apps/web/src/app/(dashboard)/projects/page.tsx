@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getProjects, createProject, Project } from "@/lib/projects-service";
+import { getProjects, createProject, checkProjectKey, Project } from "@/lib/projects-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,8 +29,13 @@ export default function ProjectsPage() {
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectKey, setNewProjectKey] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
   const [createError, setCreateError] = useState("");
+  const [keyError, setKeyError] = useState("");
+  const [isCheckingKey, setIsCheckingKey] = useState(false);
+  const [isKeyAvailable, setIsKeyAvailable] = useState<boolean | null>(null);
+  const [isKeyManuallyEdited, setIsKeyManuallyEdited] = useState(false);
 
   // Fetch projects via TanStack Query
   const { data: projects = [], isLoading, error: queryError } = useQuery<Project[]>({
@@ -40,14 +45,18 @@ export default function ProjectsPage() {
 
   // Create project mutation
   const createMutation = useMutation({
-    mutationFn: ({ name, description }: { name: string; description?: string }) =>
-      createProject(name, description),
+    mutationFn: ({ name, key, description }: { name: string; key: string; description?: string }) =>
+      createProject(name, key, description),
     onSuccess: (newProj) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       setIsDialogOpen(false);
       setNewProjectName("");
+      setNewProjectKey("");
       setNewProjectDesc("");
       setCreateError("");
+      setKeyError("");
+      setIsKeyAvailable(null);
+      setIsKeyManuallyEdited(false);
       // Navigate to the newly created project tab
       router.push(`/projects/${newProj.id}?tab=issues`);
     },
@@ -56,11 +65,81 @@ export default function ProjectsPage() {
     },
   });
 
+  const generateKeyFromName = (name: string): string => {
+    const cleaned = name.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    let base = cleaned;
+    if (base.length > 0 && !/^[A-Z]/.test(base)) {
+      base = "P" + base;
+    }
+    let key = base.substring(0, 5);
+    while (key.length > 0 && key.length < 5) {
+      key += "X";
+    }
+    return key;
+  };
+
+  const handleNameChange = (val: string) => {
+    setNewProjectName(val);
+    if (!isKeyManuallyEdited) {
+      const suggestedKey = generateKeyFromName(val);
+      setNewProjectKey(suggestedKey);
+      
+      if (suggestedKey.length > 0 && !/^[A-Z][A-Z0-9_-]{1,9}$/.test(suggestedKey)) {
+        setKeyError("Kode proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+      } else {
+        setKeyError("");
+      }
+      setIsKeyAvailable(null);
+    }
+  };
+
+  const checkKeyUniqueness = async (keyToCheck: string) => {
+    if (!/^[A-Z][A-Z0-9_-]{1,9}$/.test(keyToCheck)) {
+      setKeyError("Kode proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+      setIsKeyAvailable(false);
+      return;
+    }
+    setIsCheckingKey(true);
+    try {
+      const res = await checkProjectKey(keyToCheck);
+      setIsKeyAvailable(res.available);
+      if (!res.available) {
+        setKeyError("Kode Proyek sudah digunakan.");
+      } else {
+        setKeyError("");
+      }
+    } catch (err) {
+      console.error("Error checking key uniqueness:", err);
+    } finally {
+      setIsCheckingKey(false);
+    }
+  };
+
+  const handleKeyChange = (val: string) => {
+    setIsKeyManuallyEdited(true);
+    const cleaned = val.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    setNewProjectKey(cleaned.substring(0, 10));
+    setIsKeyAvailable(null);
+
+    if (cleaned.length > 0 && !/^[A-Z][A-Z0-9_-]{1,9}$/.test(cleaned)) {
+      setKeyError("Kode proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+    } else {
+      setKeyError("");
+    }
+  };
+
+  const handleKeyBlur = () => {
+    if (newProjectKey) {
+      checkKeyUniqueness(newProjectKey);
+    }
+  };
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProjectName.trim()) return;
+    if (!newProjectName.trim() || !newProjectKey.trim() || keyError) return;
     createMutation.mutate({
       name: newProjectName.trim(),
+      key: newProjectKey.trim(),
       description: newProjectDesc.trim() || undefined,
     });
   };
@@ -196,10 +275,38 @@ export default function ProjectsPage() {
                   placeholder="Contoh: TrackFlow App"
                   className="h-8 text-[12.5px]"
                   value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onChange={(e) => handleNameChange(e.target.value)}
                   required
                   disabled={createMutation.isPending}
                 />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="proj-key" className="text-[11px] font-medium text-muted-foreground">
+                    Kode Proyek (Project Key)
+                  </Label>
+                  {isCheckingKey && (
+                    <span className="text-[10px] text-muted-foreground animate-pulse">Memeriksa...</span>
+                  )}
+                  {!isCheckingKey && isKeyAvailable === true && (
+                    <span className="text-[10px] text-emerald-500 font-medium">Tersedia</span>
+                  )}
+                </div>
+                <Input
+                  id="proj-key"
+                  type="text"
+                  placeholder="Contoh: TRACK, MOB"
+                  className={`h-8 text-[12.5px] uppercase ${keyError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                  value={newProjectKey}
+                  onChange={(e) => handleKeyChange(e.target.value)}
+                  onBlur={handleKeyBlur}
+                  required
+                  disabled={createMutation.isPending}
+                />
+                {keyError && (
+                  <span className="text-[10px] text-destructive mt-0.5">{keyError}</span>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">

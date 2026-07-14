@@ -399,8 +399,15 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   <TableCell className="font-mono text-[11px] text-muted-foreground pl-4">
                     #{issue.id.slice(0, 6)}
                   </TableCell>
-                  <TableCell className="font-medium text-foreground truncate max-w-[220px]">
-                    {issue.title}
+                  <TableCell className="font-medium text-foreground">
+                    <div className="flex items-center gap-1.5 max-w-[280px]">
+                      {issue.displayId && (
+                        <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
+                          {issue.displayId}
+                        </span>
+                      )}
+                      <span className="truncate">{issue.title}</span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground select-none">
@@ -680,8 +687,13 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                     {selectedIssue.tracker?.name || "Task"}
                   </span>
                 </div>
-                <DialogTitle className="text-[15px] font-semibold mt-1 leading-normal text-foreground">
-                  {selectedIssue.title}
+                <DialogTitle className="text-[15px] font-semibold mt-1 leading-normal text-foreground flex items-center gap-2">
+                  {selectedIssue.displayId && (
+                    <span className="inline-flex items-center rounded bg-muted border border-border px-1.5 py-0.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase">
+                      {selectedIssue.displayId}
+                    </span>
+                  )}
+                  <span>{selectedIssue.title}</span>
                 </DialogTitle>
               </DialogHeader>
 

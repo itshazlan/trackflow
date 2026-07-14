@@ -1,6 +1,8 @@
 export interface Project {
   id: string;
   name: string;
+  key: string;
+  issueSequence: number;
   description: string | null;
   createdBy: string;
   createdAt: string;
@@ -23,18 +25,38 @@ export async function getProjects(): Promise<Project[]> {
   return res.json();
 }
 
-export async function createProject(name: string, description?: string, parentProjectId?: string): Promise<Project> {
+export async function createProject(
+  name: string,
+  key: string,
+  description?: string,
+  parentProjectId?: string,
+): Promise<Project> {
   const res = await fetch("/api/projects", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ name, description, parentProjectId }),
+    body: JSON.stringify({ name, key, description, parentProjectId }),
   });
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.message || "Failed to create project");
+  }
+
+  return res.json();
+}
+
+export async function checkProjectKey(key: string): Promise<{ available: boolean }> {
+  const res = await fetch(`/api/projects/check-key/${key}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to check project key");
   }
 
   return res.json();
@@ -87,6 +109,7 @@ export async function getSubProjects(id: string): Promise<Project[]> {
 export async function createSubProject(
   parentId: string,
   name: string,
+  key: string,
   description?: string,
 ): Promise<Project> {
   const res = await fetch(`/api/projects/${parentId}/sub-projects`, {
@@ -94,7 +117,7 @@ export async function createSubProject(
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, key, description }),
   });
 
   if (!res.ok) {

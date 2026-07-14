@@ -572,7 +572,7 @@ export default function TimesheetsPage() {
                   <option value="">-- Pilih Issue --</option>
                   {issues.map((issue) => (
                     <option key={issue.id} value={issue.id}>
-                      {issue.title}
+                      {issue.displayId ? `[${issue.displayId}] ${issue.title}` : issue.title}
                     </option>
                   ))}
                 </select>

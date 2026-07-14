@@ -4,6 +4,8 @@ export interface Issue {
   trackerId: string;
   statusId: string;
   title: string;
+  number?: number;
+  displayId?: string;
   description: string | null;
   assigneeId: string | null;
   priority: 'low' | 'medium' | 'high' | 'urgent';

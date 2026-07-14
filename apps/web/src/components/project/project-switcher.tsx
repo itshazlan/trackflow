@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getProjects, createProject, Project } from "@/lib/projects-service";
+import { getProjects, createProject, checkProjectKey, Project } from "@/lib/projects-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,11 +25,15 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-export default function ProjectSwitcher() {
+interface ProjectSwitcherProps {
+  currentProjectId?: string;
+}
+
+export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherProps) {
   const router = useRouter();
   const params = useParams();
   const queryClient = useQueryClient();
-  const activeProjectId = params?.id as string | undefined;
+  const activeProjectId = (params?.id as string | undefined) || currentProjectId;
 
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -38,9 +42,14 @@ export default function ProjectSwitcher() {
   // Create project dialog state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectKey, setNewProjectKey] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
   const [newProjectParentId, setNewProjectParentId] = useState("");
   const [createError, setCreateError] = useState("");
+  const [keyError, setKeyError] = useState("");
+  const [isCheckingKey, setIsCheckingKey] = useState(false);
+  const [isKeyAvailable, setIsKeyAvailable] = useState<boolean | null>(null);
+  const [isKeyManuallyEdited, setIsKeyManuallyEdited] = useState(false);
 
   // Fetch projects via TanStack Query
   const { data: projects = [], isLoading } = useQuery<Project[]>({
@@ -52,20 +61,26 @@ export default function ProjectSwitcher() {
   const createMutation = useMutation({
     mutationFn: ({
       name,
+      key,
       description,
       parentProjectId,
     }: {
       name: string;
+      key: string;
       description?: string;
       parentProjectId?: string;
-    }) => createProject(name, description, parentProjectId),
+    }) => createProject(name, key, description, parentProjectId),
     onSuccess: (newProj) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       setIsCreateOpen(false);
       setNewProjectName("");
+      setNewProjectKey("");
       setNewProjectDesc("");
       setNewProjectParentId("");
       setCreateError("");
+      setKeyError("");
+      setIsKeyAvailable(null);
+      setIsKeyManuallyEdited(false);
       // Navigate to the newly created project
       router.push(`/projects/${newProj.id}?tab=issues`);
     },
@@ -73,6 +88,86 @@ export default function ProjectSwitcher() {
       setCreateError(err.message || "Gagal membuat proyek baru.");
     },
   });
+
+  const generateKeyFromName = (name: string): string => {
+    const cleaned = name.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    let base = cleaned;
+    if (base.length > 0 && !/^[A-Z]/.test(base)) {
+      base = "P" + base;
+    }
+    let key = base.substring(0, 5);
+    while (key.length > 0 && key.length < 5) {
+      key += "X";
+    }
+    return key;
+  };
+
+  const handleNameChange = (val: string) => {
+    setNewProjectName(val);
+    if (!isKeyManuallyEdited) {
+      const suggestedKey = generateKeyFromName(val);
+      setNewProjectKey(suggestedKey);
+      
+      if (suggestedKey.length > 0 && !/^[A-Z][A-Z0-9_-]{1,9}$/.test(suggestedKey)) {
+        setKeyError("Kode proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+      } else {
+        setKeyError("");
+      }
+      setIsKeyAvailable(null);
+    }
+  };
+
+  const checkKeyUniqueness = async (keyToCheck: string) => {
+    if (!/^[A-Z][A-Z0-9_-]{1,9}$/.test(keyToCheck)) {
+      setKeyError("Kode proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+      setIsKeyAvailable(false);
+      return;
+    }
+    setIsCheckingKey(true);
+    try {
+      const res = await checkProjectKey(keyToCheck);
+      setIsKeyAvailable(res.available);
+      if (!res.available) {
+        setKeyError("Kode Proyek sudah digunakan.");
+      } else {
+        setKeyError("");
+      }
+    } catch (err) {
+      console.error("Error checking key uniqueness:", err);
+    } finally {
+      setIsCheckingKey(false);
+    }
+  };
+
+  const handleKeyChange = (val: string) => {
+    setIsKeyManuallyEdited(true);
+    const cleaned = val.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    setNewProjectKey(cleaned.substring(0, 10));
+    setIsKeyAvailable(null);
+
+    if (cleaned.length > 0 && !/^[A-Z][A-Z0-9_-]{1,9}$/.test(cleaned)) {
+      setKeyError("Kode proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+    } else {
+      setKeyError("");
+    }
+  };
+
+  const handleKeyBlur = () => {
+    if (newProjectKey) {
+      checkKeyUniqueness(newProjectKey);
+    }
+  };
+
+  const handleCreateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim() || !newProjectKey.trim() || keyError) return;
+    createMutation.mutate({
+      name: newProjectName.trim(),
+      key: newProjectKey.trim(),
+      description: newProjectDesc.trim() || undefined,
+      parentProjectId: newProjectParentId || undefined,
+    });
+  };
 
   // Close popover when clicking outside
   useEffect(() => {
@@ -133,16 +228,6 @@ export default function ProjectSwitcher() {
       lastTab = localStorage.getItem(`trackflow:last-tab:${projectId}`) || "issues";
     }
     router.push(`/projects/${projectId}?tab=${lastTab}`);
-  };
-
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProjectName.trim()) return;
-    createMutation.mutate({
-      name: newProjectName.trim(),
-      description: newProjectDesc.trim() || undefined,
-      parentProjectId: newProjectParentId || undefined,
-    });
   };
 
   return (
@@ -264,10 +349,39 @@ export default function ProjectSwitcher() {
                   required
                   placeholder="Contoh: TrackFlow Web"
                   value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onChange={(e) => handleNameChange(e.target.value)}
                   className="h-8.5 text-[12px]"
                   disabled={createMutation.isPending}
                 />
+              </div>
+
+              {/* Project Key */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="new-proj-key" className="text-[11px] font-semibold text-muted-foreground">
+                    Kode Proyek (Project Key) <span className="text-red-500">*</span>
+                  </Label>
+                  {isCheckingKey && (
+                    <span className="text-[10px] text-muted-foreground animate-pulse">Memeriksa...</span>
+                  )}
+                  {!isCheckingKey && isKeyAvailable === true && (
+                    <span className="text-[10px] text-emerald-500 font-medium">Tersedia</span>
+                  )}
+                </div>
+                <Input
+                  id="new-proj-key"
+                  type="text"
+                  required
+                  placeholder="Contoh: TRACK, MOB"
+                  className={`h-8.5 text-[12px] uppercase ${keyError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                  value={newProjectKey}
+                  onChange={(e) => handleKeyChange(e.target.value)}
+                  onBlur={handleKeyBlur}
+                  disabled={createMutation.isPending}
+                />
+                {keyError && (
+                  <span className="text-[10px] text-destructive mt-0.5">{keyError}</span>
+                )}
               </div>
 
               {/* Description */}
