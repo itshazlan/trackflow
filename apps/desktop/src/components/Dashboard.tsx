@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, BASE_URL } from '../lib/api';
 import { invoke } from '@tauri-apps/api/core';
-import { LogOut, Play, Shield, User, Wifi } from 'lucide-react';
+import { ChevronDown, LogOut, Play, Shield, User, Wifi } from 'lucide-react';
 
 interface DashboardProps {
   user: any;
@@ -233,18 +233,23 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
             {loadingProjects ? (
               <div className="h-8 w-full rounded border border-border bg-secondary animate-pulse" />
             ) : (
-              <select
-                value={selectedProjectId}
-                onChange={(e) => handleProjectChange(e.target.value)}
-                className="w-full rounded border border-input bg-background py-1.5 px-2.5 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none"
-              >
-                <option value="">Select a project...</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => handleProjectChange(e.target.value)}
+                  className="w-full appearance-none rounded border border-input bg-background py-2 pl-3 pr-10 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none transition-colors cursor-pointer"
+                >
+                  <option value="" className="bg-[#0a0a0c]">Select a project...</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id} className="bg-[#0a0a0c]">
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-muted-foreground">
+                  <ChevronDown className="h-4 w-4" />
+                </span>
+              </div>
             )}
           </div>
 
@@ -256,27 +261,32 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
             {loadingIssues ? (
               <div className="h-8 w-full rounded border border-border bg-secondary animate-pulse" />
             ) : (
-              <select
-                value={selectedIssueId}
-                onChange={(e) => handleIssueChange(e.target.value)}
-                disabled={!selectedProjectId || issues.length === 0}
-                className="w-full rounded border border-input bg-background py-1.5 px-2.5 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none disabled:opacity-50"
-              >
-                {!selectedProjectId ? (
-                  <option value="">Select a project first...</option>
-                ) : issues.length === 0 ? (
-                  <option value="">No tasks assigned to you</option>
-                ) : (
-                  <>
-                    <option value="">Select a task...</option>
-                    {issues.map((issue) => (
-                      <option key={issue.id} value={issue.id}>
-                        {issue.displayId ? `[${issue.displayId}] ` : ''}{issue.title}
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
+              <div className="relative">
+                <select
+                  value={selectedIssueId}
+                  onChange={(e) => handleIssueChange(e.target.value)}
+                  disabled={!selectedProjectId || issues.length === 0}
+                  className="w-full appearance-none rounded border border-input bg-background py-2 pl-3 pr-10 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {!selectedProjectId ? (
+                    <option value="" className="bg-[#0a0a0c]">Select a project first...</option>
+                  ) : issues.length === 0 ? (
+                    <option value="" className="bg-[#0a0a0c]">No tasks assigned to you</option>
+                  ) : (
+                    <>
+                      <option value="" className="bg-[#0a0a0c]">Select a task...</option>
+                      {issues.map((issue) => (
+                        <option key={issue.id} value={issue.id} className="bg-[#0a0a0c]">
+                          {issue.displayId ? `[${issue.displayId}] ` : ''}{issue.title}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+                <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-muted-foreground">
+                  <ChevronDown className="h-4 w-4" />
+                </span>
+              </div>
             )}
           </div>
 
