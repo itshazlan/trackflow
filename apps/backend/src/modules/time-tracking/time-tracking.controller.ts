@@ -36,12 +36,15 @@ export class TimeTrackingController {
   @Get()
   findAll(
     @Req() req: any,
+    @Query('userId') userId?: string,
     @Query('projectId') projectId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
     return this.timeTrackingService.findAllForUser(
       req.user.id,
+      req.user.isAdmin,
+      userId,
       projectId,
       startDate,
       endDate,

@@ -22,12 +22,14 @@ export interface TimeBlock {
 export async function getTimeBlocks(
   projectId?: string,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  userId?: string
 ): Promise<TimeBlock[]> {
   const params = new URLSearchParams();
   if (projectId) params.append("projectId", projectId);
   if (startDate) params.append("startDate", startDate);
   if (endDate) params.append("endDate", endDate);
+  if (userId) params.append("userId", userId);
 
   const res = await fetch(`/api/time-blocks?${params.toString()}`, {
     method: "GET",

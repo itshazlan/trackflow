@@ -72,4 +72,19 @@ export class R2Service {
       );
     }
   }
+
+  isConfigured(): boolean {
+    return this.s3Client !== null;
+  }
+
+  async getObjectStream(objectKey: string) {
+    if (!this.s3Client) return null;
+    const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: objectKey,
+    });
+    const response = await this.s3Client.send(command);
+    return response.Body;
+  }
 }

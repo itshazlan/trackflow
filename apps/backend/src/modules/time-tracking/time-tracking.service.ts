@@ -153,13 +153,44 @@ export class TimeTrackingService {
   }
 
   async findAllForUser(
-    userId: string,
+    requesterId: string,
+    isAdmin: boolean,
+    targetUserId?: string,
     projectId?: string,
     startDate?: string,
     endDate?: string,
   ) {
+    let finalUserId = requesterId;
+
+    if (targetUserId && targetUserId !== requesterId) {
+      let isAllowed = isAdmin;
+      if (!isAllowed && projectId) {
+        const [membership] = await this.db
+          .select()
+          .from(projectMemberships)
+          .where(
+            and(
+              eq(projectMemberships.projectId, projectId),
+              eq(projectMemberships.userId, requesterId),
+              eq(projectMemberships.role, 'manager'),
+            ),
+          )
+          .limit(1);
+        if (membership) {
+          isAllowed = true;
+        }
+      }
+
+      if (!isAllowed) {
+        throw new ForbiddenException(
+          "You do not have permission to view other users' time blocks",
+        );
+      }
+      finalUserId = targetUserId;
+    }
+
     const queryConditions = [
-      eq(timeBlocks.userId, userId),
+      eq(timeBlocks.userId, finalUserId),
       eq(timeBlocks.isDeleted, false),
     ];
 

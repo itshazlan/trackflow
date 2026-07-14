@@ -7,6 +7,7 @@ import { auth } from './modules/auth/better-auth.config';
 import * as express from 'express';
 import { join } from 'path';
 import * as fs from 'fs';
+import { R2Service } from './modules/time-tracking/r2.service';
 
 async function bootstrap() {
   // Ensure screenshots upload folder exists (Multer requires this)
@@ -30,9 +31,25 @@ async function bootstrap() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Serve uploads folder static assets
+  // Serve uploads folder static assets with R2 proxy fallback
   expressInstance.use(
     '/uploads',
+    async (req: any, res: any, next: any) => {
+      try {
+        const r2Service = app.get(R2Service);
+        if (r2Service && r2Service.isConfigured()) {
+          const key = req.path.replace(/^\//, ''); // e.g. project/.../xxx.webp
+          const stream = await r2Service.getObjectStream(key);
+          if (stream) {
+            res.setHeader('Content-Type', 'image/webp');
+            return (stream as any).pipe(res);
+          }
+        }
+      } catch (err) {
+        // Fallback to static
+      }
+      next();
+    },
     express.static(join(process.cwd(), 'uploads')),
   );
 
