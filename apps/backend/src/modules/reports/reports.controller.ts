@@ -15,6 +15,21 @@ import { AuthGuard } from '../../common/guards/auth.guard';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
+  @Get('hours/preview')
+  async getHoursReportPreview(
+    @Query('projectId') projectId?: string,
+    @Query('userId') userId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getReportData(
+      projectId,
+      userId,
+      startDate,
+      endDate,
+    );
+  }
+
   @Get('hours')
   async getHoursReport(
     @Res() res: Response,

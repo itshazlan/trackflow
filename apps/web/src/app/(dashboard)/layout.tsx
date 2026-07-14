@@ -105,7 +105,7 @@ export default function DashboardLayout({
       id: "reports",
       label: "Reports",
       icon: LineChart,
-      href: projectId ? `/projects/${projectId}?tab=reports` : null,
+      href: projectId ? `/reports?projectId=${projectId}` : "/reports",
     },
     {
       id: "settings",
@@ -200,7 +200,13 @@ export default function DashboardLayout({
           {navigationItems.map((item) => {
             const Icon = item.icon;
             const disabled = !item.href;
-            const isActive = item.href && (item.id === "timesheets" ? pathname.startsWith("/timesheets") : pathname.startsWith(projectId ? `/projects/${projectId}` : "_") && pathname.includes(item.id));
+            const isActive = item.href && (
+              item.id === "timesheets"
+                ? pathname.startsWith("/timesheets")
+                : item.id === "reports"
+                ? pathname.startsWith("/reports")
+                : pathname.startsWith(projectId ? `/projects/${projectId}` : "_") && pathname.includes(item.id)
+            );
 
             const content = (
               <div

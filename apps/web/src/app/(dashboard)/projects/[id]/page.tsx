@@ -191,10 +191,6 @@ export default function ProjectDetailPage() {
             <Clock className="h-3.5 w-3.5" />
             Time Book
           </TabsTrigger>
-          <TabsTrigger value="reports" className="text-[12px] font-medium px-4 h-8 rounded-md flex items-center gap-1.5">
-            <LineChart className="h-3.5 w-3.5" />
-            Reports
-          </TabsTrigger>
           <TabsTrigger value="settings" className="text-[12px] font-medium px-4 h-8 rounded-md flex items-center gap-1.5">
             <Settings className="h-3.5 w-3.5" />
             Settings
@@ -208,16 +204,6 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="timebook" className="mt-0">
           <TimeBookSection projectId={projectId} />
-        </TabsContent>
-
-        <TabsContent value="reports" className="mt-0">
-          <div className="flex flex-col items-center justify-center border border-dashed border-border rounded-lg py-20 text-center bg-card/30">
-            <LineChart className="h-8 w-8 text-muted-foreground/50 mb-2.5" />
-            <p className="text-[13px] font-semibold text-foreground">Laporan Jam Kerja</p>
-            <p className="text-[11px] text-muted-foreground mt-1 max-w-[280px]">
-              Slice pelaporan unduhan PDF/CSV akan ditampilkan di sini.
-            </p>
-          </div>
         </TabsContent>
 
         <TabsContent value="settings" className="mt-0">
