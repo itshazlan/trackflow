@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, BASE_URL } from '../lib/api';
 import { invoke } from '@tauri-apps/api/core';
 import { LogOut, Play, Shield, User, Wifi } from 'lucide-react';
@@ -10,6 +10,112 @@ interface DashboardProps {
 
 export function Dashboard({ user, onLogout }: DashboardProps) {
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Slicing: Project & Task Selection states
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [issues, setIssues] = useState<any[]>([]);
+  const [selectedIssueId, setSelectedIssueId] = useState<string>('');
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingIssues, setLoadingIssues] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initialize and restore active state on mount
+  useEffect(() => {
+    async function initDashboard() {
+      setLoadingProjects(true);
+      setError(null);
+
+      // 1. Fetch projects from backend
+      const res = await api.get<any[]>('/projects');
+      if (res.error) {
+        setError('Failed to load projects: ' + res.error);
+        setLoadingProjects(false);
+        return;
+      }
+
+      const projectList = res.data || [];
+      setProjects(projectList);
+
+      // 2. Check if there's an active tracking task stored in Rust core
+      try {
+        const [activeProjId, activeIssueId] = await invoke<[string | null, string | null]>('get_active_task');
+        
+        if (activeProjId && projectList.some((p) => p.id === activeProjId)) {
+          setSelectedProjectId(activeProjId);
+
+          // Fetch issues for this project
+          setLoadingIssues(true);
+          const issuesRes = await api.get<any[]>(`/projects/${activeProjId}/issues`);
+          
+          if (!issuesRes.error && issuesRes.data) {
+            // Filter issues assigned to this user
+            const assignedIssues = issuesRes.data.filter(
+              (issue: any) => issue.assignee?.id === user.id
+            );
+            setIssues(assignedIssues);
+
+            if (activeIssueId && assignedIssues.some((i) => i.id === activeIssueId)) {
+              setSelectedIssueId(activeIssueId);
+            }
+          }
+          setLoadingIssues(false);
+        }
+      } catch (err) {
+        console.error('[Dashboard Init] Failed to restore active task:', err);
+      } finally {
+        setLoadingProjects(false);
+      }
+    }
+
+    void initDashboard();
+  }, [user.id]);
+
+  const handleProjectChange = async (projectId: string) => {
+    setSelectedProjectId(projectId);
+    setSelectedIssueId('');
+    setIssues([]);
+    setError(null);
+
+    // Sync state to Rust (clear active task since project changed)
+    try {
+      await invoke('set_active_task', {
+        projectId: projectId || null,
+        issueId: null,
+      });
+    } catch (err) {
+      console.error('[Dashboard] Failed to sync active task to Rust:', err);
+    }
+
+    if (!projectId) return;
+
+    setLoadingIssues(true);
+    const res = await api.get<any[]>(`/projects/${projectId}/issues`);
+    if (res.error) {
+      setError('Failed to load tasks: ' + res.error);
+    } else if (res.data) {
+      const assignedIssues = res.data.filter(
+        (issue: any) => issue.assignee?.id === user.id
+      );
+      setIssues(assignedIssues);
+    }
+    setLoadingIssues(false);
+  };
+
+  const handleIssueChange = async (issueId: string) => {
+    setSelectedIssueId(issueId);
+    setError(null);
+
+    // Sync state to Rust
+    try {
+      await invoke('set_active_task', {
+        projectId: selectedProjectId || null,
+        issueId: issueId || null,
+      });
+    } catch (err) {
+      console.error('[Dashboard] Failed to sync active task to Rust:', err);
+    }
+  };
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -23,6 +129,8 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     try {
       // Delete token from OS Keychain
       await invoke('delete_token');
+      // Also clear active task in Rust core
+      await invoke('set_active_task', { projectId: null, issueId: null });
     } catch (err) {
       console.error('[Dashboard] Failed to delete token from keychain:', err);
     }
@@ -105,20 +213,89 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         </div>
 
-        {/* Tasks Scaffolding Card */}
-        <div className="rounded-lg border border-border border-dashed bg-card/50 p-6 flex flex-col items-center justify-center text-center space-y-3">
-          <div className="rounded-full bg-secondary p-3 border border-border">
-            <Play className="h-5 w-5 text-muted-foreground" />
+        {/* Project & Task Selector Card */}
+        <div className="rounded-lg border border-border bg-card p-4 space-y-4 shadow-sm">
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Task Selection
+          </h3>
+
+          {error && (
+            <div className="rounded border border-destructive/50 bg-destructive/10 p-2.5 text-[11px] text-destructive-foreground">
+              {error}
+            </div>
+          )}
+
+          {/* Project Selection */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Project
+            </label>
+            {loadingProjects ? (
+              <div className="h-8 w-full rounded border border-border bg-secondary animate-pulse" />
+            ) : (
+              <select
+                value={selectedProjectId}
+                onChange={(e) => handleProjectChange(e.target.value)}
+                className="w-full rounded border border-input bg-background py-1.5 px-2.5 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none"
+              >
+                <option value="">Select a project...</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
-          <div className="space-y-1">
-            <h3 className="text-xs font-medium text-foreground">
-              Ready to Track Time
-            </h3>
-            <p className="text-[10px] text-muted-foreground max-w-[240px]">
-              Foundation is ready. Next slice will load your assigned projects
-              and active tasks to start the timer.
-            </p>
+
+          {/* Task/Issue Selection */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Assigned Task
+            </label>
+            {loadingIssues ? (
+              <div className="h-8 w-full rounded border border-border bg-secondary animate-pulse" />
+            ) : (
+              <select
+                value={selectedIssueId}
+                onChange={(e) => handleIssueChange(e.target.value)}
+                disabled={!selectedProjectId || issues.length === 0}
+                className="w-full rounded border border-input bg-background py-1.5 px-2.5 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none disabled:opacity-50"
+              >
+                {!selectedProjectId ? (
+                  <option value="">Select a project first...</option>
+                ) : issues.length === 0 ? (
+                  <option value="">No tasks assigned to you</option>
+                ) : (
+                  <>
+                    <option value="">Select a task...</option>
+                    {issues.map((issue) => (
+                      <option key={issue.id} value={issue.id}>
+                        {issue.displayId ? `[${issue.displayId}] ` : ''}{issue.title}
+                      </option>
+                    ))}
+                  </>
+                )}
+              </select>
+            )}
           </div>
+
+          {/* Active Tracker Feedback */}
+          {selectedIssueId && (
+            <div className="flex items-center space-x-3 pt-3 border-t border-border">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Play className="h-3.5 w-3.5 text-emerald-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-foreground truncate">
+                  Active Task Configured
+                </p>
+                <p className="text-[9px] text-muted-foreground truncate">
+                  Rust Core tracking state synchronized successfully.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 

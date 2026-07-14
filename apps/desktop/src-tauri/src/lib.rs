@@ -1,4 +1,11 @@
 use keyring::{Entry, Error};
+use std::sync::Mutex;
+
+#[derive(Default)]
+pub struct ActiveTrackingState {
+    pub project_id: Mutex<Option<String>>,
+    pub issue_id: Mutex<Option<String>>,
+}
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -66,16 +73,42 @@ fn delete_token() -> Result<(), String> {
         }
     }
 }
+#[tauri::command]
+fn set_active_task(
+    project_id: Option<String>,
+    issue_id: Option<String>,
+    state: tauri::State<'_, ActiveTrackingState>,
+) -> Result<(), String> {
+    *state.project_id.lock().unwrap() = project_id.clone();
+    *state.issue_id.lock().unwrap() = issue_id.clone();
+    println!(
+        "[Tauri Rust] set_active_task called. Project: {:?}, Issue: {:?}",
+        project_id, issue_id
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn get_active_task(
+    state: tauri::State<'_, ActiveTrackingState>,
+) -> Result<(Option<String>, Option<String>), String> {
+    let project_id = state.project_id.lock().unwrap().clone();
+    let issue_id = state.issue_id.lock().unwrap().clone();
+    Ok((project_id, issue_id))
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ActiveTrackingState::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             save_token,
             get_token,
-            delete_token
+            delete_token,
+            set_active_task,
+            get_active_task
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
