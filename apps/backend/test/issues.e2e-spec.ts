@@ -28,6 +28,7 @@ import {
   issueStatuses,
   issueTemplates,
   issueTrackers,
+  issueAttachments,
 } from './../src/db/schema/issues';
 import { user } from './../src/db/schema/auth';
 import { AuthGuard } from './../src/common/guards/auth.guard';
@@ -288,6 +289,100 @@ describe('Issues and Workflow Statuses (e2e)', () => {
         .expect(200);
 
       expect(res.body.statusId).toBe(doneStatus.id);
+    });
+  });
+
+  describe('Issue Attachments', () => {
+    let attachmentId: string;
+
+    it('should fail to create attachment if issue does not exist (404)', async () => {
+      const nonExistentIssueId = '00000000-0000-0000-0000-000000000000';
+      await request(app.getHttpServer())
+        .post(`/issues/${nonExistentIssueId}/attachments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .send({
+          fileName: 'screenshot.png',
+          contentType: 'image/png',
+        })
+        .expect(404);
+    });
+
+    it('should fail to create attachment if user is not a project member (403)', async () => {
+      const outsiderId = 'mock-outsider';
+      await db.insert(user).values({
+        id: outsiderId,
+        name: 'Outsider',
+        email: 'outsider@tf.local',
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        username: 'outsider',
+        isAdmin: false,
+      });
+
+      try {
+        await request(app.getHttpServer())
+          .post(`/issues/${issueId}/attachments`)
+          .set('x-mock-user-id', outsiderId)
+          .send({
+            fileName: 'screenshot.png',
+            contentType: 'image/png',
+          })
+          .expect(403);
+      } finally {
+        await db.delete(user).where(eq(user.id, outsiderId));
+      }
+    });
+
+    it('should successfully create attachment and generate presigned URL', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/issues/${issueId}/attachments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .send({
+          fileName: 'log.txt',
+          contentType: 'text/plain',
+        })
+        .expect(201);
+
+      expect(res.body.uploadUrl).toBeDefined();
+      expect(res.body.r2ObjectKey).toBeDefined();
+      expect(res.body.attachment).toBeDefined();
+      expect(res.body.attachment.fileName).toBe('log.txt');
+      expect(res.body.attachment.uploadedBy).toBe(mockUsers.developer.id);
+
+      attachmentId = res.body.attachment.id;
+    });
+
+    it('should list attachments for the issue', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/issues/${issueId}/attachments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].id).toBe(attachmentId);
+      expect(res.body[0].fileName).toBe('log.txt');
+    });
+
+    it('should fail to delete attachment if user is not the uploader or admin (403)', async () => {
+      await request(app.getHttpServer())
+        .delete(`/issues/${issueId}/attachments/${attachmentId}`)
+        .set('x-mock-user-id', mockUsers.reporter.id)
+        .expect(403);
+    });
+
+    it('should successfully delete attachment if user is the uploader (200)', async () => {
+      await request(app.getHttpServer())
+        .delete(`/issues/${issueId}/attachments/${attachmentId}`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get(`/issues/${issueId}/attachments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .expect(200);
+
+      expect(res.body).toHaveLength(0);
     });
   });
 });

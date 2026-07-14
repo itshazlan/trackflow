@@ -82,3 +82,18 @@ export const issues = pgTable('issues', {
 }, (table) => [
   unique('unique_project_issue_number').on(table.projectId, table.number),
 ]);
+
+export const issueAttachments = pgTable('issue_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  issueId: uuid('issue_id')
+    .notNull()
+    .references(() => issues.id, { onDelete: 'cascade' }),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  r2ObjectKey: varchar('r2_object_key', { length: 512 }).notNull(),
+  uploadedBy: text('uploaded_by')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

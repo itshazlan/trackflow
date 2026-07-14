@@ -7,22 +7,27 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { eq, and, or, asc, sql } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import {
   issues,
   issueStatuses,
   issueTrackers,
+  issueAttachments,
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
 import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
+import { CreateAttachmentDto } from './dto/attachment.dto';
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
+import { R2Service } from '../time-tracking/r2.service';
 
 @Injectable()
 export class IssuesService {
   constructor(
     @Inject(DRIZZLE) private db: any,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly r2Service: R2Service,
   ) {}
 
   async create(
@@ -373,5 +378,154 @@ export class IssuesService {
     }
 
     return { message: 'Issue deleted successfully', deleted };
+  }
+
+  async createAttachment(
+    issueId: string,
+    payload: CreateAttachmentDto,
+    userId: string,
+  ) {
+    const [issue] = await this.db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!issue) {
+      throw new NotFoundException(`Issue with ID ${issueId} not found`);
+    }
+
+    // Check project membership (implicitly skip for global admins)
+    const [currentUser] = await this.db
+      .select()
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!currentUser?.isAdmin) {
+      const [membership] = await this.db
+        .select()
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.projectId, issue.projectId),
+            eq(projectMemberships.userId, userId),
+          ),
+        )
+        .limit(1);
+
+      if (!membership) {
+        throw new ForbiddenException('Not a member of this project');
+      }
+    }
+
+    const attachmentId = randomUUID();
+    const objectKey = `project/${issue.projectId}/issues/${issueId}/attachments/${attachmentId}-${payload.fileName}`;
+
+    // Get presigned upload URL
+    const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+      objectKey,
+      payload.contentType,
+    );
+
+    // Save attachment in database
+    const [attachment] = await this.db
+      .insert(issueAttachments)
+      .values({
+        id: attachmentId,
+        issueId,
+        fileName: payload.fileName,
+        r2ObjectKey: objectKey,
+        uploadedBy: userId,
+      })
+      .returning();
+
+    return {
+      uploadUrl,
+      r2ObjectKey: objectKey,
+      attachment,
+    };
+  }
+
+  async findAttachmentsForIssue(issueId: string, userId: string) {
+    const [issue] = await this.db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!issue) {
+      throw new NotFoundException(`Issue with ID ${issueId} not found`);
+    }
+
+    // Check project membership (implicitly skip for global admins)
+    const [currentUser] = await this.db
+      .select()
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!currentUser?.isAdmin) {
+      const [membership] = await this.db
+        .select()
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.projectId, issue.projectId),
+            eq(projectMemberships.userId, userId),
+          ),
+        )
+        .limit(1);
+
+      if (!membership) {
+        throw new ForbiddenException('Not a member of this project');
+      }
+    }
+
+    return this.db
+      .select()
+      .from(issueAttachments)
+      .where(eq(issueAttachments.issueId, issueId))
+      .orderBy(asc(issueAttachments.uploadedAt));
+  }
+
+  async removeAttachment(
+    issueId: string,
+    attachmentId: string,
+    userId: string,
+    isAdmin: boolean,
+  ) {
+    const [attachment] = await this.db
+      .select()
+      .from(issueAttachments)
+      .where(
+        and(
+          eq(issueAttachments.id, attachmentId),
+          eq(issueAttachments.issueId, issueId),
+        ),
+      )
+      .limit(1);
+
+    if (!attachment) {
+      throw new NotFoundException(
+        `Attachment with ID ${attachmentId} not found on issue ${issueId}`,
+      );
+    }
+
+    if (attachment.uploadedBy !== userId && !isAdmin) {
+      throw new ForbiddenException(
+        'Only the uploader or an Admin can delete this attachment',
+      );
+    }
+
+    // Delete from R2
+    await this.r2Service.deleteObject(attachment.r2ObjectKey);
+
+    // Delete from database
+    await this.db
+      .delete(issueAttachments)
+      .where(eq(issueAttachments.id, attachmentId));
+
+    return { success: true };
   }
 }

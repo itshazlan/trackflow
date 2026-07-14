@@ -10,11 +10,15 @@ import {
   getProjectMembers,
   getProjectTemplates,
   updateIssueStatus,
+  getIssueAttachments,
+  createIssueAttachment,
+  deleteIssueAttachment,
   Issue,
   IssueStatus,
   Tracker,
   ProjectMember,
   IssueTemplate,
+  IssueAttachment,
 } from "@/lib/issues-service";
 import { getSession, UserSession } from "@/lib/auth-service";
 import { Button } from "@/components/ui/button";
@@ -47,6 +51,8 @@ import {
   AlertCircle,
   Trash2,
   Calendar,
+  Paperclip,
+  X,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
@@ -77,12 +83,16 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
 
+  // Create Issue Attachments state
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   // Detail Issue Dialog state
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
+  const [attachments, setAttachments] = useState<IssueAttachment[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState("all");
@@ -133,6 +143,36 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     };
   }, [fetchData]);
 
+  useEffect(() => {
+    if (selectedIssue && isDetailOpen) {
+      setAttachmentsLoading(true);
+      getIssueAttachments(selectedIssue.id)
+        .then((data) => setAttachments(data))
+        .catch((err) => console.error("Gagal mengambil lampiran:", err))
+        .finally(() => setAttachmentsLoading(false));
+    } else {
+      setAttachments([]);
+    }
+  }, [selectedIssue, isDetailOpen]);
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!selectedIssue) return;
+    const ok = await confirm({
+      title: "Hapus Lampiran",
+      description: "Apakah Anda yakin ingin menghapus lampiran ini? Tindakan ini tidak dapat dibatalkan.",
+      confirmLabel: "Ya, Hapus",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
+    try {
+      await deleteIssueAttachment(selectedIssue.id, attachmentId);
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    } catch (err: unknown) {
+      setDetailError(err instanceof Error ? err.message : "Gagal menghapus lampiran.");
+    }
+  };
+
   // Find matching template
   const bugTemplate = templates.find((t) => t.trackerId === selectedTrackerId);
 
@@ -150,6 +190,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       setTitle("");
       setDescription("");
     }
+    setSelectedFiles([]);
     setCreateError("");
     setIsCreateOpen(true);
   };
@@ -165,7 +206,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       if (!title.trim()) {
         throw new Error("Judul tiket wajib diisi.");
       }
-      await createIssue(projectId, {
+      const newIssue = await createIssue(projectId, {
         trackerId: selectedTrackerId,
         title,
         description,
@@ -175,6 +216,27 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
         dueDate: dueDate || null,
       });
 
+      // Upload selected files sequentially
+      for (const file of selectedFiles) {
+        const { uploadUrl } = await createIssueAttachment(
+          newIssue.id,
+          file.name,
+          file.type || "application/octet-stream"
+        );
+
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+          },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error(`Gagal mengunggah lampiran: ${file.name}`);
+        }
+      }
+
       setIsCreateOpen(false);
       // Reset states
       setTitle("");
@@ -182,6 +244,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       setPriority("medium");
       setAssigneeId("");
       setDueDate("");
+      setSelectedFiles([]);
       await fetchData();
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : "Gagal membuat issue.");
@@ -513,6 +576,70 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                 />
               </div>
 
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" />
+                  Lampiran (Attachments)
+                </Label>
+                <div className="flex flex-col gap-2 rounded-md border border-input p-2 bg-card/30">
+                  <input
+                    type="file"
+                    multiple
+                    id="issue-files-input"
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        const filesArr = Array.from(e.target.files);
+                        setSelectedFiles((prev) => [...prev, ...filesArr]);
+                      }
+                    }}
+                    className="hidden"
+                    disabled={createLoading}
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground">
+                      {selectedFiles.length === 0
+                        ? "Pilih file untuk dilampirkan..."
+                        : `${selectedFiles.length} file dipilih`}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10.5px] font-medium px-2"
+                      onClick={() => document.getElementById("issue-files-input")?.click()}
+                      disabled={createLoading}
+                    >
+                      Pilih File
+                    </Button>
+                  </div>
+                  {selectedFiles.length > 0 && (
+                    <div className="flex flex-col gap-1 mt-1 border-t border-border/50 pt-1.5 max-h-[100px] overflow-y-auto pr-1">
+                      {selectedFiles.map((file, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded text-[11.5px] text-foreground group"
+                        >
+                          <span className="truncate max-w-[280px] font-medium">{file.name}</span>
+                          <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-2">
+                            {(file.size / 1024).toFixed(1)} KB
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
+                              onClick={() =>
+                                setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              disabled={createLoading}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="h-px bg-border my-1" />
 
               <div className="grid grid-cols-2 gap-3">
@@ -696,6 +823,53 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                         : "Tidak ditentukan"}
                     </div>
                   </div>
+                </div>
+
+                {/* Attachments Section */}
+                <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3 mt-1">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Paperclip className="h-3 w-3" />
+                    Lampiran ({attachments.length})
+                  </span>
+                  {attachmentsLoading ? (
+                    <div className="flex items-center gap-1.5 py-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Memuat lampiran...
+                    </div>
+                  ) : attachments.length === 0 ? (
+                    <span className="text-xs text-muted-foreground italic py-1">
+                      Tidak ada lampiran untuk tiket ini.
+                    </span>
+                  ) : (
+                    <div className="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto pr-1 mt-1">
+                      {attachments.map((att) => (
+                        <div
+                          key={att.id}
+                          className="flex items-center justify-between border border-border/80 bg-muted/20 hover:bg-muted/40 px-2.5 py-1 rounded-md text-[12px] group"
+                        >
+                          <a
+                            href={`/uploads/${att.r2ObjectKey}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={att.fileName}
+                            className="font-medium text-foreground hover:underline truncate max-w-[320px] flex items-center gap-1.5"
+                          >
+                            <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                            {att.fileName}
+                          </a>
+                          {(att.uploadedBy === session?.user?.id || session?.user?.isAdmin) && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAttachment(att.id)}
+                              className="text-muted-foreground hover:text-destructive shrink-0 ml-2"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

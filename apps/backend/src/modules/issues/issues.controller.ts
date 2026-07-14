@@ -15,6 +15,7 @@ import {
   UpdateIssueDto,
   UpdateIssueStatusDto,
 } from './dto/issue.dto';
+import { CreateAttachmentDto } from './dto/attachment.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { ProjectRoleGuard } from '../../common/guards/project-role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -40,6 +41,38 @@ export class UserIssuesController {
       id,
       updateIssueStatusDto.statusId,
       req.user.id,
+    );
+  }
+
+  @Post(':id/attachments')
+  createAttachment(
+    @Param('id') id: string,
+    @Body() createAttachmentDto: CreateAttachmentDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.createAttachment(
+      id,
+      createAttachmentDto,
+      req.user.id,
+    );
+  }
+
+  @Get(':id/attachments')
+  findAttachments(@Param('id') id: string, @Req() req: any) {
+    return this.issuesService.findAttachmentsForIssue(id, req.user.id);
+  }
+
+  @Delete(':id/attachments/:attachmentId')
+  removeAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+    @Req() req: any,
+  ) {
+    return this.issuesService.removeAttachment(
+      id,
+      attachmentId,
+      req.user.id,
+      req.user.isAdmin,
     );
   }
 }

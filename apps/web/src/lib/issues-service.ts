@@ -71,6 +71,15 @@ export interface IssueTemplate {
   };
 }
 
+export interface IssueAttachment {
+  id: string;
+  issueId: string;
+  fileName: string;
+  r2ObjectKey: string;
+  uploadedBy: string;
+  uploadedAt: string;
+}
+
 export async function getIssues(projectId: string): Promise<Issue[]> {
   const res = await fetch(`/api/projects/${projectId}/issues`, {
     method: "GET",
@@ -427,5 +436,56 @@ export async function deleteProjectTemplate(projectId: string, templateId: strin
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.message || "Failed to delete template");
+  }
+}
+
+export async function getIssueAttachments(issueId: string): Promise<IssueAttachment[]> {
+  const res = await fetch(`/api/issues/${issueId}/attachments`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to fetch attachments");
+  }
+
+  return res.json();
+}
+
+export async function createIssueAttachment(
+  issueId: string,
+  fileName: string,
+  contentType: string
+): Promise<{ uploadUrl: string; r2ObjectKey: string; attachment: IssueAttachment }> {
+  const res = await fetch(`/api/issues/${issueId}/attachments`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ fileName, contentType }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to initiate attachment upload");
+  }
+
+  return res.json();
+}
+
+export async function deleteIssueAttachment(issueId: string, attachmentId: string): Promise<void> {
+  const res = await fetch(`/api/issues/${issueId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to delete attachment");
   }
 }

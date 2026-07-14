@@ -78,6 +78,13 @@
       "when": 1784026150231,
       "tag": "0010_uneven_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784027208137,
+      "tag": "0011_cheerful_arachne",
+      "breakpoints": true
     }
   ]
 }
