@@ -23,7 +23,7 @@ export default function App() {
 
         // 2. Verify token validity by fetching session from backend
         console.log('[App Auth] Found token in keychain, verifying session with backend...');
-        const response = await api.get<{ session: any; user: any }>('/api/auth/session');
+        const response = await api.get<{ session: any; user: any }>('/api/auth/get-session');
         console.log('[App Auth] Session response:', {
           status: response.status,
           hasData: !!response.data,
