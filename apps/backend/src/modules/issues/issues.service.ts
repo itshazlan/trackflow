@@ -14,11 +14,13 @@ import {
   issueStatuses,
   issueTrackers,
   issueAttachments,
+  issueComments,
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
 import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
 import { CreateAttachmentDto } from './dto/attachment.dto';
+import { CreateCommentDto, UpdateCommentDto } from './dto/comment.dto';
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
 import { R2Service } from '../time-tracking/r2.service';
 
@@ -539,6 +541,234 @@ export class IssuesService {
     await this.db
       .delete(issueAttachments)
       .where(eq(issueAttachments.id, attachmentId));
+
+    return { success: true };
+  }
+
+  async findCommentsForIssue(issueId: string, userId: string) {
+    const [issue] = await this.db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!issue) {
+      throw new NotFoundException(`Issue with ID ${issueId} not found`);
+    }
+
+    const [currentUser] = await this.db
+      .select()
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!currentUser?.isAdmin) {
+      const [membership] = await this.db
+        .select()
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.projectId, issue.projectId),
+            eq(projectMemberships.userId, userId),
+          ),
+        )
+        .limit(1);
+
+      if (!membership) {
+        throw new ForbiddenException('Not a member of this project');
+      }
+    }
+
+    return this.db
+      .select({
+        id: issueComments.id,
+        issueId: issueComments.issueId,
+        body: issueComments.body,
+        createdAt: issueComments.createdAt,
+        updatedAt: issueComments.updatedAt,
+        author: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        },
+      })
+      .from(issueComments)
+      .innerJoin(user, eq(issueComments.authorId, user.id))
+      .where(eq(issueComments.issueId, issueId))
+      .orderBy(asc(issueComments.createdAt));
+  }
+
+  async createComment(
+    issueId: string,
+    createCommentDto: CreateCommentDto,
+    userId: string,
+  ) {
+    const [issue] = await this.db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!issue) {
+      throw new NotFoundException(`Issue with ID ${issueId} not found`);
+    }
+
+    const [currentUser] = await this.db
+      .select()
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!currentUser?.isAdmin) {
+      const [membership] = await this.db
+        .select()
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.projectId, issue.projectId),
+            eq(projectMemberships.userId, userId),
+          ),
+        )
+        .limit(1);
+
+      if (!membership) {
+        throw new ForbiddenException('Not a member of this project');
+      }
+    }
+
+    const [comment] = await this.db
+      .insert(issueComments)
+      .values({
+        issueId,
+        authorId: userId,
+        body: createCommentDto.body,
+      })
+      .returning();
+
+    const bodyPreview =
+      createCommentDto.body.length > 100
+        ? createCommentDto.body.substring(0, 100) + '...'
+        : createCommentDto.body;
+
+    this.realtimeGateway.emitCommentCreated(issue.projectId, {
+      issueId,
+      commentId: comment.id,
+      authorId: userId,
+      bodyPreview,
+    });
+
+    const [commentWithAuthor] = await this.db
+      .select({
+        id: issueComments.id,
+        issueId: issueComments.issueId,
+        body: issueComments.body,
+        createdAt: issueComments.createdAt,
+        updatedAt: issueComments.updatedAt,
+        author: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        },
+      })
+      .from(issueComments)
+      .innerJoin(user, eq(issueComments.authorId, user.id))
+      .where(eq(issueComments.id, comment.id))
+      .limit(1);
+
+    return commentWithAuthor;
+  }
+
+  async updateComment(
+    issueId: string,
+    commentId: string,
+    updateCommentDto: UpdateCommentDto,
+    userId: string,
+  ) {
+    const [comment] = await this.db
+      .select()
+      .from(issueComments)
+      .where(
+        and(
+          eq(issueComments.id, commentId),
+          eq(issueComments.issueId, issueId),
+        ),
+      )
+      .limit(1);
+
+    if (!comment) {
+      throw new NotFoundException(
+        `Comment with ID ${commentId} not found on issue ${issueId}`,
+      );
+    }
+
+    if (comment.authorId !== userId) {
+      throw new ForbiddenException(
+        'Hanya penulis yang dapat mengubah komentar ini',
+      );
+    }
+
+    await this.db
+      .update(issueComments)
+      .set({
+        body: updateCommentDto.body,
+        updatedAt: new Date(),
+      })
+      .where(eq(issueComments.id, commentId));
+
+    const [commentWithAuthor] = await this.db
+      .select({
+        id: issueComments.id,
+        issueId: issueComments.issueId,
+        body: issueComments.body,
+        createdAt: issueComments.createdAt,
+        updatedAt: issueComments.updatedAt,
+        author: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        },
+      })
+      .from(issueComments)
+      .innerJoin(user, eq(issueComments.authorId, user.id))
+      .where(eq(issueComments.id, commentId))
+      .limit(1);
+
+    return commentWithAuthor;
+  }
+
+  async removeComment(
+    issueId: string,
+    commentId: string,
+    userId: string,
+    isAdmin: boolean,
+  ) {
+    const [comment] = await this.db
+      .select()
+      .from(issueComments)
+      .where(
+        and(
+          eq(issueComments.id, commentId),
+          eq(issueComments.issueId, issueId),
+        ),
+      )
+      .limit(1);
+
+    if (!comment) {
+      throw new NotFoundException(
+        `Comment with ID ${commentId} not found on issue ${issueId}`,
+      );
+    }
+
+    if (comment.authorId !== userId && !isAdmin) {
+      throw new ForbiddenException(
+        'Hanya penulis atau Admin yang dapat menghapus komentar ini',
+      );
+    }
+
+    await this.db.delete(issueComments).where(eq(issueComments.id, commentId));
 
     return { success: true };
   }

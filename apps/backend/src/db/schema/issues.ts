@@ -97,3 +97,18 @@ export const issueAttachments = pgTable('issue_attachments', {
     .defaultNow()
     .notNull(),
 });
+
+export const issueComments = pgTable('issue_comments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  issueId: uuid('issue_id')
+    .notNull()
+    .references(() => issues.id, { onDelete: 'cascade' }),
+  authorId: text('author_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  body: text('body').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+});

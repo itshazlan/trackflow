@@ -19,6 +19,7 @@ import {
   UpdateIssueDto,
   UpdateIssueStatusDto,
 } from './dto/issue.dto';
+import { CreateCommentDto, UpdateCommentDto } from './dto/comment.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { ProjectRoleGuard } from '../../common/guards/project-role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -84,6 +85,53 @@ export class UserIssuesController {
     return this.issuesService.removeAttachment(
       id,
       attachmentId,
+      req.user.id,
+      req.user.isAdmin,
+    );
+  }
+
+  @Get(':id/comments')
+  findComments(@Param('id') id: string, @Req() req: any) {
+    return this.issuesService.findCommentsForIssue(id, req.user.id);
+  }
+
+  @Post(':id/comments')
+  createComment(
+    @Param('id') id: string,
+    @Body() createCommentDto: CreateCommentDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.createComment(
+      id,
+      createCommentDto,
+      req.user.id,
+    );
+  }
+
+  @Patch(':id/comments/:commentId')
+  updateComment(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Body() updateCommentDto: UpdateCommentDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.updateComment(
+      id,
+      commentId,
+      updateCommentDto,
+      req.user.id,
+    );
+  }
+
+  @Delete(':id/comments/:commentId')
+  removeComment(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Req() req: any,
+  ) {
+    return this.issuesService.removeComment(
+      id,
+      commentId,
       req.user.id,
       req.user.isAdmin,
     );

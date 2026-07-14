@@ -64,6 +64,22 @@ export class RealtimeGateway
     this.server.emit('issue.updated', issue);
   }
 
+  emitCommentCreated(
+    projectId: string,
+    payload: {
+      issueId: string;
+      commentId: string;
+      authorId: string;
+      bodyPreview: string;
+    },
+  ) {
+    this.server
+      .to(`project:${projectId}`)
+      .emit('issue.comment_created', payload);
+    // Also emit globally
+    this.server.emit('issue.comment_created', payload);
+  }
+
   emitTimeBlockSynced(userId: string, projectId: string, payload: any) {
     this.server.to(`project:${projectId}`).emit('timeblock.synced', payload);
     this.server.to(`user:${userId}`).emit('timeblock.synced', payload);

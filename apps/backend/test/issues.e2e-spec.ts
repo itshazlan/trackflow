@@ -431,4 +431,149 @@ describe('Issues and Workflow Statuses (e2e)', () => {
       expect(res.body.createdBy).toBe(mockUsers.developer.id);
     });
   });
+
+  describe('Issue Comments (Forum-Style)', () => {
+    let commentId: string;
+
+    it('should successfully add a comment as a Developer (project member)', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/issues/${issueId}/comments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .send({
+          body: 'This is a test comment by developer',
+        })
+        .expect(201);
+
+      expect(res.body.id).toBeDefined();
+      expect(res.body.body).toBe('This is a test comment by developer');
+      expect(res.body.author.id).toBe(mockUsers.developer.id);
+      expect(res.body.author.name).toBe(mockUsers.developer.name);
+      expect(res.body.updatedAt).toBeNull();
+      
+      commentId = res.body.id;
+    });
+
+    it('should list comments in chronological order for project members (Developer)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/issues/${issueId}/comments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].id).toBe(commentId);
+      expect(res.body[0].body).toBe('This is a test comment by developer');
+    });
+
+    it('should allow another project member (Reporter) to read comments', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/issues/${issueId}/comments`)
+        .set('x-mock-user-id', mockUsers.reporter.id)
+        .expect(200);
+
+      expect(res.body).toHaveLength(1);
+    });
+
+    it('should forbid non-project members from reading or writing comments (403)', async () => {
+      const outsiderId = 'mock-outsider-comments';
+      await db.insert(user).values({
+        id: outsiderId,
+        name: 'Comments Outsider',
+        email: 'outsidercomm@tf.local',
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        username: 'outsidercomm',
+        isAdmin: false,
+      });
+
+      try {
+        // Read attempt
+        await request(app.getHttpServer())
+          .get(`/issues/${issueId}/comments`)
+          .set('x-mock-user-id', outsiderId)
+          .expect(403);
+
+        // Write attempt
+        await request(app.getHttpServer())
+          .post(`/issues/${issueId}/comments`)
+          .set('x-mock-user-id', outsiderId)
+          .send({ body: 'Outsider comment attempt' })
+          .expect(403);
+      } finally {
+        await db.delete(user).where(eq(user.id, outsiderId));
+      }
+    });
+
+    it('should allow the author to edit their own comment (200)', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/issues/${issueId}/comments/${commentId}`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .send({
+          body: 'This is my edited comment',
+        })
+        .expect(200);
+
+      expect(res.body.body).toBe('This is my edited comment');
+      expect(res.body.updatedAt).not.toBeNull();
+    });
+
+    it('should forbid editing other users comments (403)', async () => {
+      await request(app.getHttpServer())
+        .patch(`/issues/${issueId}/comments/${commentId}`)
+        .set('x-mock-user-id', mockUsers.reporter.id)
+        .send({
+          body: 'Malicious edit attempt',
+        })
+        .expect(403);
+    });
+
+    it('should forbid deleting other users comments if not admin (403)', async () => {
+      await request(app.getHttpServer())
+        .delete(`/issues/${issueId}/comments/${commentId}`)
+        .set('x-mock-user-id', mockUsers.reporter.id)
+        .expect(403);
+    });
+
+    it('should allow the author to delete their own comment', async () => {
+      await request(app.getHttpServer())
+        .delete(`/issues/${issueId}/comments/${commentId}`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get(`/issues/${issueId}/comments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .expect(200);
+
+      expect(res.body).toHaveLength(0);
+    });
+
+    it('should allow Admin to delete any comment (moderation)', async () => {
+      // 1. Create a comment as Developer
+      const createRes = await request(app.getHttpServer())
+        .post(`/issues/${issueId}/comments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .send({
+          body: 'Spam comment to be deleted by Admin',
+        })
+        .expect(201);
+
+      const newCommentId = createRes.body.id;
+
+      // 2. Delete as Admin
+      await request(app.getHttpServer())
+        .delete(`/issues/${issueId}/comments/${newCommentId}`)
+        .set('x-mock-user-id', 'admin-moderator')
+        .set('x-mock-is-admin', 'true')
+        .expect(200);
+
+      // 3. Verify it is deleted
+      const listRes = await request(app.getHttpServer())
+        .get(`/issues/${issueId}/comments`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .expect(200);
+
+      expect(listRes.body).toHaveLength(0);
+    });
+  });
 });
