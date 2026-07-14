@@ -64,7 +64,13 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
           <div className="flex items-center space-x-3">
             {user.image ? (
               <img
-                src={user.image.startsWith('/') ? `${BASE_URL}${user.image}` : user.image}
+                src={
+                  user.image.startsWith('/api/uploads/')
+                    ? `${BASE_URL}${user.image.replace('/api/uploads/', '/uploads/')}`
+                    : user.image.startsWith('/')
+                    ? `${BASE_URL}${user.image}`
+                    : user.image
+                }
                 alt={user.name || 'User Avatar'}
                 className="h-9 w-9 rounded-full object-cover border border-border"
                 onError={(e) => {
