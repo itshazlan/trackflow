@@ -51,7 +51,10 @@ export class TemplatesController {
 }
 
 // 2. Project-level Templates Controller
-@Controller('projects/:projectId/templates')
+@Controller([
+  'projects/:projectId/templates',
+  'projects/:projectId/issue-templates',
+])
 @UseGuards(AuthGuard, ProjectRoleGuard)
 export class ProjectTemplatesController {
   constructor(private readonly templatesService: TemplatesService) {}

@@ -8,11 +8,7 @@ import {
   UseGuards,
   Req,
   Query,
-  UseInterceptors,
-  UploadedFile,
-  BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { TimeTrackingService } from './time-tracking.service';
 import { SyncTimeBlockDto } from './dto/sync-time-block.dto';
 import {
@@ -21,8 +17,6 @@ import {
 } from './dto/override-time-block.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
 
 @Controller('time-blocks')
 @UseGuards(AuthGuard)
@@ -35,29 +29,8 @@ export class TimeTrackingController {
   }
 
   @Post(':id/screenshot')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/screenshots',
-        filename: (req: any, file: any, cb: any) => {
-          const randomName = Array(32)
-            .fill(null)
-            .map(() => Math.round(Math.random() * 16).toString(16))
-            .join('');
-          cb(null, `${randomName}${extname(file.originalname)}`);
-        },
-      }),
-    }),
-  )
-  uploadScreenshot(@Param('id') id: string, @UploadedFile() file: any) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
-    return this.timeTrackingService.saveScreenshot(
-      id,
-      file.path,
-      new Date().toISOString(),
-    );
+  uploadScreenshot(@Param('id') id: string) {
+    return this.timeTrackingService.getScreenshotUploadUrl(id);
   }
 
   @Get()

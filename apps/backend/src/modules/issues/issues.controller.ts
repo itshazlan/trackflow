@@ -10,7 +10,11 @@ import {
   Req,
 } from '@nestjs/common';
 import { IssuesService } from './issues.service';
-import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
+import {
+  CreateIssueDto,
+  UpdateIssueDto,
+  UpdateIssueStatusDto,
+} from './dto/issue.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { ProjectRoleGuard } from '../../common/guards/project-role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -24,6 +28,19 @@ export class UserIssuesController {
   @Get()
   findAllForUser(@Req() req: any) {
     return this.issuesService.findAllForUser(req.user.id);
+  }
+
+  @Patch(':id/status')
+  updateStatus(
+    @Param('id') id: string,
+    @Body() updateIssueStatusDto: UpdateIssueStatusDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.updateStatus(
+      id,
+      updateIssueStatusDto.statusId,
+      req.user.id,
+    );
   }
 }
 

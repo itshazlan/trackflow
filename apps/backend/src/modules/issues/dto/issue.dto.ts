@@ -97,3 +97,9 @@ export class UpdateIssueDto {
   @IsOptional()
   estimatedHours?: number | null;
 }
+
+export class UpdateIssueStatusDto {
+  @IsUUID()
+  @IsNotEmpty()
+  statusId: string;
+}

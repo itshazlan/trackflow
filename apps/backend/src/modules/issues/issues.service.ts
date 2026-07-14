@@ -266,6 +266,74 @@ export class IssuesService {
     return updated;
   }
 
+  async updateStatus(issueId: string, statusId: string, userId: string) {
+    // 1. Get the issue to find its projectId
+    const [issue] = await this.db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!issue) {
+      throw new NotFoundException(`Issue with ID ${issueId} not found`);
+    }
+
+    const projectId = issue.projectId;
+
+    // 2. Verify that the user is a member of this project
+    const [membership] = await this.db
+      .select()
+      .from(projectMemberships)
+      .where(
+        and(
+          eq(projectMemberships.projectId, projectId),
+          eq(projectMemberships.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    if (!membership) {
+      throw new ForbiddenException('Not a member of this project');
+    }
+
+    // 3. Get the target status and verify it belongs to this project
+    const [targetStatus] = await this.db
+      .select()
+      .from(issueStatuses)
+      .where(
+        and(
+          eq(issueStatuses.id, statusId),
+          eq(issueStatuses.projectId, projectId),
+        ),
+      )
+      .limit(1);
+
+    if (!targetStatus) {
+      throw new BadRequestException(
+        'Target status does not exist in this project',
+      );
+    }
+
+    // 4. Check restrictedToRole constraint
+    if (
+      targetStatus.restrictedToRole &&
+      membership.role !== targetStatus.restrictedToRole
+    ) {
+      throw new ForbiddenException(
+        `Status "${targetStatus.name}" is restricted to role "${targetStatus.restrictedToRole}". Your project role: ${membership.role}`,
+      );
+    }
+
+    // 5. Perform Update
+    const [updated] = await this.db
+      .update(issues)
+      .set({ statusId })
+      .where(eq(issues.id, issueId))
+      .returning();
+
+    return updated;
+  }
+
   async remove(projectId: string, id: string) {
     const [deleted] = await this.db
       .delete(issues)

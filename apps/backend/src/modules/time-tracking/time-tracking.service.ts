@@ -18,10 +18,15 @@ import { appSettings } from '../../db/schema/settings';
 import { projectMemberships } from '../../db/schema/projects';
 import { SyncTimeBlockDto } from './dto/sync-time-block.dto';
 import { OverrideTimeBlockDto } from './dto/override-time-block.dto';
+import { R2Service } from './r2.service';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class TimeTrackingService {
-  constructor(@Inject(DRIZZLE) private db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private db: any,
+    private readonly r2Service: R2Service,
+  ) {}
 
   async sync(dto: SyncTimeBlockDto, userObj: { id: string; isAdmin: boolean }) {
     const userId = userObj.id;
@@ -103,11 +108,7 @@ export class TimeTrackingService {
     }
   }
 
-  async saveScreenshot(
-    timeBlockId: string,
-    filePath: string,
-    capturedAt: string,
-  ) {
+  async getScreenshotUploadUrl(timeBlockId: string) {
     const [timeBlock] = await this.db
       .select()
       .from(timeBlocks)
@@ -120,16 +121,31 @@ export class TimeTrackingService {
       );
     }
 
+    const projectId = timeBlock.projectId;
+    const randomHash = randomUUID();
+    const objectKey = `project/${projectId}/screenshots/${timeBlockId}_${randomHash}.webp`;
+
+    // Generate presigned upload URL
+    const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+      objectKey,
+      'image/webp',
+    );
+
+    // Create DB screenshot record
     const [screenshot] = await this.db
       .insert(screenshots)
       .values({
         timeBlockId,
-        r2ObjectKey: filePath,
-        capturedAt: new Date(capturedAt),
+        r2ObjectKey: objectKey,
+        capturedAt: new Date(),
       })
       .returning();
 
-    return screenshot;
+    return {
+      uploadUrl,
+      r2ObjectKey: objectKey,
+      screenshot,
+    };
   }
 
   async findAllForUser(
@@ -200,7 +216,21 @@ export class TimeTrackingService {
     }
 
     return this.db.transaction(async (tx: any) => {
-      // 1. Mark as deleted
+      // 1. Delete screenshots from R2 and PG
+      const projectScreenshots = await tx
+        .select()
+        .from(screenshots)
+        .where(eq(screenshots.timeBlockId, timeBlockId));
+
+      for (const s of projectScreenshots) {
+        await this.r2Service.deleteObject(s.r2ObjectKey);
+      }
+
+      await tx
+        .delete(screenshots)
+        .where(eq(screenshots.timeBlockId, timeBlockId));
+
+      // 2. Mark as deleted
       const [updated] = await tx
         .update(timeBlocks)
         .set({
@@ -209,11 +239,12 @@ export class TimeTrackingService {
           deletedBy: userId,
           deletionType: 'self',
           deletionReason: reason || null,
+          isPaid: false,
         })
         .where(eq(timeBlocks.id, timeBlockId))
         .returning();
 
-      // 2. Audit log
+      // 3. Audit log
       await tx.insert(timeBlockAuditLogs).values({
         timeBlockId,
         action: 'self_delete',
@@ -248,6 +279,21 @@ export class TimeTrackingService {
       let updated;
 
       if (action === 'delete') {
+        // 1. Delete screenshots from R2 and PG
+        const projectScreenshots = await tx
+          .select()
+          .from(screenshots)
+          .where(eq(screenshots.timeBlockId, timeBlockId));
+
+        for (const s of projectScreenshots) {
+          await this.r2Service.deleteObject(s.r2ObjectKey);
+        }
+
+        await tx
+          .delete(screenshots)
+          .where(eq(screenshots.timeBlockId, timeBlockId));
+
+        // 2. Perform Update
         [updated] = await tx
           .update(timeBlocks)
           .set({
@@ -256,6 +302,7 @@ export class TimeTrackingService {
             deletedBy: actorId,
             deletionType: 'admin_override',
             deletionReason: reason,
+            isPaid: false,
           })
           .where(eq(timeBlocks.id, timeBlockId))
           .returning();

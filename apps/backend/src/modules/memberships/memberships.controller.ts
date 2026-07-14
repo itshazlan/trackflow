@@ -40,6 +40,19 @@ export class MembershipsController {
     return this.membershipsService.getMembers(projectId);
   }
 
+  @Patch()
+  @Roles('manager')
+  updateRoleInBody(
+    @Param('projectId') projectId: string,
+    @Body() addMembershipDto: AddMembershipDto,
+  ) {
+    return this.membershipsService.updateRole(
+      projectId,
+      addMembershipDto.userId,
+      addMembershipDto.role,
+    );
+  }
+
   @Patch(':userId')
   @Roles('manager')
   updateRole(

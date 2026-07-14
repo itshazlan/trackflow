@@ -18,7 +18,10 @@ import { AuthGuard } from '../../common/guards/auth.guard';
 import { ProjectRoleGuard } from '../../common/guards/project-role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
-@Controller('projects/:projectId/statuses')
+@Controller([
+  'projects/:projectId/statuses',
+  'projects/:projectId/issue-statuses',
+])
 @UseGuards(AuthGuard, ProjectRoleGuard)
 export class StatusesController {
   constructor(private readonly statusesService: StatusesService) {}

@@ -36,10 +36,22 @@ export class ProjectsController {
     return this.projectsService.findOne(id);
   }
 
-  @Get(':id/subprojects')
+  @Get([':id/subprojects', ':id/sub-projects'])
   @UseGuards(ProjectRoleGuard)
   findSubProjects(@Param('id') id: string) {
     return this.projectsService.findSubProjects(id);
+  }
+
+  @Post([':id/subprojects', ':id/sub-projects'])
+  @UseGuards(ProjectRoleGuard)
+  @Roles('manager')
+  createSubProject(
+    @Param('id') id: string,
+    @Body() createProjectDto: CreateProjectDto,
+    @Req() req: any,
+  ) {
+    const dtoWithParent = { ...createProjectDto, parentProjectId: id };
+    return this.projectsService.create(dtoWithParent, req.user.id);
   }
 
   @Patch(':id')

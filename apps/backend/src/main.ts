@@ -31,7 +31,10 @@ async function bootstrap() {
   app.use(express.urlencoded({ extended: true }));
 
   // Serve uploads folder static assets
-  expressInstance.use('/uploads', express.static(join(process.cwd(), 'uploads')));
+  expressInstance.use(
+    '/uploads',
+    express.static(join(process.cwd(), 'uploads')),
+  );
 
   // Register global validation pipe for request DTO validation
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));

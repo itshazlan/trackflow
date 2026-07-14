@@ -1,3 +1,15 @@
+jest.mock('better-auth', () => ({
+  betterAuth: jest.fn().mockReturnValue({
+    api: {
+      getSession: jest.fn(),
+    },
+  }),
+}));
+
+jest.mock('better-auth/adapters/drizzle', () => ({
+  drizzleAdapter: jest.fn(),
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
