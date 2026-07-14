@@ -17,10 +17,14 @@ import {
 import { projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
 import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
+import { RealtimeGateway } from '../../gateways/realtime.gateway';
 
 @Injectable()
 export class IssuesService {
-  constructor(@Inject(DRIZZLE) private db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private db: any,
+    private readonly realtimeGateway: RealtimeGateway,
+  ) {}
 
   async create(
     projectId: string,
@@ -263,6 +267,10 @@ export class IssuesService {
       .where(and(eq(issues.id, id), eq(issues.projectId, projectId)))
       .returning();
 
+    if (updated) {
+      this.realtimeGateway.emitIssueUpdated(projectId, updated);
+    }
+
     return updated;
   }
 
@@ -330,6 +338,10 @@ export class IssuesService {
       .set({ statusId })
       .where(eq(issues.id, issueId))
       .returning();
+
+    if (updated) {
+      this.realtimeGateway.emitIssueUpdated(projectId, updated);
+    }
 
     return updated;
   }

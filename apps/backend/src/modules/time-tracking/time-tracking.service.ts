@@ -20,12 +20,14 @@ import { SyncTimeBlockDto } from './dto/sync-time-block.dto';
 import { OverrideTimeBlockDto } from './dto/override-time-block.dto';
 import { R2Service } from './r2.service';
 import { randomUUID } from 'crypto';
+import { RealtimeGateway } from '../../gateways/realtime.gateway';
 
 @Injectable()
 export class TimeTrackingService {
   constructor(
     @Inject(DRIZZLE) private db: any,
     private readonly r2Service: R2Service,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async sync(dto: SyncTimeBlockDto, userObj: { id: string; isAdmin: boolean }) {
@@ -100,7 +102,9 @@ export class TimeTrackingService {
           })
           .returning();
 
-        return { timeBlock, activityLog };
+        const result = { timeBlock, activityLog };
+        this.realtimeGateway.emitTimeBlockSynced(userId, dto.projectId, result);
+        return result;
       });
     } catch (err) {
       console.error('[TimeTrackingService.sync Error]:', err);
@@ -328,6 +332,15 @@ export class TimeTrackingService {
           actorId,
           targetUserId: existing.userId,
           reason,
+        });
+      }
+
+      if (updated) {
+        this.realtimeGateway.emitTimeBlockOverridden(timeBlockId, {
+          action,
+          actorId,
+          reason,
+          projectId: existing.projectId,
         });
       }
 

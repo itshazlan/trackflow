@@ -11,6 +11,7 @@ import { TimesheetsModule } from './modules/timesheets/timesheets.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { UsersModule } from './modules/users/users.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { UsersModule } from './modules/users/users.module';
     ReportsModule,
     AdminModule,
     UsersModule,
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
