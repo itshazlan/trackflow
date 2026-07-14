@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { io } from "socket.io-client";
 import {
   getIssues,
   createIssue,
@@ -15,12 +17,17 @@ import {
   getIssueAttachments,
   createIssueAttachment,
   deleteIssueAttachment,
+  getIssueComments,
+  createIssueComment,
+  updateIssueComment,
+  deleteIssueComment,
   Issue,
   IssueStatus,
   Tracker,
   ProjectMember,
   IssueTemplate,
   IssueAttachment,
+  IssueComment,
 } from "@/lib/issues-service";
 import { getSession, UserSession } from "@/lib/auth-service";
 import { Button } from "@/components/ui/button";
@@ -46,6 +53,12 @@ import {
   AvatarFallback,
 } from "@/components/ui/avatar";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Loader2,
   Plus,
   Search,
@@ -62,6 +75,9 @@ import {
   FileCode,
   Archive,
   File,
+  MessageSquare,
+  Send,
+  Edit2,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
@@ -113,6 +129,7 @@ interface IssuesSectionProps {
 }
 
 export default function IssuesSection({ projectId }: IssuesSectionProps) {
+  const router = useRouter();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [session, setSession] = useState<UserSession | null>(null);
@@ -162,6 +179,14 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const [detailError, setDetailError] = useState("");
   const [attachments, setAttachments] = useState<IssueAttachment[]>([]);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+
+  // Comments state
+  const [comments, setComments] = useState<IssueComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState("");
+  const [newCommentText, setNewCommentText] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState("all");
@@ -219,10 +244,62 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
         .then((data) => setAttachments(data))
         .catch((err) => console.error("Gagal mengambil lampiran:", err))
         .finally(() => setAttachmentsLoading(false));
+
+      setCommentsLoading(true);
+      setCommentsError("");
+      getIssueComments(selectedIssue.id)
+        .then((data) => setComments(data))
+        .catch((err) => {
+          console.error("Gagal mengambil komentar:", err);
+          setCommentsError("Gagal memuat komentar.");
+        })
+        .finally(() => setCommentsLoading(false));
     } else {
       setAttachments([]);
+      setComments([]);
+      setNewCommentText("");
+      setEditingCommentId(null);
+      setEditingCommentText("");
     }
   }, [selectedIssue, isDetailOpen]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const socketUrl =
+      typeof window !== "undefined" && window.location.hostname === "localhost"
+        ? "http://localhost:3000"
+        : "";
+
+    const socket = io(socketUrl, {
+      query: { userId: session.user.id },
+      transports: ["websocket"],
+    });
+
+    socket.on("connect", () => {
+      console.log("[Socket.io] Connected to realtime gateway");
+      socket.emit("joinProject", projectId);
+    });
+
+    socket.on("issue.comment_created", (payload: { issueId: string; commentId: string; authorId: string }) => {
+      console.log("[Socket.io] Comment created:", payload);
+      // Invalidate react-query cache for issues
+      queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+
+      // If the currently viewed issue is the one that got a new comment, refresh its comments list
+      if (selectedIssue && selectedIssue.id === payload.issueId) {
+        getIssueComments(selectedIssue.id)
+          .then((data) => setComments(data))
+          .catch((err) => console.error("Gagal memperbarui komentar via socket:", err));
+      }
+    });
+
+    return () => {
+      socket.emit("leaveProject", projectId);
+      socket.disconnect();
+    };
+  }, [projectId, session?.user?.id, selectedIssue, queryClient]);
 
   const handleDeleteAttachment = async (attachmentId: string) => {
     if (!selectedIssue) return;
@@ -239,6 +316,67 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
     } catch (err: unknown) {
       setDetailError(err instanceof Error ? err.message : "Gagal menghapus lampiran.");
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIssue || !newCommentText.trim()) return;
+
+    setDetailLoading(true);
+    setCommentsError("");
+    try {
+      const comment = await createIssueComment(selectedIssue.id, newCommentText);
+      setComments((prev) => [...prev, comment]);
+      setNewCommentText("");
+    } catch (err: unknown) {
+      setCommentsError(err instanceof Error ? err.message : "Gagal menambahkan komentar.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleStartEditComment = (commentId: string, currentBody: string) => {
+    setEditingCommentId(commentId);
+    setEditingCommentText(currentBody);
+  };
+
+  const handleSaveEditComment = async (commentId: string) => {
+    if (!selectedIssue || !editingCommentText.trim()) return;
+
+    setDetailLoading(true);
+    setCommentsError("");
+    try {
+      const updated = await updateIssueComment(selectedIssue.id, commentId, editingCommentText);
+      setComments((prev) => prev.map((c) => (c.id === commentId ? updated : c)));
+      setEditingCommentId(null);
+      setEditingCommentText("");
+    } catch (err: unknown) {
+      setCommentsError(err instanceof Error ? err.message : "Gagal mengubah komentar.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!selectedIssue) return;
+    const ok = await confirm({
+      title: "Hapus Komentar",
+      description: "Apakah Anda yakin ingin menghapus komentar ini?",
+      confirmLabel: "Hapus",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
+    setDetailLoading(true);
+    setCommentsError("");
+    try {
+      await deleteIssueComment(selectedIssue.id, commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    } catch (err: unknown) {
+      setCommentsError(err instanceof Error ? err.message : "Gagal menghapus komentar.");
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -593,9 +731,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   key={issue.id}
                   className="cursor-pointer hover:bg-muted/40 transition-colors"
                   onClick={() => {
-                    setSelectedIssue(issue);
-                    setIsDetailOpen(true);
-                    setDetailError("");
+                    router.push(`/projects/${projectId}/issues/${issue.id}`);
                   }}
                 >
                   <TableCell className="font-mono text-[11px] text-muted-foreground pl-4">
@@ -1199,240 +1335,6 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Detail Issue Dialog/Drawer */}
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="sm:max-w-[460px]">
-          {selectedIssue && (
-            <div className="flex flex-col gap-4">
-              <DialogHeader className="border-b border-border pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] text-muted-foreground">#{selectedIssue.id}</span>
-                  <span className="rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary uppercase">
-                    {selectedIssue.tracker?.name || "Task"}
-                  </span>
-                </div>
-                <DialogTitle className="text-[15px] font-semibold mt-1 leading-normal text-foreground flex items-center gap-2">
-                  {selectedIssue.displayId && (
-                    <span className="inline-flex items-center rounded bg-muted border border-border px-1.5 py-0.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase">
-                      {selectedIssue.displayId}
-                    </span>
-                  )}
-                  <span>{selectedIssue.title}</span>
-                </DialogTitle>
-              </DialogHeader>
-
-              {detailError && (
-                <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive leading-normal">
-                  <AlertCircle className="h-3.5 w-3.5 mt-[1px] shrink-0" />
-                  <span>{detailError}</span>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-4 py-2">
-                {/* Description content */}
-                <div className="flex flex-col gap-1.5 bg-muted/20 border border-border p-3 rounded-lg">
-                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Deskripsi / Detail Tiket
-                  </span>
-                  <div className="text-[12.5px] leading-relaxed text-foreground whitespace-pre-wrap mt-1">
-                    {selectedIssue.description || "Tidak ada deskripsi rinci untuk tiket ini."}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Status update with role validator */}
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">Status Tiket</Label>
-                    <select
-                      value={selectedIssue.statusId}
-                      onChange={(e) => handleStatusChange(selectedIssue.id, e.target.value)}
-                      disabled={detailLoading}
-                      className="h-8 rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
-                    >
-                      {statuses.map((st) => {
-                        // Sembunyikan atau disable jika restrictedToRole tidak sesuai
-                        const isRestricted = st.restrictedToRole !== null;
-                        const isRoleMatched = st.restrictedToRole === userRole;
-                        const disabled = isRestricted && !isRoleMatched && !isAdmin;
-
-                        return (
-                          <option key={st.id} value={st.id} disabled={disabled}>
-                            {st.name} {disabled ? "🔒 (Hanya QA)" : ""}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">Prioritas</Label>
-                    <div className="h-8 border border-border bg-muted/20 rounded-md flex items-center px-2.5 text-[12.5px] capitalize font-medium">
-                      {selectedIssue.priority}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">Ditugaskan Kepada</Label>
-                    <div className="flex items-center gap-2 h-8">
-                      <Avatar className="h-5 w-5">
-                        <AvatarFallback className="text-[9px] font-bold">
-                          {selectedIssue.assignee ? selectedIssue.assignee.name.slice(0, 2).toUpperCase() : "-"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-[12.5px] truncate">
-                        {selectedIssue.assignee?.name || "Belum ditugaskan"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-[11px] font-medium text-muted-foreground">Batas Waktu (Due Date)</Label>
-                    <div className="flex items-center gap-2 h-8 text-[12.5px] text-foreground font-medium">
-                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                      {selectedIssue.dueDate
-                        ? new Date(selectedIssue.dueDate).toLocaleDateString("id-ID", {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })
-                        : "Tidak ditentukan"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Attachments Section */}
-                <div
-                  className={`flex flex-col gap-1.5 border-t border-border/60 pt-3 mt-1 transition-all ${
-                    isDetailDragging ? "bg-primary/5 border-dashed border-primary p-2 rounded-md" : ""
-                  }`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDetailDragging(true);
-                  }}
-                  onDragLeave={() => setIsDetailDragging(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDetailDragging(false);
-                    if (e.dataTransfer.files) {
-                      void handleUploadDetailFiles(e.dataTransfer.files);
-                    }
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                      <Paperclip className="h-3 w-3" />
-                      Lampiran ({attachments.length})
-                    </span>
-                    <div className="flex items-center">
-                      <input
-                        type="file"
-                        multiple
-                        id="detail-files-input"
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files) {
-                            void handleUploadDetailFiles(e.target.files);
-                          }
-                        }}
-                        disabled={detailLoading}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[10px] font-medium px-2 text-muted-foreground hover:text-foreground"
-                        onClick={() => document.getElementById("detail-files-input")?.click()}
-                        disabled={detailLoading}
-                      >
-                        Tambah File
-                      </Button>
-                    </div>
-                  </div>
-
-                  {attachmentsLoading ? (
-                    <div className="flex items-center gap-1.5 py-2 text-xs text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Memuat lampiran...
-                    </div>
-                  ) : attachments.length === 0 ? (
-                    <span className="text-xs text-muted-foreground italic py-2.5 text-center border border-dashed border-border/80 rounded bg-muted/10">
-                      Seret file ke sini untuk mengunggah
-                    </span>
-                  ) : (
-                    <div className="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto pr-1 mt-1">
-                      {attachments.map((att) => (
-                        <div
-                          key={att.id}
-                          className="flex items-center justify-between border border-border/80 bg-muted/20 hover:bg-muted/40 px-2.5 py-1 rounded-md text-[12px] group gap-2"
-                        >
-                          <a
-                            href={`/uploads/${att.r2ObjectKey}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download={att.fileName}
-                            className="font-medium text-foreground hover:underline truncate max-w-[320px] flex items-center gap-1.5"
-                          >
-                            {getFileIcon(att.fileName)}
-                            {att.fileName}
-                          </a>
-                          {(att.uploadedBy === session?.user?.id || session?.user?.isAdmin) && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteAttachment(att.id)}
-                              className="text-muted-foreground hover:text-destructive shrink-0 ml-2"
-                              disabled={detailLoading}
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <DialogFooter className="border-t border-border pt-3 mt-2 flex items-center justify-between">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-8 text-[12px] text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
-                  onClick={() => handleDeleteIssue(selectedIssue.id)}
-                  disabled={detailLoading}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                  Hapus Tiket
-                </Button>
-                <div className="flex gap-2">
-                  {canEdit && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8 text-[12px] font-medium"
-                      onClick={handleOpenEditModal}
-                      disabled={detailLoading}
-                    >
-                      Edit Tiket
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-8 text-[12px]"
-                    onClick={() => setIsDetailOpen(false)}
-                    disabled={detailLoading}
-                  >
-                    Tutup
-                  </Button>
-                </div>
-              </DialogFooter>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>

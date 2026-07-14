@@ -95,6 +95,22 @@ export async function getIssues(projectId: string): Promise<Issue[]> {
   return res.json();
 }
 
+export async function getIssueDetail(projectId: string, issueId: string): Promise<Issue> {
+  const res = await fetch(`/api/projects/${projectId}/issues/${issueId}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to fetch issue details");
+  }
+
+  return res.json();
+}
+
 export async function createIssue(
   projectId: string,
   payload: {
@@ -486,5 +502,87 @@ export async function deleteIssueAttachment(issueId: string, attachmentId: strin
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.message || "Failed to delete attachment");
+  }
+}
+
+export interface IssueComment {
+  id: string;
+  issueId: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string | null;
+  author: {
+    id: string;
+    name: string;
+    email: string;
+    image: string | null;
+  };
+}
+
+export async function getIssueComments(issueId: string): Promise<IssueComment[]> {
+  const res = await fetch(`/api/issues/${issueId}/comments`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to fetch comments");
+  }
+
+  return res.json();
+}
+
+export async function createIssueComment(issueId: string, body: string): Promise<IssueComment> {
+  const res = await fetch(`/api/issues/${issueId}/comments`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ body }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to add comment");
+  }
+
+  return res.json();
+}
+
+export async function updateIssueComment(
+  issueId: string,
+  commentId: string,
+  body: string,
+): Promise<IssueComment> {
+  const res = await fetch(`/api/issues/${issueId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ body }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to edit comment");
+  }
+
+  return res.json();
+}
+
+export async function deleteIssueComment(issueId: string, commentId: string): Promise<void> {
+  const res = await fetch(`/api/issues/${issueId}/comments/${commentId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to delete comment");
   }
 }
