@@ -29,7 +29,7 @@ export async function getTimeBlocks(
   if (startDate) params.append("startDate", startDate);
   if (endDate) params.append("endDate", endDate);
 
-  const res = await fetch(`/time-blocks?${params.toString()}`, {
+  const res = await fetch(`/api/time-blocks?${params.toString()}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -44,7 +44,7 @@ export async function getTimeBlocks(
 }
 
 export async function deleteTimeBlock(id: string, reason: string): Promise<void> {
-  const res = await fetch(`/time-blocks/${id}`, {
+  const res = await fetch(`/api/time-blocks/${id}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
@@ -63,7 +63,7 @@ export async function overrideTimeBlock(
   action: "delete" | "mark_unpaid",
   reason: string
 ): Promise<void> {
-  const res = await fetch(`/time-blocks/${id}/override`, {
+  const res = await fetch(`/api/time-blocks/${id}/override`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -45,7 +45,7 @@ export async function getTimesheets(projectId?: string): Promise<Timesheet[]> {
   const params = new URLSearchParams();
   if (projectId) params.append("projectId", projectId);
 
-  const res = await fetch(`/timesheets?${params.toString()}`, {
+  const res = await fetch(`/api/timesheets?${params.toString()}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -60,7 +60,7 @@ export async function getTimesheets(projectId?: string): Promise<Timesheet[]> {
 }
 
 export async function getTimesheetDetail(id: string): Promise<Timesheet> {
-  const res = await fetch(`/timesheets/${id}`, {
+  const res = await fetch(`/api/timesheets/${id}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -79,7 +79,7 @@ export async function createTimesheet(
   periodStart: string,
   periodEnd: string
 ): Promise<Timesheet> {
-  const res = await fetch("/timesheets", {
+  const res = await fetch("/api/timesheets", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -96,7 +96,7 @@ export async function createTimesheet(
 }
 
 export async function submitTimesheet(id: string): Promise<Timesheet> {
-  const res = await fetch(`/timesheets/${id}/submit`, {
+  const res = await fetch(`/api/timesheets/${id}/submit`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -116,7 +116,7 @@ export async function approveTimesheet(
   decision: "approved" | "rejected",
   note?: string
 ): Promise<Timesheet> {
-  const res = await fetch(`/timesheets/${id}/approve`, {
+  const res = await fetch(`/api/timesheets/${id}/approve`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -136,7 +136,7 @@ export async function getManualEntries(projectId?: string): Promise<ManualTimeEn
   const params = new URLSearchParams();
   if (projectId) params.append("projectId", projectId);
 
-  const res = await fetch(`/manual-time-entries?${params.toString()}`, {
+  const res = await fetch(`/api/manual-time-entries?${params.toString()}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -157,7 +157,7 @@ export async function createManualEntry(
   description: string,
   entryDate: string
 ): Promise<ManualTimeEntry> {
-  const res = await fetch("/manual-time-entries", {
+  const res = await fetch("/api/manual-time-entries", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

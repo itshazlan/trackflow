@@ -8,39 +8,39 @@ const nextConfig: NextConfig = {
         destination: "http://localhost:3000/api/auth/:path*",
       },
       {
-        source: "/users/:path*",
+        source: "/api/users/:path*",
         destination: "http://localhost:3000/users/:path*",
       },
       {
-        source: "/projects/:path*",
+        source: "/api/projects/:path*",
         destination: "http://localhost:3000/projects/:path*",
       },
       {
-        source: "/trackers/:path*",
+        source: "/api/trackers/:path*",
         destination: "http://localhost:3000/trackers/:path*",
       },
       {
-        source: "/time-blocks/:path*",
+        source: "/api/time-blocks/:path*",
         destination: "http://localhost:3000/time-blocks/:path*",
       },
       {
-        source: "/manual-time-entries/:path*",
+        source: "/api/manual-time-entries/:path*",
         destination: "http://localhost:3000/manual-time-entries/:path*",
       },
       {
-        source: "/timesheets/:path*",
+        source: "/api/timesheets/:path*",
         destination: "http://localhost:3000/timesheets/:path*",
       },
       {
-        source: "/reports/:path*",
+        source: "/api/reports/:path*",
         destination: "http://localhost:3000/reports/:path*",
       },
       {
-        source: "/admin/:path*",
+        source: "/api/admin/:path*",
         destination: "http://localhost:3000/admin/:path*",
       },
       {
-        source: "/uploads/:path*",
+        source: "/api/uploads/:path*",
         destination: "http://localhost:3000/uploads/:path*",
       },
     ];

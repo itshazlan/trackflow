@@ -7,7 +7,7 @@ export interface Project {
 }
 
 export async function getProjects(): Promise<Project[]> {
-  const res = await fetch("/projects", {
+  const res = await fetch("/api/projects", {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -22,7 +22,7 @@ export async function getProjects(): Promise<Project[]> {
 }
 
 export async function createProject(name: string, description?: string): Promise<Project> {
-  const res = await fetch("/projects", {
+  const res = await fetch("/api/projects", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -39,7 +39,7 @@ export async function createProject(name: string, description?: string): Promise
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const res = await fetch(`/projects/${id}`, {
+  const res = await fetch(`/api/projects/${id}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
@@ -52,7 +52,7 @@ export async function deleteProject(id: string): Promise<void> {
 }
 
 export async function getProjectDetail(id: string): Promise<Project> {
-  const res = await fetch(`/projects/${id}`, {
+  const res = await fetch(`/api/projects/${id}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -67,7 +67,7 @@ export async function getProjectDetail(id: string): Promise<Project> {
 }
 
 export async function getSubProjects(id: string): Promise<Project[]> {
-  const res = await fetch(`/projects/${id}/sub-projects`, {
+  const res = await fetch(`/api/projects/${id}/sub-projects`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -86,7 +86,7 @@ export async function createSubProject(
   name: string,
   description?: string,
 ): Promise<Project> {
-  const res = await fetch(`/projects/${parentId}/sub-projects`, {
+  const res = await fetch(`/api/projects/${parentId}/sub-projects`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

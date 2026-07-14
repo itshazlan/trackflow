@@ -70,7 +70,7 @@ export interface IssueTemplate {
 }
 
 export async function getIssues(projectId: string): Promise<Issue[]> {
-  const res = await fetch(`/projects/${projectId}/issues`, {
+  const res = await fetch(`/api/projects/${projectId}/issues`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -96,7 +96,7 @@ export async function createIssue(
     dueDate?: string | null;
   }
 ): Promise<Issue> {
-  const res = await fetch(`/projects/${projectId}/issues`, {
+  const res = await fetch(`/api/projects/${projectId}/issues`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -125,7 +125,7 @@ export async function updateIssue(
     dueDate: string | null;
   }>
 ): Promise<Issue> {
-  const res = await fetch(`/projects/${projectId}/issues/${issueId}`, {
+  const res = await fetch(`/api/projects/${projectId}/issues/${issueId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -142,7 +142,7 @@ export async function updateIssue(
 }
 
 export async function deleteIssue(projectId: string, issueId: string): Promise<void> {
-  const res = await fetch(`/projects/${projectId}/issues/${issueId}`, {
+  const res = await fetch(`/api/projects/${projectId}/issues/${issueId}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
@@ -155,7 +155,7 @@ export async function deleteIssue(projectId: string, issueId: string): Promise<v
 }
 
 export async function getProjectStatuses(projectId: string): Promise<IssueStatus[]> {
-  const res = await fetch(`/projects/${projectId}/statuses`, {
+  const res = await fetch(`/api/projects/${projectId}/statuses`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -170,7 +170,7 @@ export async function getProjectStatuses(projectId: string): Promise<IssueStatus
 }
 
 export async function getTrackers(): Promise<Tracker[]> {
-  const res = await fetch("/trackers", {
+  const res = await fetch("/api/trackers", {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -185,7 +185,7 @@ export async function getTrackers(): Promise<Tracker[]> {
 }
 
 export async function getProjectMembers(projectId: string): Promise<ProjectMember[]> {
-  const res = await fetch(`/projects/${projectId}/members`, {
+  const res = await fetch(`/api/projects/${projectId}/members`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -203,7 +203,7 @@ export async function createProjectStatus(
   projectId: string,
   payload: { name: string; orderIndex: number; restrictedToRole: string | null }
 ): Promise<IssueStatus> {
-  const res = await fetch(`/projects/${projectId}/statuses`, {
+  const res = await fetch(`/api/projects/${projectId}/statuses`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -224,7 +224,7 @@ export async function updateProjectStatus(
   statusId: string,
   payload: Partial<{ name: string; orderIndex: number; restrictedToRole: string | null }>
 ): Promise<IssueStatus> {
-  const res = await fetch(`/projects/${projectId}/statuses/${statusId}`, {
+  const res = await fetch(`/api/projects/${projectId}/statuses/${statusId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -241,7 +241,7 @@ export async function updateProjectStatus(
 }
 
 export async function deleteProjectStatus(projectId: string, statusId: string): Promise<void> {
-  const res = await fetch(`/projects/${projectId}/statuses/${statusId}`, {
+  const res = await fetch(`/api/projects/${projectId}/statuses/${statusId}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
@@ -255,7 +255,7 @@ export async function deleteProjectStatus(projectId: string, statusId: string): 
 }
 
 export async function reorderProjectStatuses(projectId: string, statusIds: string[]): Promise<IssueStatus[]> {
-  const res = await fetch(`/projects/${projectId}/statuses/reorder`, {
+  const res = await fetch(`/api/projects/${projectId}/statuses/reorder`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -272,7 +272,7 @@ export async function reorderProjectStatuses(projectId: string, statusIds: strin
 }
 
 export async function getProjectTemplates(projectId: string): Promise<IssueTemplate[]> {
-  const res = await fetch(`/projects/${projectId}/templates`, {
+  const res = await fetch(`/api/projects/${projectId}/templates`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -290,7 +290,7 @@ export async function createProjectTemplate(
   projectId: string,
   payload: { name: string; trackerId: string; titlePattern?: string; fields: TemplateField[] }
 ): Promise<IssueTemplate> {
-  const res = await fetch(`/projects/${projectId}/templates`, {
+  const res = await fetch(`/api/projects/${projectId}/templates`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -311,7 +311,7 @@ export async function updateProjectTemplate(
   templateId: string,
   payload: Partial<{ name: string; trackerId: string; titlePattern: string | null; fields: TemplateField[] }>
 ): Promise<IssueTemplate> {
-  const res = await fetch(`/projects/${projectId}/templates/${templateId}`, {
+  const res = await fetch(`/api/projects/${projectId}/templates/${templateId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -328,7 +328,7 @@ export async function updateProjectTemplate(
 }
 
 export async function deleteProjectTemplate(projectId: string, templateId: string): Promise<void> {
-  const res = await fetch(`/projects/${projectId}/templates/${templateId}`, {
+  const res = await fetch(`/api/projects/${projectId}/templates/${templateId}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
