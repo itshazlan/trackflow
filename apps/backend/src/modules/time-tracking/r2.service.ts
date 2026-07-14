@@ -5,6 +5,8 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { join } from 'path';
+import { mkdirSync, writeFileSync } from 'fs';
 
 @Injectable()
 export class R2Service {
@@ -17,7 +19,7 @@ export class R2Service {
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
     this.bucketName = process.env.R2_BUCKET_NAME || 'trackflow-screenshots';
 
-    if (endpoint && accessKeyId && secretAccessKey) {
+    if (endpoint && accessKeyId && secretAccessKey && process.env.NODE_ENV !== 'test') {
       this.s3Client = new S3Client({
         endpoint,
         credentials: {
@@ -27,9 +29,13 @@ export class R2Service {
         region: 'auto',
       });
     } else {
-      console.warn(
-        '⚠️ Cloudflare R2 credentials not fully configured. Falling back to Mock mode.',
-      );
+      if (process.env.NODE_ENV === 'test') {
+        console.log('ℹ️ Running in Jest test environment. Forcing local Mock R2 mode.');
+      } else {
+        console.warn(
+          '⚠️ Cloudflare R2 credentials not fully configured. Falling back to Mock mode.',
+        );
+      }
     }
   }
 
@@ -59,8 +65,6 @@ export class R2Service {
   ): Promise<void> {
     if (!this.s3Client) {
       // Mock mode: persist to local disk so /uploads/* static server can serve it
-      const { join } = await import('path');
-      const { mkdirSync, writeFileSync } = await import('fs');
       const filePath = join(process.cwd(), 'uploads', objectKey);
       mkdirSync(join(filePath, '..'), { recursive: true });
       writeFileSync(filePath, buffer);

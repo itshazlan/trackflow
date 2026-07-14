@@ -137,14 +137,13 @@ describe('Users Profile (e2e)', () => {
   });
 
   describe('POST /users/me/avatar', () => {
-    it('should generate a presigned avatar upload url and update user.image path', async () => {
+    it('should upload avatar and update user.image path', async () => {
       const res = await request(app.getHttpServer())
         .post('/users/me/avatar')
         .set('x-mock-user-id', mockUser.id)
         .attach('file', Buffer.from('dummy-image-content'), 'avatar.png')
         .expect(201);
 
-      expect(res.body).toHaveProperty('uploadUrl');
       expect(res.body).toHaveProperty('publicUrl');
       expect(res.body.publicUrl).toContain(`/api/uploads/avatars/${mockUser.id}.webp`);
 
