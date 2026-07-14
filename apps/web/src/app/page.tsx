@@ -1430,7 +1430,7 @@ function TimebookSection({ project, isAdmin }: { project: Project; isAdmin: bool
               />
             </div>
 
-            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+            <DialogFooter className="mt-6">
               <Button
                 type="button"
                 variant="outline"
@@ -1495,7 +1495,7 @@ function TimebookSection({ project, isAdmin }: { project: Project; isAdmin: bool
               />
             </div>
 
-            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+            <DialogFooter className="mt-6">
               <Button
                 type="button"
                 variant="outline"
@@ -2121,7 +2121,7 @@ function ReportsSection({
               </div>
             </div>
 
-            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+            <DialogFooter className="mt-6">
               <Button
                 type="button"
                 variant="outline"
@@ -2284,7 +2284,7 @@ function ReportsSection({
                 </div>
               )}
 
-              <DialogFooter className="p-0 border-t border-border pt-4">
+              <DialogFooter className="mt-6">
                 <Button
                   type="button"
                   variant="outline"
