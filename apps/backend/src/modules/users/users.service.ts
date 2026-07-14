@@ -3,10 +3,14 @@ import { eq } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { user } from '../../db/schema/auth';
 import { UpdateProfileDto } from './dto/user-profile.dto';
+import { R2Service } from '../time-tracking/r2.service';
 
 @Injectable()
 export class UsersService {
-  constructor(@Inject(DRIZZLE) private readonly db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: any,
+    private readonly r2Service: R2Service,
+  ) {}
 
   async findOne(id: string) {
     const [found] = await this.db
@@ -25,9 +29,29 @@ export class UsersService {
   }
 
   async updateProfile(id: string, dto: UpdateProfileDto) {
+    const cleanDto: any = { ...dto };
+    delete cleanDto.employeeId;
+    delete cleanDto.joinDate;
+    delete cleanDto.employmentStatus;
+    delete cleanDto.isAdmin;
+    delete cleanDto.email;
+    delete cleanDto.id;
+    delete cleanDto.createdAt;
+
+    // Filter out undefined fields so Drizzle doesn't complain about empty updates
+    Object.keys(cleanDto).forEach((key) => {
+      if (cleanDto[key] === undefined) {
+        delete cleanDto[key];
+      }
+    });
+
+    if (Object.keys(cleanDto).length === 0) {
+      return this.findOne(id);
+    }
+
     const [updated] = await this.db
       .update(user)
-      .set(dto)
+      .set(cleanDto)
       .where(eq(user.id, id))
       .returning();
 
@@ -37,5 +61,22 @@ export class UsersService {
 
     const { password, ...safeUser } = updated;
     return safeUser;
+  }
+
+  async getAvatarUploadUrl(id: string) {
+    const objectKey = `avatars/${id}.webp`;
+    const uploadUrl = await this.r2Service.getPresignedUploadUrl(objectKey, 'image/webp');
+    const publicUrl = `/api/uploads/${objectKey}`;
+
+    await this.db
+      .update(user)
+      .set({ image: publicUrl })
+      .where(eq(user.id, id));
+
+    return {
+      uploadUrl,
+      publicUrl,
+      r2ObjectKey: objectKey,
+    };
   }
 }

@@ -16,4 +16,12 @@ export class UpdateProfileDto {
   @IsString()
   @IsOptional()
   image?: string | null;
+
+  @IsString()
+  @IsOptional()
+  position?: string | null;
+
+  @IsString()
+  @IsOptional()
+  department?: string | null;
 }

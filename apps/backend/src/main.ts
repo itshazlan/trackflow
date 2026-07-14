@@ -31,6 +31,27 @@ async function bootstrap() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // Mount mock-r2 handler for local file upload testing
+  expressInstance.put('/mock-r2/:bucket/*', (req: any, res: any) => {
+    const key = req.params[0]; // e.g. avatars/xxx.png or project/xxx/screenshots/xxx.webp
+    const filePath = join(process.cwd(), 'uploads', key);
+    
+    // Ensure parent directory exists
+    fs.mkdirSync(join(filePath, '..'), { recursive: true });
+    
+    const writeStream = fs.createWriteStream(filePath);
+    req.pipe(writeStream);
+    
+    writeStream.on('finish', () => {
+      res.status(200).json({ success: true, path: `/uploads/${key}` });
+    });
+    
+    writeStream.on('error', (err) => {
+      console.error('[Mock R2 Upload Error]:', err);
+      res.status(500).send('Upload failed');
+    });
+  });
+
   // Serve uploads folder static assets with R2 proxy fallback
   expressInstance.use(
     '/uploads',

@@ -7,6 +7,7 @@ import { getSession, logout, UserSession } from "@/lib/auth-service";
 import { getProjects, Project } from "@/lib/projects-service";
 import { useQuery } from "@tanstack/react-query";
 import ProjectSwitcher from "@/components/project/project-switcher";
+import ProfileModal from "@/components/profile-modal";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,14 +24,12 @@ import {
 import {
   Loader2,
   LogOut,
-  Folder,
   Clock,
   Settings,
   LineChart,
   CheckSquare,
   PanelLeftClose,
   PanelLeftOpen,
-  ChevronDown,
   Timer,
   User as UserIcon,
   FileText,
@@ -49,6 +48,16 @@ export default function DashboardLayout({
   const [session, setSession] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  const reloadSession = async () => {
+    try {
+      const s = await getSession();
+      setSession(s);
+    } catch (err) {
+      console.error("Failed to reload session", err);
+    }
+  };
 
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ["projects"],
@@ -270,7 +279,12 @@ export default function DashboardLayout({
                   Akun Anda
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-destructive text-[13px]">
+                <DropdownMenuItem onClick={() => setIsProfileOpen(true)} className="text-[13px] cursor-pointer">
+                  <UserIcon className="h-4 w-4 mr-2" />
+                  Profil Saya
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-destructive text-[13px] cursor-pointer">
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign Out
                 </DropdownMenuItem>
@@ -298,7 +312,12 @@ export default function DashboardLayout({
                 </Avatar>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem onClick={handleLogout} className="text-destructive text-[13px]">
+                <DropdownMenuItem onClick={() => setIsProfileOpen(true)} className="text-[13px] cursor-pointer">
+                  <UserIcon className="h-4 w-4 mr-2" />
+                  Profil Saya
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-destructive text-[13px] cursor-pointer">
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign Out
                 </DropdownMenuItem>
@@ -368,6 +387,13 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+
+      {/* User Profile Modal */}
+      <ProfileModal
+        open={isProfileOpen}
+        onOpenChange={setIsProfileOpen}
+        onSuccess={reloadSession}
+      />
     </div>
   );
 }
