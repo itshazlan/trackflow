@@ -3,6 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../../db/schema';
+import { bearer } from 'better-auth/plugins';
 
 console.log(
   '[better-auth.config.ts] BETTER_AUTH_URL:',
@@ -29,7 +30,13 @@ export const auth = betterAuth({
       verification: schema.verification,
     },
   }),
-  trustedOrigins: ['http://localhost:3001'],
+  trustedOrigins: [
+    'http://localhost:3001',
+    'http://localhost:1420',
+    'tauri://localhost',
+    'https://tauri.localhost',
+  ],
+  plugins: [bearer()],
   emailAndPassword: {
     enabled: true,
   },
@@ -50,3 +57,4 @@ export const auth = betterAuth({
     },
   },
 });
+

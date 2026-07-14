@@ -14,20 +14,40 @@ async function bootstrap() {
   if (!fs.existsSync('./uploads/screenshots')) {
     fs.mkdirSync('./uploads/screenshots', { recursive: true });
   }
-
   const app = await NestFactory.create(AppModule, { bodyParser: false });
 
-  // 1. Mount Better Auth handler using a custom middleware to preserve req.url
   const expressInstance = app.getHttpAdapter().getInstance();
+
+  // Custom CORS middleware to allow cross-origin requests from the Tauri application
+  expressInstance.use((req: any, res: any, next: any) => {
+    const origin = req.headers.origin;
+    const allowedOrigins = [
+      'http://localhost:3001',
+      'http://localhost:1420',
+      'tauri://localhost',
+      'https://tauri.localhost',
+    ];
+    if (allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With');
+    
+    if (req.method === 'OPTIONS') {
+      return res.status(204).send();
+    }
+    next();
+  });
+
+  // 1. Mount Better Auth handler using a custom middleware to preserve req.url
   expressInstance.use((req: any, res: any, next: any) => {
     if (req.url.startsWith('/api/auth')) {
       console.log(`[Better Auth Middleware] Routing: ${req.method} ${req.url}`);
       return toNodeHandler(auth)(req, res);
     }
     next();
-  });
-
-  // 2. Apply body parsers globally for all subsequent NestJS routes
+  });  // 2. Apply body parsers globally for all subsequent NestJS routes
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 

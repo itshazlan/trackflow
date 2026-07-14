@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.1 (Lean Internal) |
+| **Versi Dokumen** | 2.2 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Kode Proyek & penomoran issue independen per sub-proyek, template jadi filler teks, lampiran, edit issue, Issue Activity/komentar, Admin bypass membership) |
+| **Tanggal** | 14 Juli 2026 (revisi: strategi autentikasi Desktop Client — Bearer token via Better Auth Bearer plugin, bukan cookie sharing) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -132,6 +132,22 @@ Berbeda dari draft sebelumnya (RBAC dua tingkat penuh dengan Owner/Admin/Member)
 3. Aksi tulis operasional (approve timesheet, ubah status tiket non-terbatas) tetap memerlukan role proyek eksplisit via `ProjectRoleGuard` — Admin tidak otomatis bisa mengerjakan tugas operasional Manager kecuali memang didaftarkan sebagai member proyek tersebut. **Pengecualian eksplisit:** endpoint `POST/PATCH /projects/:id/members` (menambah/mengubah anggota) tetap mengizinkan Admin meski **belum** terdaftar sebagai member proyek tersebut — karena mengelola keanggotaan tim lain adalah bagian dari peran administratif, bukan operasional harian proyek.
 4. **Override blok waktu milik pekerja lain** memerlukan `AdminGuard` saja — **tidak ada lapisan izin granular per-Manager** (`can_override_timeblocks` dihapus dari draft sebelumnya), karena untuk tim internal kecil cukup satu titik kewenangan yang jelas dan mudah diaudit.
 
+### 4.2 Autentikasi Desktop Client — Bearer Token (Bukan Cookie Session)
+
+Better Auth secara default memakai **session cookie httpOnly**, cocok untuk `apps/web` (browser). Desktop client (Tauri) punya Rust core process yang jalan di background untuk sync tiap 10 menit — proses ini **tidak punya akses ke cookie jar WebView**, sehingga tidak bisa memakai mekanisme cookie yang sama. Keputusan: **Bearer token**, bukan cookie sharing.
+
+**Alur:**
+1. Aktifkan **Bearer plugin** Better Auth di konfigurasi backend (`betterAuth({ plugins: [bearer()] })`) — plugin resmi yang membuat Better Auth mengembalikan token di response `sign-in`, selain (atau sebagai ganti) set-cookie.
+2. Desktop client memanggil `POST /api/auth/sign-in/email` seperti biasa; response menyertakan token sesi.
+3. Token disimpan di **OS keychain**, bukan file plaintext/localStorage-equivalent — Tauri menyediakan plugin resmi untuk ini (mis. `tauri-plugin-stronghold` atau keychain-plugin native per-OS).
+4. Setiap request dari Rust core (`reqwest`) menyertakan header `Authorization: Bearer <token>`, bukan mengandalkan cookie.
+5. Guard `AdminGuard`/`ProjectRoleGuard` di backend **tidak berubah** — keduanya membaca sesi via `/api/auth/session`, yang kompatibel menerima sesi dari Bearer token maupun cookie tanpa perbedaan logic guard.
+
+**Konsekuensi desain:**
+- CORS/allow-list backend harus memasukkan origin desktop client (`tauri://localhost`, berbeda dari origin `apps/web`) — dicek terpisah dari header Authorization, tapi tetap wajib supaya request tidak ditolak sebelum sampai guard.
+- Refresh token/expiry: desktop client perlu logic refresh token sendiri (Rust core), karena tidak ada browser yang otomatis mengelola cookie refresh — masuk sebagai bagian dari Sync Service (§6).
+- Logout dari desktop client harus memanggil endpoint sign-out **dan** menghapus token dari keychain lokal — kalau hanya salah satu, sesi bisa "zombie" (token masih valid di server tapi UI mengira sudah logout, atau sebaliknya).
+
 ---
 
 ## 5. Arsitektur Frontend Web (Next.js)
@@ -149,31 +165,38 @@ Berbeda dari draft sebelumnya (RBAC dua tingkat penuh dengan Owner/Admin/Member)
 
 ```mermaid
 flowchart LR
-    UI["Tauri WebView UI (Start/Stop, pemilihan task)"]
+    UI["Tauri WebView UI (Login, Start/Stop, pemilihan task)"]
     CORE["Rust Core Process"]
+    AUTH["Auth/Token Manager (keychain)"]
     HOOK["OS-level Input Hook (keyboard/mouse count)"]
     CAP["Screenshot Capture Module"]
     LOCALDB["Local SQLite Buffer"]
     SYNC["Sync Service"]
 
     UI <--> CORE
+    UI -- login/logout --> AUTH
     CORE --> HOOK
     CORE --> CAP
+    CORE --> AUTH
     HOOK --> LOCALDB
     CAP --> LOCALDB
     LOCALDB --> SYNC
-    SYNC -- HTTPS batch upload --> API["Backend API"]
+    SYNC -- ambil Bearer token --> AUTH
+    SYNC -- "HTTPS batch upload + Authorization: Bearer <token>" --> API["Backend API"]
 ```
 
 | Komponen | Tanggung Jawab |
 |---|---|
 | **Rust Core Process** | Siklus blok waktu 10 menit, jadwal screenshot acak |
+| **Auth/Token Manager** | Login via `/api/auth/sign-in/email` (Bearer plugin), simpan token di OS keychain (bukan file plaintext), sediakan token ke Sync Service tiap request, tangani refresh & logout (hapus dari keychain + panggil sign-out) — lihat §4.2 |
 | **OS-level Input Hook** | Hitung klik/ketukan tanpa merekam konten (privasi) |
 | **Screenshot Capture Module** | Screenshot pada detik acak + notifikasi shutter |
 | **Local SQLite Buffer** | Buffer offline sebelum berhasil diunggah |
-| **Sync Service** | Upload per blok selesai, retry dengan backoff |
+| **Sync Service** | Ambil token dari Auth/Token Manager, sertakan sebagai header `Authorization: Bearer <token>` di tiap request, upload per blok selesai, retry dengan backoff. Jika server balas `401 Unauthorized` (token expired), pause sync → picu refresh via Auth/Token Manager → resume; jika refresh gagal, tampilkan prompt re-login di WebView UI |
 
 **Prinsip privasi tidak berubah:** idle detection, tidak ada keylogging konten, randomisasi jadwal screenshot lokal.
+
+**Prinsip keamanan token (baru):** token tidak pernah disimpan sebagai file teks biasa di disk maupun di `localStorage`-equivalent WebView — wajib lewat mekanisme keychain native OS (Keychain di macOS, Credential Manager di Windows, Secret Service di Linux), diakses lewat plugin Tauri resmi.
 
 ---
 
@@ -481,10 +504,10 @@ erDiagram
 
 | Modul | Endpoint | Method | Deskripsi |
 |---|---|---|---|
-| Auth | `/api/auth/sign-in/email` | POST | Login via Better Auth |
+| Auth | `/api/auth/sign-in/email` | POST | Login via Better Auth. Untuk Desktop Client, response menyertakan Bearer token (plugin aktif) selain cookie — dipakai `apps/web` |
 | Auth | `/api/auth/sign-up/email` | POST | Registrasi via Better Auth |
-| Auth | `/api/auth/sign-out` | POST | Logout |
-| Auth | `/api/auth/session` | GET | Sesi aktif (dipakai guard) |
+| Auth | `/api/auth/sign-out` | POST | Logout — Desktop Client wajib panggil ini **dan** hapus token dari keychain lokal (§4.2) |
+| Auth | `/api/auth/session` | GET | Sesi aktif (dipakai guard) — menerima baik cookie (`apps/web`) maupun header `Authorization: Bearer <token>` (Desktop Client) |
 | Profil | `/users/me` | GET/PATCH | Lihat & update profil sendiri (username, foto, nomor telepon) — foto diunggah via presigned URL R2 seperti dokumen/screenshot |
 | Profil | `/admin/users/:id/employment` | PATCH | Update data kepegawaian user lain (jabatan, departemen, employeeId, joinDate, employmentStatus) — **Admin only** |
 | Admin | `/admin/settings` | GET/PATCH | Pengaturan aplikasi (`company_name`, `screenshot_retention_days`) — **Admin only** |
@@ -728,7 +751,8 @@ sequenceDiagram
 
 | Aspek | Implementasi |
 |---|---|
-| Autentikasi | Better Auth — session cookie (httpOnly) + hashing password bawaan |
+| Autentikasi | Better Auth — session cookie (httpOnly) untuk `apps/web`; **Bearer token** (via Bearer plugin) untuk Desktop Client, disimpan di OS keychain (§4.2, §6) |
+| CORS | Backend allow-list origin `apps/web` **dan** origin Tauri (`tauri://localhost`, berbeda per-OS) — tanpa ini, request Desktop Client ditolak sebelum sampai guard |
 | Akses data | Drizzle ORM — query ter-tipe, mengurangi risiko SQL injection |
 | Otorisasi | `AdminGuard` (flag boolean) + `ProjectRoleGuard` (role per-proyek) — dua guard sederhana, bukan hierarki organisasi bertingkat |
 | Enkripsi in-transit | HTTPS untuk REST, WSS untuk WebSocket |
