@@ -32,6 +32,17 @@ import {
   overrideTimeBlock,
   TimeBlock
 } from "@/lib/time-service";
+import {
+  getTimesheets,
+  getTimesheetDetail,
+  createTimesheet,
+  submitTimesheet,
+  approveTimesheet,
+  getManualEntries,
+  createManualEntry,
+  Timesheet,
+  ManualTimeEntry
+} from "@/lib/timesheet-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -390,7 +401,7 @@ export default function Home() {
             <div className="p-5 max-w-7xl mx-auto space-y-6">
               {activeSection === "issues" && <IssuesSection project={selectedProject} />}
               {activeSection === "timebook" && <TimebookSection project={selectedProject} isAdmin={session?.user?.isAdmin || false} />}
-              {activeSection === "reports" && <ReportsSection project={selectedProject} />}
+              {activeSection === "reports" && <ReportsSection project={selectedProject} session={session} isAdmin={session?.user?.isAdmin || false} />}
               {activeSection === "settings" && <SettingsSection project={selectedProject} />}
             </div>
           )}
@@ -1511,68 +1522,782 @@ function TimebookSection({ project, isAdmin }: { project: Project; isAdmin: bool
   );
 }
 
-function ReportsSection({ project }: { project: Project }) {
-  return (
-    <div className="space-y-4">
-      <SectionHeader
-        title={`Reports — ${project.name}`}
-        description="Analisis efisiensi kerja tim, distribusi waktu, dan progres issue."
-      />
+function ReportsSection({
+  project,
+  session,
+  isAdmin,
+}: {
+  project: Project;
+  session: UserSession | null;
+  isAdmin: boolean;
+}) {
+  const [subTab, setSubTab] = useState<"timesheets" | "manual">("timesheets");
+  const [timesheetsList, setTimesheetsList] = useState<Timesheet[]>([]);
+  const [manualEntries, setManualEntries] = useState<ManualTimeEntry[]>([]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Simple Progress chart mockup */}
-        <div className="border border-border bg-card p-4 rounded-md">
-          <h3 className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Pencapaian Milestone</h3>
-          <div className="space-y-3">
-            <div>
-              <div className="flex justify-between text-xs mb-1 font-medium">
-                <span className="text-foreground">Fase 1: Database &amp; Auth</span>
-                <span className="text-muted-foreground">100%</span>
-              </div>
-              <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500" style={{ width: "100%" }} />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs mb-1 font-medium">
-                <span className="text-foreground">Fase 2: API &amp; Services</span>
-                <span className="text-muted-foreground">90%</span>
-              </div>
-              <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500" style={{ width: "90%" }} />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs mb-1 font-medium">
-                <span className="text-foreground">Fase 3: Frontend Layout &amp; Auth Connection</span>
-                <span className="text-muted-foreground">40%</span>
-              </div>
-              <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                <div className="h-full bg-primary" style={{ width: "40%" }} />
-              </div>
-            </div>
-          </div>
+  // Create timesheet dialog state
+  const [isGenerateOpen, setIsGenerateOpen] = useState(false);
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+  const [generateLoading, setGenerateLoading] = useState(false);
+  const [generateError, setGenerateError] = useState("");
+
+  // Create manual entry state
+  const [manualDate, setManualDate] = useState(() => new Date().toLocaleDateString("en-CA"));
+  const [manualHours, setManualHours] = useState("");
+  const [manualMinutes, setManualMinutes] = useState("");
+  const [manualDesc, setManualDesc] = useState("");
+  const [manualIssueId, setManualIssueId] = useState("");
+  const [manualActionLoading, setManualActionLoading] = useState(false);
+  const [manualError, setManualError] = useState("");
+
+  // Timesheet Detail Modal state
+  const [selectedTimesheetId, setSelectedTimesheetId] = useState<string | null>(null);
+  const [timesheetDetail, setTimesheetDetail] = useState<Timesheet | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+
+  // Approval Action state
+  const [approvalNote, setApprovalNote] = useState("");
+  const [approvalActionLoading, setApprovalActionLoading] = useState(false);
+  const [approvalError, setApprovalError] = useState("");
+
+  // Toggle for personal vs team views (for managers)
+  const [viewMode, setViewMode] = useState<"personal" | "team">("personal");
+
+  const fetchReportsData = React.useCallback(async () => {
+    try {
+      const [tsData, manualData, membersData, issuesData] = await Promise.all([
+        getTimesheets(project.id),
+        getManualEntries(project.id),
+        getProjectMembers(project.id),
+        getIssues(project.id),
+      ]);
+      setTimesheetsList(tsData);
+      setManualEntries(manualData);
+      setMembers(membersData);
+      setIssues(issuesData);
+    } catch (err: unknown) {
+      console.error(err);
+      setError("Gagal memuat data timesheet.");
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setLoading(true);
+      setError("");
+      return fetchReportsData();
+    })
+    .catch((err) => {
+      if (!active) return;
+      console.error(err);
+      setError("Gagal memuat data.");
+    })
+    .finally(() => {
+      if (!active) return;
+      setLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [project.id, fetchReportsData]);
+
+  // Load timesheet detail
+  const loadTimesheetDetail = React.useCallback(async (id: string) => {
+    setDetailLoading(true);
+    setDetailError("");
+    setApprovalNote("");
+    setApprovalError("");
+    try {
+      const data = await getTimesheetDetail(id);
+      setTimesheetDetail(data);
+    } catch (err: unknown) {
+      console.error(err);
+      setDetailError("Gagal memuat detail timesheet.");
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+
+
+  const myMember = members.find((m) => m.email === session?.user?.email);
+  const myRole = myMember ? myMember.role : null;
+  const isManagerOrAdmin = myRole === "manager" || isAdmin;
+
+  // Filter timesheets list based on tab toggle
+  const displayTimesheets = isManagerOrAdmin && viewMode === "team"
+    ? timesheetsList
+    : timesheetsList.filter((t) => t.userId === session?.user?.id);
+
+  // Formatting helper
+  const formatMinutes = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}j ${m}m` : `${m}m`;
+  };
+
+  const handleCreateManualEntry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualHours && !manualMinutes) {
+      setManualError("Masukkan durasi jam atau menit.");
+      return;
+    }
+    const hrs = parseInt(manualHours || "0", 10);
+    const mins = parseInt(manualMinutes || "0", 10);
+    const totalMins = hrs * 60 + mins;
+    if (totalMins <= 0) {
+      setManualError("Durasi harus lebih dari 0 menit.");
+      return;
+    }
+    if (!manualDesc.trim()) {
+      setManualError("Tuliskan deskripsi aktivitas.");
+      return;
+    }
+
+    setManualActionLoading(true);
+    setManualError("");
+
+    try {
+      await createManualEntry(
+        project.id,
+        manualIssueId || null,
+        totalMins,
+        manualDesc.trim(),
+        manualDate
+      );
+      setManualHours("");
+      setManualMinutes("");
+      setManualDesc("");
+      setManualIssueId("");
+      await fetchReportsData();
+    } catch (err: unknown) {
+      console.error(err);
+      setManualError(err instanceof Error ? err.message : "Gagal menyimpan entri manual.");
+    } finally {
+      setManualActionLoading(false);
+    }
+  };
+
+  const handleGenerateTimesheet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!periodStart || !periodEnd) {
+      setGenerateError("Pilih tanggal awal dan akhir periode.");
+      return;
+    }
+    if (new Date(periodStart) > new Date(periodEnd)) {
+      setGenerateError("Tanggal awal tidak boleh melebihi tanggal akhir.");
+      return;
+    }
+
+    setGenerateLoading(true);
+    setGenerateError("");
+
+    try {
+      await createTimesheet(project.id, periodStart, periodEnd);
+      setIsGenerateOpen(false);
+      setPeriodStart("");
+      setPeriodEnd("");
+      await fetchReportsData();
+    } catch (err: unknown) {
+      console.error(err);
+      setGenerateError(err instanceof Error ? err.message : "Gagal membuat timesheet.");
+    } finally {
+      setGenerateLoading(false);
+    }
+  };
+
+  const handleSubmitTimesheetTrigger = async (tsId: string) => {
+    if (!confirm("Kirim timesheet ini untuk diajukan ke manajer proyek?")) return;
+    try {
+      await submitTimesheet(tsId);
+      await fetchReportsData();
+    } catch (err: unknown) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Gagal mengirimkan timesheet.");
+    }
+  };
+
+  const handleReviewTimesheet = async (decision: "approved" | "rejected") => {
+    if (!timesheetDetail) return;
+    if (!confirm(`Apakah Anda yakin ingin ${decision === "approved" ? "menyetujui" : "menolak"} timesheet ini?`)) return;
+
+    setApprovalActionLoading(true);
+    setApprovalError("");
+
+    try {
+      const updated = await approveTimesheet(timesheetDetail.id, decision, approvalNote.trim() || undefined);
+      setTimesheetDetail((prev) => (prev ? { ...prev, status: updated.status } : null));
+      await fetchReportsData();
+      if (selectedTimesheetId) {
+        await loadTimesheetDetail(selectedTimesheetId);
+      }
+    } catch (err: unknown) {
+      console.error(err);
+      setApprovalError(err instanceof Error ? err.message : "Gagal memproses persetujuan.");
+    } finally {
+      setApprovalActionLoading(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "approved":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Approved</span>;
+      case "rejected":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-destructive/10 text-destructive border border-destructive/20">Rejected</span>;
+      case "submitted":
+        return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Submitted</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-secondary/80 text-muted-foreground border border-border">Draft</span>;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="h-8 w-48 bg-muted animate-pulse rounded" />
         </div>
-
-        {/* Quick info list */}
-        <div className="border border-border bg-card p-4 rounded-md flex flex-col justify-between">
-          <h3 className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Distribusi Waktu Tim</h3>
-          <div className="divide-y divide-border text-xs">
-            <div className="flex justify-between py-1.5">
-              <span className="text-muted-foreground">Engineering</span>
-              <span className="font-semibold text-foreground">3j 45m</span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-muted-foreground">UI/UX Design</span>
-              <span className="font-semibold text-foreground">2j 0m</span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-muted-foreground">Management &amp; Planning</span>
-              <span className="font-semibold text-foreground">45m</span>
-            </div>
-          </div>
+        <div className="space-y-4">
+          <div className="h-32 w-full bg-muted animate-pulse rounded-md" />
+          <div className="h-44 w-full bg-muted animate-pulse rounded-md" />
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 pb-12">
+      {/* Header & Sub-Tabs Navigation */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3 gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Timesheets — {project.name}</h2>
+          <p className="text-xs text-muted-foreground">Kelola entri waktu kerja manual dan persetujuan berkas timesheet.</p>
+        </div>
+        <div className="flex items-center bg-secondary/15 p-0.5 rounded-md border border-border shrink-0 self-start sm:self-auto">
+          <button
+            onClick={() => setSubTab("timesheets")}
+            className={`px-3 py-1 text-xs rounded-sm font-medium transition-all cursor-pointer ${
+              subTab === "timesheets" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Timesheet &amp; Approval
+          </button>
+          <button
+            onClick={() => setSubTab("manual")}
+            className={`px-3 py-1 text-xs rounded-sm font-medium transition-all cursor-pointer ${
+              subTab === "manual" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Waktu Manual (Manual Entry)
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* --- SUB-TAB: TIMESHEETS --- */}
+      {subTab === "timesheets" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-secondary/5 p-3 rounded-md border border-border">
+            <div className="flex items-center gap-2">
+              {isManagerOrAdmin ? (
+                <div className="flex items-center bg-secondary/25 p-0.5 rounded border border-border">
+                  <button
+                    onClick={() => setViewMode("personal")}
+                    className={`px-2.5 py-0.5 text-[11px] rounded transition-all cursor-pointer ${
+                      viewMode === "personal" ? "bg-background text-foreground shadow-sm font-semibold" : "text-muted-foreground"
+                    }`}
+                  >
+                    Timesheet Saya
+                  </button>
+                  <button
+                    onClick={() => setViewMode("team")}
+                    className={`px-2.5 py-0.5 text-[11px] rounded transition-all cursor-pointer ${
+                      viewMode === "team" ? "bg-background text-foreground shadow-sm font-semibold" : "text-muted-foreground"
+                    }`}
+                  >
+                    Persetujuan Tim
+                  </button>
+                </div>
+              ) : (
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Berkas Timesheet Anda</span>
+              )}
+            </div>
+            <Button
+              onClick={() => {
+                setGenerateError("");
+                setIsGenerateOpen(true);
+              }}
+              className="h-8 text-xs font-medium cursor-pointer self-start sm:self-auto"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Buat Timesheet
+            </Button>
+          </div>
+
+          {/* List display */}
+          <div className="border border-border rounded-md overflow-hidden bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-secondary/40 border-b border-border text-muted-foreground uppercase text-[10px] tracking-wider font-semibold">
+                    {isManagerOrAdmin && viewMode === "team" && <th className="p-3">Karyawan</th>}
+                    <th className="p-3">Periode</th>
+                    <th className="p-3 text-right">Total Durasi</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {displayTimesheets.length === 0 ? (
+                    <tr>
+                      <td colSpan={isManagerOrAdmin && viewMode === "team" ? 5 : 4} className="p-6 text-center text-muted-foreground italic">
+                        Tidak ada berkas timesheet ditemukan.
+                      </td>
+                    </tr>
+                  ) : (
+                    displayTimesheets.map((ts) => (
+                      <tr key={ts.id} className="hover:bg-accent/20 transition-colors">
+                        {isManagerOrAdmin && viewMode === "team" && (
+                          <td className="p-3 font-medium text-foreground">
+                            <div>{ts.user?.name || "Karyawan"}</div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">{ts.user?.email}</div>
+                          </td>
+                        )}
+                        <td className="p-3">
+                          <button
+                            onClick={() => {
+                              setSelectedTimesheetId(ts.id);
+                              loadTimesheetDetail(ts.id);
+                            }}
+                            className="font-semibold text-foreground hover:underline text-left cursor-pointer"
+                          >
+                            {new Date(ts.periodStart).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - {new Date(ts.periodEnd).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                          </button>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">Dibuat pada {new Date(ts.createdAt).toLocaleDateString("id-ID")}</div>
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-foreground">
+                          {formatMinutes(ts.totalMinutes)}
+                        </td>
+                        <td className="p-3 text-center">
+                          {getStatusBadge(ts.status)}
+                        </td>
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedTimesheetId(ts.id);
+                                loadTimesheetDetail(ts.id);
+                              }}
+                              className="h-7 text-[10px] border-border bg-transparent hover:bg-accent cursor-pointer"
+                            >
+                              Detail
+                            </Button>
+                            {ts.status === "draft" && ts.userId === session?.user?.id && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleSubmitTimesheetTrigger(ts.id)}
+                                className="h-7 text-[10px] cursor-pointer"
+                              >
+                                Kirim
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- SUB-TAB: MANUAL ENTRIES --- */}
+      {subTab === "manual" && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Form Create Manual Entry */}
+          <div className="border border-border bg-card p-4 rounded-md space-y-4 h-fit">
+            <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider border-b border-border pb-2">
+              Input Waktu Manual
+            </h3>
+            <form onSubmit={handleCreateManualEntry} className="space-y-3.5">
+              {manualError && (
+                <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+                  <span>{manualError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="man-date" className="text-xs text-muted-foreground">Tanggal Entri <span className="text-destructive">*</span></Label>
+                <Input
+                  id="man-date"
+                  type="date"
+                  required
+                  value={manualDate}
+                  onChange={(e) => setManualDate(e.target.value)}
+                  className="text-xs h-8 border-border bg-input"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Durasi Kerja <span className="text-destructive">*</span></Label>
+                <div className="flex gap-2 items-center">
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={manualHours}
+                      onChange={(e) => setManualHours(e.target.value)}
+                      className="text-xs h-8 border-border bg-input text-right"
+                    />
+                    <span className="text-[11px] text-muted-foreground">Jam</span>
+                  </div>
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="59"
+                      placeholder="0"
+                      value={manualMinutes}
+                      onChange={(e) => setManualMinutes(e.target.value)}
+                      className="text-xs h-8 border-border bg-input text-right"
+                    />
+                    <span className="text-[11px] text-muted-foreground">Menit</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="man-issue" className="text-xs text-muted-foreground">Terkait Issue (Opsional)</Label>
+                <select
+                  id="man-issue"
+                  value={manualIssueId}
+                  onChange={(e) => setManualIssueId(e.target.value)}
+                  className="w-full text-xs h-8 rounded-md border border-border bg-input px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">-- Pilih Issue --</option>
+                  {issues.map((issue) => (
+                    <option key={issue.id} value={issue.id}>
+                      {issue.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="man-desc" className="text-xs text-muted-foreground">Aktivitas Pekerjaan <span className="text-destructive">*</span></Label>
+                <textarea
+                  id="man-desc"
+                  required
+                  rows={3}
+                  placeholder="Redesign layout navbar, meeting mingguan dev, dll."
+                  value={manualDesc}
+                  onChange={(e) => setManualDesc(e.target.value)}
+                  className="w-full rounded-md border border-border bg-input p-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring resize-none placeholder-muted-foreground"
+                />
+              </div>
+
+              <Button type="submit" disabled={manualActionLoading} className="w-full h-8 text-xs font-semibold cursor-pointer">
+                {manualActionLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Simpan Entri"
+                )}
+              </Button>
+            </form>
+          </div>
+
+          {/* List Manual Entries */}
+          <div className="md:col-span-2 border border-border rounded-md overflow-hidden bg-card flex flex-col">
+            <div className="py-2 px-3 bg-secondary/50 border-b border-border text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Daftar Entri Waktu Manual Anda
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-secondary/20 border-b border-border text-muted-foreground uppercase text-[10px] tracking-wider font-semibold">
+                    <th className="p-2.5">Tanggal</th>
+                    <th className="p-2.5">Deskripsi</th>
+                    <th className="p-2.5 text-right">Durasi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {manualEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="p-6 text-center text-muted-foreground italic">
+                        Belum ada entri waktu manual.
+                      </td>
+                    </tr>
+                  ) : (
+                    manualEntries.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-accent/10 transition-colors">
+                        <td className="p-2.5 font-medium text-foreground">
+                          {new Date(entry.entryDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                        </td>
+                        <td className="p-2.5">
+                          <p className="text-foreground">{entry.description}</p>
+                          {entry.issueId && (
+                            <span className="inline-block mt-0.5 text-[10px] font-semibold text-primary">
+                              ID Tiket: {issues.find((i) => i.id === entry.issueId)?.title || "Terlampir"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-right font-mono font-bold text-foreground">
+                          {formatMinutes(entry.durationMinutes)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- DIALOG: GENERATE TIMESHEET (Buat baru) --- */}
+      <Dialog open={isGenerateOpen} onOpenChange={setIsGenerateOpen}>
+        <DialogContent className="sm:max-w-[400px] bg-background border-border text-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Buat Berkas Timesheet Baru</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleGenerateTimesheet} className="space-y-4">
+            {generateError && (
+              <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+                <span>{generateError}</span>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground leading-normal">
+              Sistem akan otomatis menghitung dan mengagregasikan seluruh total jam kerja dari pelacakan otomatis desktop (*time blocks*) ditambah dengan *manual entries* Anda di proyek ini dalam rentang periode yang ditentukan.
+            </p>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="start-date" className="text-xs text-muted-foreground">Mulai Periode <span className="text-destructive">*</span></Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  required
+                  value={periodStart}
+                  onChange={(e) => setPeriodStart(e.target.value)}
+                  className="text-xs h-8 border-border bg-input"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="end-date" className="text-xs text-muted-foreground">Akhir Periode <span className="text-destructive">*</span></Label>
+                <Input
+                  id="end-date"
+                  type="date"
+                  required
+                  value={periodEnd}
+                  onChange={(e) => setPeriodEnd(e.target.value)}
+                  className="text-xs h-8 border-border bg-input"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="p-0 mt-6 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsGenerateOpen(false)}
+                className="h-8 text-xs border-border bg-transparent hover:bg-accent cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button type="submit" disabled={generateLoading} className="h-8 text-xs font-semibold cursor-pointer">
+                {generateLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menyusun...
+                  </>
+                ) : (
+                  "Generate Timesheet"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- LIGHTBOX MODAL: DETAIL TIMESHEET & PERSATUJUAN --- */}
+      <Dialog
+        open={selectedTimesheetId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedTimesheetId(null);
+            setTimesheetDetail(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px] bg-background border-border text-foreground max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Detail Berkas Timesheet</DialogTitle>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="py-12 flex justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : detailError ? (
+            <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive my-4">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+              <span>{detailError}</span>
+            </div>
+          ) : timesheetDetail ? (
+            <div className="space-y-5">
+              {/* Profile Block */}
+              <div className="flex justify-between items-start border-b border-border/60 pb-3">
+                <div className="space-y-0.5">
+                  <p className="text-xs text-muted-foreground">Pengaju Timesheet</p>
+                  <p className="font-bold text-sm text-foreground">{timesheetDetail.user?.name || "Karyawan"}</p>
+                  <p className="text-xs text-muted-foreground">{timesheetDetail.user?.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-right text-muted-foreground mb-1">Status</p>
+                  {getStatusBadge(timesheetDetail.status)}
+                </div>
+              </div>
+
+              {/* Aggregation hours details */}
+              <div className="grid grid-cols-2 gap-4 bg-secondary/15 p-3 rounded border border-border">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Periode Laporan</p>
+                  <p className="text-xs font-semibold text-foreground mt-0.5">
+                    {new Date(timesheetDetail.periodStart).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - {new Date(timesheetDetail.periodEnd).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Akumulasi Jam Kerja</p>
+                  <p className="text-xs font-mono font-bold text-primary mt-0.5">
+                    {formatMinutes(timesheetDetail.totalMinutes)} ({timesheetDetail.totalMinutes} Menit)
+                  </p>
+                </div>
+              </div>
+
+              {/* Review History */}
+              <div className="space-y-2">
+                <h4 className="text-[11px] font-semibold text-foreground uppercase tracking-wider border-b border-border pb-1">
+                  Log Riwayat Persetujuan
+                </h4>
+                {timesheetDetail.approvals && timesheetDetail.approvals.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-2">Belum ada keputusan peninjauan.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {timesheetDetail.approvals?.map((appr) => (
+                      <div key={appr.id} className="p-2.5 bg-secondary/10 border border-border rounded text-xs space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold text-foreground">{appr.reviewer?.name || "Reviewer"}</span>
+                          <span className={`text-[10px] font-bold ${appr.decision === "approved" ? "text-emerald-500" : "text-destructive"}`}>
+                            {appr.decision === "approved" ? "SETUJU" : "DITOLAK"}
+                          </span>
+                        </div>
+                        {appr.note && (
+                          <p className="text-muted-foreground italic border-t border-border/40 pt-1 mt-1 text-[11px]">
+                            &ldquo;{appr.note}&rdquo;
+                          </p>
+                        )}
+                        <p className="text-[10px] text-muted-foreground text-right mt-1">
+                          Ditinjau pada {new Date(appr.reviewedAt).toLocaleString("id-ID")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Manager Panel Action Form */}
+              {timesheetDetail.status === "submitted" && isManagerOrAdmin && timesheetDetail.userId !== session?.user?.id && (
+                <div className="border-t border-border pt-4 space-y-4">
+                  <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider text-amber-500">
+                    Aksi Persetujuan Manajer
+                  </h4>
+
+                  {approvalError && (
+                    <div className="flex items-start gap-2 text-xs border border-destructive/20 bg-destructive/10 p-2.5 rounded text-destructive">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-[1px]" />
+                      <span>{approvalError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="appr-note" className="text-xs text-muted-foreground">Catatan / Komentar Peninjauan (Opsional)</Label>
+                    <textarea
+                      id="appr-note"
+                      placeholder="Masukkan catatan persetujuan atau alasan penolakan..."
+                      value={approvalNote}
+                      onChange={(e) => setApprovalNote(e.target.value)}
+                      rows={2}
+                      className="w-full rounded-md border border-border bg-input p-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring placeholder-muted-foreground resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="destructive"
+                      disabled={approvalActionLoading}
+                      onClick={() => handleReviewTimesheet("rejected")}
+                      className="h-8 text-xs font-semibold cursor-pointer border border-destructive"
+                    >
+                      Tolak
+                    </Button>
+                    <Button
+                      disabled={approvalActionLoading}
+                      onClick={() => handleReviewTimesheet("approved")}
+                      className="h-8 text-xs font-semibold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                    >
+                      {approvalActionLoading ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          Memproses...
+                        </>
+                      ) : (
+                        "Setujui Timesheet"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter className="p-0 border-t border-border pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSelectedTimesheetId(null)}
+                  className="h-8 text-xs border-border bg-transparent hover:bg-accent cursor-pointer"
+                >
+                  Tutup
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

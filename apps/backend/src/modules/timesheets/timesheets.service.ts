@@ -14,6 +14,7 @@ import {
 } from '../../db/schema/timesheets';
 import { timeBlocks } from '../../db/schema/time-tracking';
 import { projectMemberships } from '../../db/schema/projects';
+import { user } from '../../db/schema/auth';
 import { CreateManualEntryDto } from './dto/create-manual-entry.dto';
 import { CreateTimesheetDto, ApproveTimesheetDto } from './dto/timesheet.dto';
 
@@ -143,14 +144,70 @@ export class TimesheetsService {
     return timesheet;
   }
 
-  async findTimesheets(userId: string, projectId?: string) {
+  async findTimesheets(userId: string, projectId?: string, isAdmin = false) {
+    if (projectId) {
+      let isAllowedAll = isAdmin;
+      if (!isAllowedAll) {
+        const [membership] = await this.db
+          .select()
+          .from(projectMemberships)
+          .where(
+            and(
+              eq(projectMemberships.projectId, projectId),
+              eq(projectMemberships.userId, userId),
+            ),
+          )
+          .limit(1);
+        if (membership && membership.role === 'manager') {
+          isAllowedAll = true;
+        }
+      }
+
+      if (isAllowedAll) {
+        return this.db
+          .select({
+            id: timesheets.id,
+            userId: timesheets.userId,
+            projectId: timesheets.projectId,
+            periodStart: timesheets.periodStart,
+            periodEnd: timesheets.periodEnd,
+            totalMinutes: timesheets.totalMinutes,
+            status: timesheets.status,
+            createdAt: timesheets.createdAt,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+            },
+          })
+          .from(timesheets)
+          .innerJoin(user, eq(timesheets.userId, user.id))
+          .where(eq(timesheets.projectId, projectId));
+      }
+    }
+
     const conditions: any[] = [eq(timesheets.userId, userId)];
     if (projectId) {
       conditions.push(eq(timesheets.projectId, projectId));
     }
     return this.db
-      .select()
+      .select({
+        id: timesheets.id,
+        userId: timesheets.userId,
+        projectId: timesheets.projectId,
+        periodStart: timesheets.periodStart,
+        periodEnd: timesheets.periodEnd,
+        totalMinutes: timesheets.totalMinutes,
+        status: timesheets.status,
+        createdAt: timesheets.createdAt,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        },
+      })
       .from(timesheets)
+      .innerJoin(user, eq(timesheets.userId, user.id))
       .where(and(...conditions));
   }
 
@@ -236,8 +293,23 @@ export class TimesheetsService {
     isAdmin: boolean,
   ) {
     const [timesheet] = await this.db
-      .select()
+      .select({
+        id: timesheets.id,
+        userId: timesheets.userId,
+        projectId: timesheets.projectId,
+        periodStart: timesheets.periodStart,
+        periodEnd: timesheets.periodEnd,
+        totalMinutes: timesheets.totalMinutes,
+        status: timesheets.status,
+        createdAt: timesheets.createdAt,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        },
+      })
       .from(timesheets)
+      .innerJoin(user, eq(timesheets.userId, user.id))
       .where(eq(timesheets.id, timesheetId))
       .limit(1);
 
@@ -265,8 +337,21 @@ export class TimesheetsService {
     }
 
     const approvals = await this.db
-      .select()
+      .select({
+        id: timesheetApprovals.id,
+        timesheetId: timesheetApprovals.timesheetId,
+        reviewedBy: timesheetApprovals.reviewedBy,
+        decision: timesheetApprovals.decision,
+        note: timesheetApprovals.note,
+        reviewedAt: timesheetApprovals.reviewedAt,
+        reviewer: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        },
+      })
       .from(timesheetApprovals)
+      .innerJoin(user, eq(timesheetApprovals.reviewedBy, user.id))
       .where(eq(timesheetApprovals.timesheetId, timesheetId));
 
     return { ...timesheet, approvals };

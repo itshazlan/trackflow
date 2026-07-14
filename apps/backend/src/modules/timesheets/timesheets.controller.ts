@@ -45,7 +45,7 @@ export class TimesheetsController {
 
   @Get('timesheets')
   findTimesheets(@Req() req: any, @Query('projectId') projectId?: string) {
-    return this.timesheetsService.findTimesheets(req.user.id, projectId);
+    return this.timesheetsService.findTimesheets(req.user.id, projectId, req.user.isAdmin);
   }
 
   @Get('timesheets/:id')
