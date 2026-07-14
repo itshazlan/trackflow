@@ -374,4 +374,61 @@ describe('Issues and Workflow Statuses (e2e)', () => {
       expect(res.body).toHaveLength(0);
     });
   });
+
+  describe('Issue Updating and Permissions', () => {
+    it('should allow the Project Manager to update the issue', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/projects/${projectId}/issues/${issueId}`)
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .send({
+          title: 'Updated Title by Manager',
+          description: 'Updated description by manager',
+        })
+        .expect(200);
+
+      expect(res.body.title).toBe('Updated Title by Manager');
+      expect(res.body.description).toBe('Updated description by manager');
+    });
+
+    it('should allow the Creator of the issue (Developer) to update the issue', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/projects/${projectId}/issues/${issueId}`)
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .send({
+          title: 'Updated Title by Creator',
+        })
+        .expect(200);
+
+      expect(res.body.title).toBe('Updated Title by Creator');
+    });
+
+    it('should forbid a project member who is not assignee/creator/manager from updating the issue (403)', async () => {
+      // Reporter is a member of the project but not manager, and is not assignee/creator of the issue
+      await request(app.getHttpServer())
+        .patch(`/projects/${projectId}/issues/${issueId}`)
+        .set('x-mock-user-id', mockUsers.reporter.id)
+        .send({
+          title: 'Unauthorized Edit Attempt',
+        })
+        .expect(403);
+    });
+
+    it('should ignore attempts to modify protected fields like number, projectId, and createdBy', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/projects/${projectId}/issues/${issueId}`)
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .send({
+          title: 'Title after protected fields check',
+          number: 9999,
+          projectId: '00000000-0000-0000-0000-000000000000',
+          createdBy: 'some-other-user-id',
+        })
+        .expect(200);
+
+      expect(res.body.title).toBe('Title after protected fields check');
+      expect(res.body.number).not.toBe(9999);
+      expect(res.body.projectId).toBe(projectId);
+      expect(res.body.createdBy).toBe(mockUsers.developer.id);
+    });
+  });
 });

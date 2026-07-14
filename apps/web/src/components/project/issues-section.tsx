@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   getIssues,
   createIssue,
+  updateIssue,
   deleteIssue,
   getProjectStatuses,
   getTrackers,
@@ -112,6 +114,7 @@ interface IssuesSectionProps {
 
 export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<UserSession | null>(null);
   const [issuesList, setIssuesList] = useState<Issue[]>([]);
   const [statuses, setStatuses] = useState<IssueStatus[]>([]);
@@ -132,6 +135,20 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const [dueDate, setDueDate] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
+
+  // Edit Issue Modal state
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editTrackerId, setEditTrackerId] = useState("");
+  const [editStatusId, setEditStatusId] = useState("");
+  const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>("medium");
+  const [editAssigneeId, setEditAssigneeId] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editSelectedFiles, setEditSelectedFiles] = useState<File[]>([]);
+  const [editDragging, setEditDragging] = useState(false);
 
   // Create Issue Attachments state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -311,6 +328,92 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     }
   };
 
+  const handleOpenEditModal = () => {
+    if (!selectedIssue) return;
+    setEditTitle(selectedIssue.title || "");
+    setEditDescription(selectedIssue.description || "");
+    setEditTrackerId(selectedIssue.trackerId || "");
+    setEditStatusId(selectedIssue.statusId || "");
+    setEditPriority(selectedIssue.priority || "medium");
+    setEditAssigneeId(selectedIssue.assigneeId || "");
+    setEditDueDate(selectedIssue.dueDate ? selectedIssue.dueDate.split("T")[0] : "");
+    setEditSelectedFiles([]);
+    setEditError("");
+    setIsEditOpen(true);
+  };
+
+  const handleSaveEditIssue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIssue) return;
+
+    setEditLoading(true);
+    setEditError("");
+
+    try {
+      if (!editTitle.trim()) {
+        throw new Error("Judul tiket wajib diisi.");
+      }
+
+      // Update issue details
+      const updatedIssue = await updateIssue(projectId, selectedIssue.id, {
+        title: editTitle,
+        description: editDescription || null,
+        trackerId: editTrackerId,
+        statusId: editStatusId,
+        priority: editPriority,
+        assigneeId: editAssigneeId || null,
+        dueDate: editDueDate || null,
+      });
+
+      // Upload selected files sequentially
+      for (const file of editSelectedFiles) {
+        await createIssueAttachment(selectedIssue.id, file);
+      }
+
+      // Invalidate TanStack Query caches
+      queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+
+      // Refresh attachments in local details state
+      const updatedAttachments = await getIssueAttachments(selectedIssue.id);
+      setAttachments(updatedAttachments);
+
+      // Construct next issue state
+      const matchingTracker = trackers.find((t) => t.id === editTrackerId);
+      const matchingStatus = statuses.find((s) => s.id === editStatusId);
+      const matchingAssignee = members.find((m) => m.id === editAssigneeId);
+
+      const nextIssue: Issue = {
+        ...selectedIssue,
+        title: editTitle,
+        description: editDescription || null,
+        trackerId: editTrackerId,
+        statusId: editStatusId,
+        priority: editPriority,
+        assigneeId: editAssigneeId || null,
+        dueDate: editDueDate || null,
+        tracker: matchingTracker ? { id: matchingTracker.id, name: matchingTracker.name } : selectedIssue.tracker,
+        status: matchingStatus ? { id: matchingStatus.id, name: matchingStatus.name } : selectedIssue.status,
+        assignee: matchingAssignee ? { id: matchingAssignee.id, name: matchingAssignee.name, email: matchingAssignee.email } : null,
+      };
+
+      setSelectedIssue(nextIssue);
+
+      setIssuesList((prev) =>
+        prev.map((iss) =>
+          iss.id === selectedIssue.id ? nextIssue : iss
+        )
+      );
+
+      setIsEditOpen(false);
+      setEditSelectedFiles([]);
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : "Gagal menyimpan perubahan tiket.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const handleStatusChange = async (issueId: string, newStatusId: string) => {
     setDetailLoading(true);
     setDetailError("");
@@ -361,6 +464,14 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   );
   const userRole = currentMember?.role;
   const isAdmin = session?.user?.isAdmin;
+
+  // Determine if user can edit this issue
+  const isIssueAssignee = selectedIssue?.assigneeId === session?.user?.id;
+  const isIssueCreator = selectedIssue?.createdBy === session?.user?.id;
+  const isProjectManager = userRole === "manager";
+  const isSystemAdmin = isAdmin;
+
+  const canEdit = selectedIssue && (isIssueAssignee || isIssueCreator || isProjectManager || isSystemAdmin);
 
   // Filter issues
   const filteredIssues = issuesList.filter((iss) => {
@@ -800,6 +911,297 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Issue Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[420px] max-h-[85vh] overflow-y-auto">
+          <form onSubmit={handleSaveEditIssue}>
+            <DialogHeader>
+              <DialogTitle className="text-[14.5px] font-semibold">Edit Tiket</DialogTitle>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-3.5 py-4">
+              {editError && (
+                <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive leading-normal">
+                  <AlertCircle className="h-3.5 w-3.5 mt-[1px] shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-tracker-select" className="text-[11px] font-medium text-muted-foreground">
+                  Tracker / Tipe Tiket
+                </Label>
+                <select
+                  id="edit-tracker-select"
+                  value={editTrackerId}
+                  onChange={(e) => setEditTrackerId(e.target.value)}
+                  className="h-8 w-full rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
+                  disabled={editLoading}
+                >
+                  {trackers.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-issue-title" className="text-[11px] font-medium text-muted-foreground">
+                  Judul Tiket
+                </Label>
+                <Input
+                  id="edit-issue-title"
+                  type="text"
+                  placeholder="Masukkan judul singkat..."
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  required
+                  className="h-8 text-[12.5px]"
+                  disabled={editLoading}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-issue-desc" className="text-[11px] font-medium text-muted-foreground">
+                  Deskripsi Masalah
+                </Label>
+                <textarea
+                  id="edit-issue-desc"
+                  placeholder="Detail deskripsi tugas atau tiket..."
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  disabled={editLoading}
+                />
+              </div>
+
+              {/* Existing attachments list */}
+              {attachments.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-[11px] font-medium text-muted-foreground">
+                    Lampiran Saat Ini ({attachments.length})
+                  </Label>
+                  <div className="flex flex-col gap-1.5 max-h-[120px] overflow-y-auto pr-1 border border-border rounded-md p-2 bg-muted/10">
+                    {attachments.map((att) => (
+                      <div
+                        key={att.id}
+                        className="flex items-center justify-between border border-border/80 bg-background px-2.5 py-1 rounded text-[11.5px] group gap-2"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          {getFileIcon(att.fileName)}
+                          <span className="truncate font-medium text-foreground">{att.fileName}</span>
+                        </div>
+                        {(att.uploadedBy === session?.user?.id || session?.user?.isAdmin) && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAttachment(att.id)}
+                            className="text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
+                            disabled={editLoading}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upload new attachments */}
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                  <Paperclip className="h-3 w-3" />
+                  Tambah Lampiran Baru
+                </Label>
+                <div
+                  className={`flex flex-col gap-2 rounded-md border p-2.5 bg-card/30 transition-all ${
+                    editDragging ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-input"
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setEditDragging(true);
+                  }}
+                  onDragLeave={() => setEditDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setEditDragging(false);
+                    if (e.dataTransfer.files) {
+                      const filesArr = Array.from(e.dataTransfer.files);
+                      setEditSelectedFiles((prev) => [...prev, ...filesArr]);
+                    }
+                  }}
+                >
+                  <input
+                    type="file"
+                    multiple
+                    id="edit-issue-files-input"
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        const filesArr = Array.from(e.target.files);
+                        setEditSelectedFiles((prev) => [...prev, ...filesArr]);
+                      }
+                    }}
+                    className="hidden"
+                    disabled={editLoading}
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground">
+                      {editSelectedFiles.length === 0
+                        ? "Pilih atau seret file ke sini..."
+                        : `${editSelectedFiles.length} file baru dipilih`}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10.5px] font-medium px-2"
+                      onClick={() => document.getElementById("edit-issue-files-input")?.click()}
+                      disabled={editLoading}
+                    >
+                      Pilih File
+                    </Button>
+                  </div>
+                  {editSelectedFiles.length > 0 && (
+                    <div className="flex flex-col gap-1 mt-1 border-t border-border/50 pt-1.5 max-h-[100px] overflow-y-auto pr-1">
+                      {editSelectedFiles.map((file, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between bg-muted/40 hover:bg-muted/70 px-2 py-0.5 rounded text-[11.5px] text-foreground group gap-2"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            {getFileIcon(file.name)}
+                            <span className="truncate font-medium">{file.name}</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-2">
+                            {(file.size / 1024).toFixed(1)} KB
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
+                              onClick={() =>
+                                setEditSelectedFiles((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                              disabled={editLoading}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="h-px bg-border my-1" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="edit-status-select" className="text-[11px] font-medium text-muted-foreground">
+                    Status
+                  </Label>
+                  <select
+                    id="edit-status-select"
+                    value={editStatusId}
+                    onChange={(e) => setEditStatusId(e.target.value)}
+                    className="h-8 rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
+                    disabled={editLoading}
+                  >
+                    {statuses.map((st) => {
+                      const isRestricted = st.restrictedToRole !== null;
+                      const isRoleMatched = st.restrictedToRole === userRole;
+                      const disabled = isRestricted && !isRoleMatched && !isAdmin;
+
+                      return (
+                        <option key={st.id} value={st.id} disabled={disabled}>
+                          {st.name} {disabled ? "🔒 (Hanya QA)" : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="edit-issue-priority" className="text-[11px] font-medium text-muted-foreground">
+                    Prioritas
+                  </Label>
+                  <select
+                    id="edit-issue-priority"
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(e.target.value as 'low' | 'medium' | 'high' | 'urgent')}
+                    className="h-8 rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
+                    disabled={editLoading}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="edit-issue-assignee" className="text-[11px] font-medium text-muted-foreground">
+                    Assignee
+                  </Label>
+                  <select
+                    id="edit-issue-assignee"
+                    value={editAssigneeId}
+                    onChange={(e) => setEditAssigneeId(e.target.value)}
+                    className="h-8 rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
+                    disabled={editLoading}
+                  >
+                    <option value="">Belum Ditugaskan</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="edit-issue-duedate" className="text-[11px] font-medium text-muted-foreground">
+                    Due Date (Batas Waktu)
+                  </Label>
+                  <Input
+                    id="edit-issue-duedate"
+                    type="date"
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    className="h-8 text-[12.5px]"
+                    disabled={editLoading}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 text-[12px]"
+                onClick={() => setIsEditOpen(false)}
+                disabled={editLoading}
+              >
+                Batal
+              </Button>
+              <Button type="submit" className="h-8 text-[12px]" disabled={editLoading}>
+                {editLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Simpan Perubahan"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Detail Issue Dialog/Drawer */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="sm:max-w-[460px]">
@@ -1006,15 +1408,28 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                   Hapus Tiket
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 text-[12px]"
-                  onClick={() => setIsDetailOpen(false)}
-                  disabled={detailLoading}
-                >
-                  Tutup
-                </Button>
+                <div className="flex gap-2">
+                  {canEdit && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-8 text-[12px] font-medium"
+                      onClick={handleOpenEditModal}
+                      disabled={detailLoading}
+                    >
+                      Edit Tiket
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 text-[12px]"
+                    onClick={() => setIsDetailOpen(false)}
+                    disabled={detailLoading}
+                  >
+                    Tutup
+                  </Button>
+                </div>
               </DialogFooter>
             </div>
           )}

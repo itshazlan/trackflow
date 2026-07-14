@@ -127,6 +127,8 @@ export class IssuesController {
       id,
       updateIssueDto,
       req.user.id,
+      req.user.isAdmin,
+      req.projectRole,
     );
   }
 

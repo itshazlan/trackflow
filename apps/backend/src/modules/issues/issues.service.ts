@@ -216,6 +216,8 @@ export class IssuesService {
     id: string,
     updateIssueDto: UpdateIssueDto,
     userId: string,
+    isAdmin?: boolean,
+    projectRole?: string,
   ) {
     const [existingIssue] = await this.db
       .select()
@@ -225,6 +227,17 @@ export class IssuesService {
 
     if (!existingIssue) {
       throw new NotFoundException(`Issue with ID ${id} not found`);
+    }
+
+    // Check permission: Assignee, Creator, Manager, or Admin
+    const isAssignee = existingIssue.assigneeId === userId;
+    const isCreator = existingIssue.createdBy === userId;
+    const isManager = projectRole === 'manager' || isAdmin;
+
+    if (!isAssignee && !isCreator && !isManager) {
+      throw new ForbiddenException(
+        'Hanya Assignee, Pembuat issue, Manager proyek, atau Admin yang dapat memperbarui issue ini',
+      );
     }
 
     // 1. Transition validation (if statusId is changing)
@@ -278,6 +291,12 @@ export class IssuesService {
           ? null
           : String(updateIssueDto.estimatedHours);
     }
+
+    // Ensure protected/unmodifiable fields are stripped from the payload
+    delete updatePayload.number;
+    delete updatePayload.projectId;
+    delete updatePayload.createdBy;
+    delete updatePayload.id;
 
     // 2. Perform Update
     const [updated] = await this.db
