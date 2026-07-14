@@ -51,7 +51,9 @@ export class ReportsService {
       .where(and(...blockConditions));
 
     // 2. Fetch Manual Time Entries
-    const manualConditions: any[] = [];
+    const manualConditions: any[] = [
+      eq(manualTimeEntries.approvalStatus, 'approved'),
+    ];
     if (projectId)
       manualConditions.push(eq(manualTimeEntries.projectId, projectId));
     if (userId) manualConditions.push(eq(manualTimeEntries.userId, userId));
