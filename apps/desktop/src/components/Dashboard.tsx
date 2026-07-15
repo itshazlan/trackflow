@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, BASE_URL } from '../lib/api';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { ChevronDown, LogOut, Play, Shield, User, Wifi } from 'lucide-react';
 
 interface DashboardProps {
@@ -12,6 +13,12 @@ interface TimerStateResponse {
   status: 'Idle' | 'Running' | 'Paused';
   start_time: number | null;
   accumulated_seconds: number;
+}
+
+interface ScreenshotEventPayload {
+  path: string;
+  window_title: string;
+  app_name: string;
 }
 
 export function Dashboard({ user, onLogout }: DashboardProps) {
@@ -34,6 +41,13 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
   // Slicing: Accessibility Permission state
   const [hasPermission, setHasPermission] = useState(true);
+
+  // Slicing: Screenshot Toast notification states
+  const [showToast, setShowToast] = useState(false);
+  const [toastDetails, setToastDetails] = useState<{
+    appName: string;
+    windowTitle: string;
+  } | null>(null);
 
   // Sync / restore timer state helper
   const syncTimerState = async () => {
@@ -80,6 +94,48 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     }, 5000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  // Listen for screenshot-taken event from Rust
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const setupListener = async () => {
+      try {
+        const unlisten = await listen<ScreenshotEventPayload>('screenshot-taken', (event) => {
+          const payload = event.payload;
+          setToastDetails({
+            appName: payload.app_name || 'System',
+            windowTitle: payload.window_title || 'Active Screen',
+          });
+          setShowToast(true);
+
+          // Play camera shutter sound
+          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-84.wav');
+          audio.volume = 0.25;
+          audio.play().catch((err) => {
+            console.warn('[Dashboard Shutter] Audio play failed:', err);
+          });
+
+          // Automatically hide toast after 4 seconds
+          if (toastTimeout) clearTimeout(toastTimeout);
+          toastTimeout = setTimeout(() => {
+            setShowToast(false);
+          }, 4000);
+        });
+        unlistenFn = unlisten;
+      } catch (err) {
+        console.error('[Dashboard Notification] Failed to listen to screenshot-taken event:', err);
+      }
+    };
+
+    void setupListener();
+
+    return () => {
+      if (unlistenFn) unlistenFn();
+      if (toastTimeout) clearTimeout(toastTimeout);
+    };
   }, []);
 
   // Initialize and restore active state on mount
@@ -500,6 +556,26 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         </div>
       </main>
+
+      {/* Toast Notification for Screenshot */}
+      {showToast && toastDetails && (
+        <div className="fixed bottom-12 left-4 right-4 z-50 rounded-lg border border-emerald-500/20 bg-emerald-950/90 backdrop-blur-md p-3.5 flex items-center space-x-3 shadow-lg shadow-emerald-950/20 animate-in slide-in-from-bottom-6 duration-300">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 animate-pulse">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+              Screenshot Captured
+            </h4>
+            <p className="text-[10px] text-foreground font-medium truncate mt-0.5">
+              {toastDetails.appName}
+            </p>
+            <p className="text-[9px] text-muted-foreground truncate leading-normal">
+              {toastDetails.windowTitle}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Footer bar */}
       <footer className="border-t border-border bg-card px-4 py-2 text-[9px] text-muted-foreground flex justify-between">
