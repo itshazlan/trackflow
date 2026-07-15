@@ -32,6 +32,9 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const [accumulatedSeconds, setAccumulatedSeconds] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  // Slicing: Accessibility Permission state
+  const [hasPermission, setHasPermission] = useState(true);
+
   // Sync / restore timer state helper
   const syncTimerState = async () => {
     try {
@@ -50,6 +53,31 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       console.error('[Dashboard Timer] Failed to sync timer state:', err);
     }
   };
+
+  // Check input hook accessibility permission periodically
+  useEffect(() => {
+    const checkPermission = async () => {
+      try {
+        const allowed = await invoke<boolean>('check_input_permission');
+        setHasPermission(allowed);
+      } catch (err) {
+        console.error('[Dashboard] Failed to check input permissions:', err);
+      }
+    };
+
+    void checkPermission();
+
+    const interval = setInterval(async () => {
+      try {
+        const allowed = await invoke<boolean>('check_input_permission');
+        setHasPermission(allowed);
+      } catch (err) {
+        console.error('[Dashboard] Failed to check input permissions:', err);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Initialize and restore active state on mount
   useEffect(() => {
@@ -261,6 +289,26 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
       {/* Main Container */}
       <main className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Permission Warning Banner */}
+        {!hasPermission && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3.5 flex flex-col space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start space-x-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-amber-500 shrink-0 mt-0.5"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-semibold text-amber-500">
+                  Accessibility Permission Required
+                </h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">
+                  TrackFlow requires Accessibility permission to measure global keyboard and mouse activity levels. Without it, your activity level will be recorded as "none".
+                </p>
+              </div>
+            </div>
+            <div className="text-[9px] text-muted-foreground bg-[#0a0a0c] p-2 rounded border border-border">
+              Go to <strong className="text-foreground">System Settings &gt; Privacy & Security &gt; Accessibility</strong> and enable <strong className="text-foreground">TrackFlow (or Terminal/VSCode if in development)</strong>.
+            </div>
+          </div>
+        )}
+
         {/* User Card */}
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
           <div className="flex items-center space-x-3">
