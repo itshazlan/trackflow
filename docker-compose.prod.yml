@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trackflow}
+      POSTGRES_USER: ${POSTGRES_USER:-trackflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trackflow_secure_pass}
+    ports:
+      - "127.0.0.1:5432:5432" # Hanya dapat diakses dari host local VM untuk keamanan
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-trackflow}:${POSTGRES_PASSWORD:-trackflow_secure_pass}@postgres:5432/${POSTGRES_DB:-trackflow}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL} # e.g., https://trackflow.mycompany.com/api/auth
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+    ports:
+      - "127.0.0.1:3000:3000" # Di-expose ke localhost saja, nanti di-proxy lewat Nginx/Caddy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:3000
+    ports:
+      - "127.0.0.1:3001:3000" # Di-expose ke localhost saja, nanti di-proxy lewat Nginx/Caddy
+
+volumes:
+  pgdata_prod:
