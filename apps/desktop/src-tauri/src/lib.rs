@@ -222,6 +222,16 @@ fn input_callback(event: rdev::Event) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn play_shutter_sound() {
+    let _ = std::process::Command::new("afplay")
+        .arg("/System/Library/Sounds/Tink.aiff")
+        .spawn();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn play_shutter_sound() {}
+
 fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<ScreenshotData, String> {
     use active_win_pos_rs::get_active_window;
     use xcap::Monitor;
@@ -260,6 +270,9 @@ fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<Screensh
         window_title,
         app_name
     );
+
+    // Play native system shutter sound
+    play_shutter_sound();
 
     // Emit event to frontend for visual notification/shutter sound
     let primary_path = saved_paths.first().cloned().unwrap_or_default();
