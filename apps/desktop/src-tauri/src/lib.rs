@@ -970,6 +970,46 @@ pub fn run() {
                 }
             });
 
+            // Spawn background application updater routine
+            let app_handle_updater = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Sleep 3 seconds after startup to let app initialize
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                println!("[Tauri Rust] Checking for application updates...");
+                use tauri_plugin_updater::UpdaterExt;
+                match app_handle_updater.updater() {
+                    Ok(updater) => {
+                        match updater.check().await {
+                            Ok(Some(update)) => {
+                                println!("[Tauri Rust] Found update: version={}, body={:?}", update.version, update.body);
+                                println!("[Tauri Rust] Automatically downloading and installing update...");
+                                match update.download_and_install(|chunk_length, content_length| {
+                                    println!("[Tauri Rust] Update download progress: chunk={}, total={:?}", chunk_length, content_length);
+                                }, || {
+                                    println!("[Tauri Rust] Update installed successfully! Relaunching...");
+                                }).await {
+                                    Ok(_) => {
+                                        app_handle_updater.restart();
+                                    }
+                                    Err(e) => {
+                                        println!("[Tauri Rust] Failed to install update: {}", e);
+                                    }
+                                }
+                            }
+                            Ok(None) => {
+                                println!("[Tauri Rust] Application is up-to-date (no updates found).");
+                            }
+                            Err(e) => {
+                                println!("[Tauri Rust] Failed to check for updates: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("[Tauri Rust] Failed to get updater instance: {}", e);
+                    }
+                }
+            });
+
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
