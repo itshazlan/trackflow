@@ -227,8 +227,19 @@ fn play_shutter_sound() {
 #[cfg(not(target_os = "macos"))]
 fn play_shutter_sound() {}
 
-fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<ScreenshotData, String> {
+fn get_current_active_window() -> (String, String) {
     use active_win_pos_rs::get_active_window;
+    match get_active_window() {
+        Ok(win) => {
+            let title = if win.title.trim().is_empty() { "Unknown".to_string() } else { win.title };
+            let app = if win.app_name.trim().is_empty() { "Unknown".to_string() } else { win.app_name };
+            (title, app)
+        }
+        Err(_) => ("Unknown".to_string(), "Unknown".to_string()),
+    }
+}
+
+fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<ScreenshotData, String> {
     use xcap::Monitor;
 
     let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -253,10 +264,7 @@ fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<Screensh
     let paths_str = saved_paths.join(",");
 
     // Get active window title and application name
-    let (window_title, app_name) = match get_active_window() {
-        Ok(win) => (win.title, win.app_name),
-        Err(_) => ("Unknown".to_string(), "Unknown".to_string()),
-    };
+    let (window_title, app_name) = get_current_active_window();
 
     println!(
         "[Tauri Rust] Screenshot captured! Monitors: {}, Paths: {}, Window: {} ({})",
@@ -353,11 +361,15 @@ fn start_background_tick_loop(
 
             // Read the captured screenshot data (if any)
             let screenshot_data = timer_state.current_screenshot.lock().unwrap().take();
-            let s_path = screenshot_data.as_ref().map(|s| s.screenshot_path.as_str());
-            let s_title = screenshot_data.as_ref().map(|s| s.active_window_title.as_str());
-            let s_app = screenshot_data.as_ref().map(|s| s.active_app_name.as_str());
+            let (s_path, s_title, s_app) = match screenshot_data {
+                Some(ref data) => (Some(data.screenshot_path.as_str()), data.active_window_title.clone(), data.active_app_name.clone()),
+                None => {
+                    let (win_title, app_name) = get_current_active_window();
+                    (None, win_title, app_name)
+                }
+            };
 
-            if let Err(e) = commit_block_to_db(&db_path, &project_id, &issue_id, block_start, now, k_count, m_count, activity, s_path, s_title, s_app) {
+            if let Err(e) = commit_block_to_db(&db_path, &project_id, &issue_id, block_start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app)) {
                 println!("[Tauri Rust] Error committing time block: {}", e);
             } else {
                 println!(
@@ -453,14 +465,18 @@ async fn pause_timer(
 
     // Read screenshot data (if already taken)
     let screenshot_data = timer_state.current_screenshot.lock().unwrap().take();
-    let s_path = screenshot_data.as_ref().map(|s| s.screenshot_path.as_str());
-    let s_title = screenshot_data.as_ref().map(|s| s.active_window_title.as_str());
-    let s_app = screenshot_data.as_ref().map(|s| s.active_app_name.as_str());
+    let (s_path, s_title, s_app) = match screenshot_data {
+        Some(ref data) => (Some(data.screenshot_path.as_str()), data.active_window_title.clone(), data.active_app_name.clone()),
+        None => {
+            let (win_title, app_name) = get_current_active_window();
+            (None, win_title, app_name)
+        }
+    };
 
     let mut current_block_start = timer_state.current_block_start.lock().unwrap();
     if let Some(start) = current_block_start.take() {
         if now > start {
-            if let Err(e) = commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, s_title, s_app) {
+            if let Err(e) = commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app)) {
                 println!("[Tauri Rust] Error committing partial block on pause: {}", e);
             } else {
                 println!(
@@ -512,14 +528,18 @@ async fn stop_timer(
         let activity = classify_activity(k_count, m_count);
 
         let screenshot_data = timer_state.current_screenshot.lock().unwrap().take();
-        let s_path = screenshot_data.as_ref().map(|s| s.screenshot_path.as_str());
-        let s_title = screenshot_data.as_ref().map(|s| s.active_window_title.as_str());
-        let s_app = screenshot_data.as_ref().map(|s| s.active_app_name.as_str());
+        let (s_path, s_title, s_app) = match screenshot_data {
+            Some(ref data) => (Some(data.screenshot_path.as_str()), data.active_window_title.clone(), data.active_app_name.clone()),
+            None => {
+                let (win_title, app_name) = get_current_active_window();
+                (None, win_title, app_name)
+            }
+        };
 
         let mut current_block_start = timer_state.current_block_start.lock().unwrap();
         if let Some(start) = current_block_start.take() {
             if now > start {
-                if let Err(e) = commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, s_title, s_app) {
+                if let Err(e) = commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app)) {
                     println!("[Tauri Rust] Error committing final partial block on stop: {}", e);
                 } else {
                     println!(
@@ -775,8 +795,14 @@ async fn sync_pending_blocks(
             activity: ActivityDto {
                 keyboard_count: block.keyboard_count,
                 mouse_count: block.mouse_count,
-                active_app_name: block.active_app_name.clone().unwrap_or_default(),
-                active_window_title: block.active_window_title.clone().unwrap_or_default(),
+                active_app_name: {
+                    let app = block.active_app_name.clone().unwrap_or_default();
+                    if app.trim().is_empty() { "Unknown".to_string() } else { app }
+                },
+                active_window_title: {
+                    let title = block.active_window_title.clone().unwrap_or_default();
+                    if title.trim().is_empty() { "Unknown".to_string() } else { title }
+                },
             },
         };
 
