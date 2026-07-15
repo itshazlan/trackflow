@@ -163,9 +163,9 @@ fn classify_activity(keyboard: u32, mouse: u32) -> &'static str {
     let total = keyboard + mouse;
     if total == 0 {
         "none"
-    } else if total <= 10 {
+    } else if total <= 20 {
         "low"
-    } else if total <= 50 {
+    } else if total <= 100 {
         "medium"
     } else {
         "high"
@@ -309,16 +309,16 @@ fn start_background_tick_loop(
     db_path: PathBuf,
 ) -> tokio::task::AbortHandle {
     let task = tokio::spawn(async move {
-        // Every 10 seconds for testing (production is 10 minutes)
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
+        // Every 10 minutes (600 seconds) for production tracking
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(600));
         // First tick resolves instantly, skip it
         interval.tick().await;
 
         loop {
             let timer_state = app_handle.state::<ActiveTimerState>();
 
-            // Calculate random offset within the 10-second block (e.g. 0 to 9 seconds)
-            let random_offset_secs = (chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0).abs() % 10) as u64;
+            // Calculate random offset within the 10-minute block (e.g. 0 to 599 seconds)
+            let random_offset_secs = (chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0).abs() % 600) as u64;
             
             // Spawn screenshot task
             let app_handle_clone = app_handle.clone();
@@ -349,7 +349,7 @@ fn start_background_tick_loop(
             let now = chrono::Utc::now().timestamp();
             let block_start = {
                 let mut curr = timer_state.current_block_start.lock().unwrap();
-                let start = curr.unwrap_or(now - 10);
+                let start = curr.unwrap_or(now - 600);
                 *curr = Some(now);
                 start
             };
@@ -373,7 +373,7 @@ fn start_background_tick_loop(
                 println!("[Tauri Rust] Error committing time block: {}", e);
             } else {
                 println!(
-                    "[Tauri Rust] Committed 10s block: Proj={}, Issue={}, Start={}, End={}, Keys={}, Mouse={}, Activity={}, Screenshot={:?}",
+                    "[Tauri Rust] Committed 10m block: Proj={}, Issue={}, Start={}, End={}, Keys={}, Mouse={}, Activity={}, Screenshot={:?}",
                     project_id, issue_id, block_start, now, k_count, m_count, activity, s_path
                 );
             }
