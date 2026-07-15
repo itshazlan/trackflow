@@ -24,7 +24,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -35,10 +35,10 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
+      "active": false,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE0RjE1NTJEODNEMEExMTUKUldRVm9kQ0RMVlh4cEZOdWhweTg0c014RVRPZGJUTEVVUTU1bU9kNXRhRDd5elkrZUZ1V3B2ZUMK",
       "endpoints": [
-        "http://localhost:3000/desktop-updater/{{target}}/{{current_version}}"
+        "https://localhost:3000/desktop-updater/{{target}}/{{current_version}}"
       ]
     }
   }
