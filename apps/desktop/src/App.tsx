@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { api } from './lib/api';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
@@ -51,6 +52,35 @@ export default function App() {
     }
 
     void checkAuth();
+  }, []);
+
+  // Slicing: Global Sync Service event handler for 401 Unauthorized token expirations
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+
+    const setupListener = async () => {
+      try {
+        const unlisten = await listen('sync-unauthorized', async () => {
+          console.warn('[App Auth] Received sync-unauthorized from background sync service. Session expired. Redirecting to login...');
+          try {
+            await invoke('delete_token');
+            await invoke('set_active_task', { projectId: null, issueId: null });
+          } catch (e) {
+            console.error('[App Auth] Failed to clean up token/task on unauthorized event:', e);
+          }
+          setUser(null);
+        });
+        unlistenFn = unlisten;
+      } catch (err) {
+        console.error('[App Auth] Failed to register sync-unauthorized listener:', err);
+      }
+    };
+
+    void setupListener();
+
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
   }, []);
 
   if (loading) {

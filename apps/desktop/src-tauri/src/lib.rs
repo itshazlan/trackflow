@@ -96,22 +96,17 @@ fn save_token(token: &str) -> Result<(), String> {
 
 #[tauri::command]
 fn get_token() -> Result<String, String> {
-    println!("[Tauri Rust] get_token called");
     let entry = Entry::new("trackflow", "auth_token").map_err(|e| {
-        println!("[Tauri Rust] get_token Entry::new error: {}", e);
         e.to_string()
     })?;
     match entry.get_password() {
         Ok(password) => {
-            println!("[Tauri Rust] get_token successfully retrieved token");
             Ok(password)
         }
         Err(Error::NoEntry) => {
-            println!("[Tauri Rust] get_token: no token stored in keyring");
             Ok(String::new())
         }
         Err(e) => {
-            println!("[Tauri Rust] get_token keyring error: {}", e);
             Err(e.to_string())
         }
     }
@@ -572,6 +567,263 @@ async fn get_timer_state(
     })
 }
 
+// DTO Serialization Structs for Sync Service Backend
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ActivityDto {
+    keyboard_count: u32,
+    mouse_count: u32,
+    active_app_name: String,
+    active_window_title: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncTimeBlockDto {
+    project_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    issue_id: Option<String>,
+    block_start: String,
+    block_end: String,
+    activity: ActivityDto,
+}
+
+#[derive(Debug)]
+enum SyncError {
+    Unauthorized,
+    Network(String),
+    Other(String),
+}
+
+impl std::fmt::Display for SyncError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SyncError::Unauthorized => write!(f, "Unauthorized (401)"),
+            SyncError::Network(s) => write!(f, "Network connection error: {}", s),
+            SyncError::Other(s) => write!(f, "Sync failure: {}", s),
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct TimeBlockResponse {
+    id: String,
+}
+
+#[derive(serde::Deserialize)]
+struct SyncResponse {
+    #[serde(rename = "timeBlock")]
+    time_block: TimeBlockResponse,
+}
+
+#[derive(serde::Deserialize)]
+struct ScreenshotUrlResponse {
+    #[serde(rename = "uploadUrl")]
+    upload_url: String,
+}
+
+async fn upload_screenshot_file(
+    path: &str,
+    time_block_id: &str,
+    token: &str,
+    client: &reqwest::Client,
+) -> Result<(), SyncError> {
+    let url_endpoint = format!("http://localhost:3000/time-blocks/{}/screenshot", time_block_id);
+    let response = client.post(&url_endpoint)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|e| SyncError::Network(e.to_string()))?;
+
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(SyncError::Unauthorized);
+    }
+    if !response.status().is_success() {
+        return Err(SyncError::Other(format!("Screenshot URL endpoint returned status: {}", response.status())));
+    }
+
+    let url_res: ScreenshotUrlResponse = response.json().await
+        .map_err(|e| SyncError::Other(format!("Failed to parse screenshot URL response: {}", e)))?;
+
+    let file_path = std::path::Path::new(path);
+    if !file_path.exists() {
+        println!("[Tauri Rust] Screenshot file not found: {}, skipping upload", path);
+        return Ok(());
+    }
+
+    let image_bytes = std::fs::read(file_path)
+        .map_err(|e| SyncError::Other(format!("Failed to read local screenshot file: {}", e)))?;
+
+    let put_response = client.put(&url_res.upload_url)
+        .header("Content-Type", "image/webp")
+        .body(image_bytes)
+        .send()
+        .await
+        .map_err(|e| SyncError::Network(e.to_string()))?;
+
+    if !put_response.status().is_success() {
+        return Err(SyncError::Other(format!("R2 upload returned status: {}", put_response.status())));
+    }
+
+    let _ = std::fs::remove_file(file_path);
+    println!("[Tauri Rust] Successfully uploaded screenshot to R2 and deleted local file: {}", path);
+
+    Ok(())
+}
+
+struct LocalTimeBlock {
+    id: String,
+    project_id: String,
+    issue_id: Option<String>,
+    block_start: String,
+    block_end: String,
+    keyboard_count: u32,
+    mouse_count: u32,
+    screenshot_path: Option<String>,
+    active_window_title: Option<String>,
+    active_app_name: Option<String>,
+}
+
+async fn sync_pending_blocks(
+    db_path: &std::path::Path,
+    token: &str,
+    client: &reqwest::Client,
+    _app_handle: &tauri::AppHandle,
+) -> Result<bool, SyncError> {
+    let pending = {
+        let conn = Connection::open(db_path)
+            .map_err(|e| SyncError::Other(format!("Failed to open DB for sync: {}", e)))?;
+
+        // Query all unsynced blocks ordered by start time
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name 
+                 FROM time_blocks WHERE synced = 0 ORDER BY block_start ASC",
+            )
+            .map_err(|e| SyncError::Other(format!("Failed to prepare select statement: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, u32>(5)?,
+                    row.get::<_, u32>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, Option<String>>(10)?,
+                ))
+            })
+            .map_err(|e| SyncError::Other(format!("Failed to query time blocks: {}", e)))?;
+
+        let mut pending = Vec::new();
+        for row_res in rows {
+            let (
+                local_id,
+                project_id,
+                issue_id,
+                block_start_str,
+                block_end_str,
+                k_count,
+                m_count,
+                _activity_level,
+                screenshot_path,
+                active_window_title,
+                active_app_name,
+            ) = row_res.map_err(|e| SyncError::Other(format!("Row error: {}", e)))?;
+
+            pending.push(LocalTimeBlock {
+                id: local_id,
+                project_id,
+                issue_id,
+                block_start: block_start_str,
+                block_end: block_end_str,
+                keyboard_count: k_count,
+                mouse_count: m_count,
+                screenshot_path,
+                active_window_title,
+                active_app_name,
+            });
+        }
+        pending
+    };
+
+    let mut synced_any = false;
+
+    for block in pending {
+        // Parse UNIX timestamps
+        let start_ts: i64 = block.block_start.parse().unwrap_or(0);
+        let end_ts: i64 = block.block_end.parse().unwrap_or(0);
+
+        // Format to ISO 8601
+        let start_iso = chrono::DateTime::from_timestamp(start_ts, 0)
+            .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+            .unwrap_or_default();
+        let end_iso = chrono::DateTime::from_timestamp(end_ts, 0)
+            .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+            .unwrap_or_default();
+
+        let sync_dto = SyncTimeBlockDto {
+            project_id: block.project_id.clone(),
+            issue_id: block.issue_id.clone(),
+            block_start: start_iso,
+            block_end: end_iso,
+            activity: ActivityDto {
+                keyboard_count: block.keyboard_count,
+                mouse_count: block.mouse_count,
+                active_app_name: block.active_app_name.clone().unwrap_or_default(),
+                active_window_title: block.active_window_title.clone().unwrap_or_default(),
+            },
+        };
+
+        println!("[Tauri Rust] Syncing block {} (Proj={}) to backend...", block.id, block.project_id);
+
+        let response = client.post("http://localhost:3000/time-blocks/sync")
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&sync_dto)
+            .send()
+            .await
+            .map_err(|e| SyncError::Network(e.to_string()))?;
+
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(SyncError::Unauthorized);
+        }
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(SyncError::Other(format!("Backend returned status: {}, body: {}", status, error_text)));
+        }
+
+        let sync_res: SyncResponse = response.json().await
+            .map_err(|e| SyncError::Other(format!("Failed to parse sync response: {}", e)))?;
+        let time_block_id = sync_res.time_block.id;
+
+        // If there's a screenshot, upload it
+        if let Some(ref path_list) = block.screenshot_path {
+            if !path_list.trim().is_empty() {
+                let paths: Vec<&str> = path_list.split(',').collect();
+                for path in paths {
+                    upload_screenshot_file(path, &time_block_id, token, client).await?;
+                }
+            }
+        }
+
+        // Open a short-lived connection to update the synced status
+        let update_conn = Connection::open(db_path)
+            .map_err(|e| SyncError::Other(format!("Failed to open DB to mark synced: {}", e)))?;
+        update_conn.execute("UPDATE time_blocks SET synced = 1 WHERE id = ?1", params![block.id])
+            .map_err(|e| SyncError::Other(format!("Failed to update local DB status: {}", e)))?;
+
+        synced_any = true;
+    }
+
+    Ok(synced_any)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -610,6 +862,7 @@ pub fn run() {
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN active_window_title TEXT", []);
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN active_app_name TEXT", []);
             
+            let db_path_sync = db_path.clone();
             app.manage(DbState { db_path });
 
             // Spawn resilient global input hook listener in OS thread
@@ -620,6 +873,47 @@ pub fn run() {
                         println!("[Tauri Rust] rdev listener failed: {:?}. Retrying in 5 seconds...", e);
                     }
                     std::thread::sleep(std::time::Duration::from_secs(5));
+                }
+            });
+
+            // Spawn background synchronization routine
+            let app_handle_sync = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let client = reqwest::Client::new();
+                let mut sync_interval_secs = 15;
+                
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(sync_interval_secs)).await;
+                    
+                    let token = match get_token() {
+                        Ok(t) if !t.trim().is_empty() => t,
+                        _ => {
+                            sync_interval_secs = 15;
+                            continue;
+                        }
+                    };
+
+                    match sync_pending_blocks(&db_path_sync, &token, &client, &app_handle_sync).await {
+                        Ok(synced_any) => {
+                            if synced_any {
+                                println!("[Tauri Rust] Sync completed successfully.");
+                            }
+                            sync_interval_secs = 15; // Reset interval to default
+                        }
+                        Err(SyncError::Unauthorized) => {
+                            println!("[Tauri Rust] Sync unauthorized (401). Pausing sync and notifying frontend...");
+                            let _ = app_handle_sync.emit("sync-unauthorized", ());
+                            sync_interval_secs = 30; // Sleep a bit before checking token again
+                        }
+                        Err(SyncError::Network(e)) => {
+                            println!("[Tauri Rust] Sync network error: {}. Backing off...", e);
+                            sync_interval_secs = std::cmp::min(sync_interval_secs * 2, 120); // Exponential backoff up to 2m
+                        }
+                        Err(SyncError::Other(e)) => {
+                            println!("[Tauri Rust] Sync other error: {}. Backing off...", e);
+                            sync_interval_secs = std::cmp::min(sync_interval_secs * 2, 60); // Backoff up to 1m
+                        }
+                    }
                 }
             });
 
