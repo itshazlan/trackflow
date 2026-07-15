@@ -26,7 +26,23 @@ export class AppController {
         notes: 'TrackFlow Desktop v0.2.0 - Slicing Auto-Update Selesai!',
         pub_date: new Date().toISOString(),
         platforms: {
-          [target]: {
+          'darwin-aarch64': {
+            signature: 'dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRVm9kQ0RMVlh4cEZOMDBWNXlQQ0k0a09ZNnBKMHhqRVBRL2pQY2RZYllzRzVBbER6RUNsVXJXbEU2ZWVoRGpMY2lBaDN6SWVaZi9kWFVVdG1pT29IUHQ4aCszdHJlQWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTMwNDIyCWZpbGU6YXBwc2Rlc2t0b3AuYXBwLnRhci5negoyWTVpODA0RytTaW1jL1ZJcWtPcTUrYk92TStZUWgxZnJGZzk3bXliVy9tZkxmQTQwMVdNSmtNd3BsZXd1SE4rVThFNjNCcGVKWWtmT0lhV05Tc09CUT09Cg==',
+            url: 'http://localhost:3000/desktop-updater/download/appsdesktop.app.tar.gz'
+          },
+          'darwin-aarch64-app': {
+            signature: 'dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRVm9kQ0RMVlh4cEZOMDBWNXlQQ0k0a09ZNnBKMHhqRVBRL2pQY2RZYllzRzVBbER6RUNsVXJXbEU2ZWVoRGpMY2lBaDN6SWVaZi9kWFVVdG1pT29IUHQ4aCszdHJlQWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTMwNDIyCWZpbGU6YXBwc2Rlc2t0b3AuYXBwLnRhci5negoyWTVpODA0RytTaW1jL1ZJcWtPcTUrYk92TStZUWgxZnJGZzk3bXliVy9tZkxmQTQwMVdNSmtNd3BsZXd1SE4rVThFNjNCcGVKWWtmT0lhV05Tc09CUT09Cg==',
+            url: 'http://localhost:3000/desktop-updater/download/appsdesktop.app.tar.gz'
+          },
+          'darwin-x86_64': {
+            signature: 'dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRVm9kQ0RMVlh4cEZOMDBWNXlQQ0k0a09ZNnBKMHhqRVBRL2pQY2RZYllzRzVBbER6RUNsVXJXbEU2ZWVoRGpMY2lBaDN6SWVaZi9kWFVVdG1pT29IUHQ4aCszdHJlQWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTMwNDIyCWZpbGU6YXBwc2Rlc2t0b3AuYXBwLnRhci5negoyWTVpODA0RytTaW1jL1ZJcWtPcTUrYk92TStZUWgxZnJGZzk3bXliVy9tZkxmQTQwMVdNSmtNd3BsZXd1SE4rVThFNjNCcGVKWWtmT0lhV05Tc09CUT09Cg==',
+            url: 'http://localhost:3000/desktop-updater/download/appsdesktop.app.tar.gz'
+          },
+          'darwin-x86_64-app': {
+            signature: 'dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRVm9kQ0RMVlh4cEZOMDBWNXlQQ0k0a09ZNnBKMHhqRVBRL2pQY2RZYllzRzVBbER6RUNsVXJXbEU2ZWVoRGpMY2lBaDN6SWVaZi9kWFVVdG1pT29IUHQ4aCszdHJlQWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTMwNDIyCWZpbGU6YXBwc2Rlc2t0b3AuYXBwLnRhci5negoyWTVpODA0RytTaW1jL1ZJcWtPcTUrYk92TStZUWgxZnJGZzk3bXliVy9tZkxmQTQwMVdNSmtNd3BsZXd1SE4rVThFNjNCcGVKWWtmT0lhV05Tc09CUT09Cg==',
+            url: 'http://localhost:3000/desktop-updater/download/appsdesktop.app.tar.gz'
+          },
+          'windows-x86_64': {
             signature: 'dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRVm9kQ0RMVlh4cEZOMDBWNXlQQ0k0a09ZNnBKMHhqRVBRL2pQY2RZYllzRzVBbER6RUNsVXJXbEU2ZWVoRGpMY2lBaDN6SWVaZi9kWFVVdG1pT29IUHQ4aCszdHJlQWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg0MTMwNDIyCWZpbGU6YXBwc2Rlc2t0b3AuYXBwLnRhci5negoyWTVpODA0RytTaW1jL1ZJcWtPcTUrYk92TStZUWgxZnJGZzk3bXliVy9tZkxmQTQwMVdNSmtNd3BsZXd1SE4rVThFNjNCcGVKWWtmT0lhV05Tc09CUT09Cg==',
             url: 'http://localhost:3000/desktop-updater/download/appsdesktop.app.tar.gz'
           }
