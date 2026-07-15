@@ -337,7 +337,7 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
             Tidak ada screenshot log aktivitas untuk hari terpilih ({new Date(activeDate).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}).
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
             {screenshotBlocks.map((block, idx) => {
               const startLocal = new Date(block.blockStart).toLocaleTimeString("id-ID", {
                 hour: "2-digit",
@@ -467,7 +467,7 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
       {/* Lightbox Preview Dialog */}
       <Dialog open={lightboxIndex !== null} onOpenChange={() => setLightboxIndex(null)}>
         {lightboxIndex !== null && (
-          <DialogContent className="max-w-[70vw] p-1.5 overflow-hidden">
+          <DialogContent className="max-w-[95vw] md:max-w-[85vw] lg:max-w-[75vw] xl:max-w-[65vw] p-1.5 overflow-hidden">
             <div className="flex flex-col bg-card relative">
               <div className="aspect-video relative bg-black overflow-hidden flex items-center justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
