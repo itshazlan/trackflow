@@ -702,6 +702,7 @@ struct LocalTimeBlock {
     screenshot_path: Option<String>,
     active_window_title: Option<String>,
     active_app_name: Option<String>,
+    _retry_count: u32,
 }
 
 async fn sync_pending_blocks(
@@ -714,11 +715,11 @@ async fn sync_pending_blocks(
         let conn = Connection::open(db_path)
             .map_err(|e| SyncError::Other(format!("Failed to open DB for sync: {}", e)))?;
 
-        // Query all unsynced blocks ordered by start time
+        // Query all unsynced blocks that have failed less than 5 times
         let mut stmt = conn
             .prepare(
-                "SELECT id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name 
-                 FROM time_blocks WHERE synced = 0 ORDER BY block_start ASC",
+                "SELECT id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, retry_count 
+                 FROM time_blocks WHERE synced = 0 AND retry_count < 5 ORDER BY block_start ASC",
             )
             .map_err(|e| SyncError::Other(format!("Failed to prepare select statement: {}", e)))?;
 
@@ -736,6 +737,7 @@ async fn sync_pending_blocks(
                     row.get::<_, Option<String>>(8)?,
                     row.get::<_, Option<String>>(9)?,
                     row.get::<_, Option<String>>(10)?,
+                    row.get::<_, u32>(11)?,
                 ))
             })
             .map_err(|e| SyncError::Other(format!("Failed to query time blocks: {}", e)))?;
@@ -754,6 +756,7 @@ async fn sync_pending_blocks(
                 screenshot_path,
                 active_window_title,
                 active_app_name,
+                retry_count,
             ) = row_res.map_err(|e| SyncError::Other(format!("Row error: {}", e)))?;
 
             pending.push(LocalTimeBlock {
@@ -767,6 +770,7 @@ async fn sync_pending_blocks(
                 screenshot_path,
                 active_window_title,
                 active_app_name,
+                _retry_count: retry_count,
             });
         }
         pending
@@ -808,43 +812,63 @@ async fn sync_pending_blocks(
 
         println!("[Tauri Rust] Syncing block {} (Proj={}) to backend...", block.id, block.project_id);
 
-        let response = client.post("http://localhost:3000/time-blocks/sync")
-            .header("Authorization", format!("Bearer {}", token))
-            .json(&sync_dto)
-            .send()
-            .await
-            .map_err(|e| SyncError::Network(e.to_string()))?;
+        let sync_result = async {
+            let response = client.post("http://localhost:3000/time-blocks/sync")
+                .header("Authorization", format!("Bearer {}", token))
+                .json(&sync_dto)
+                .send()
+                .await
+                .map_err(|e| SyncError::Network(e.to_string()))?;
 
-        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(SyncError::Unauthorized);
-        }
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(SyncError::Other(format!("Backend returned status: {}, body: {}", status, error_text)));
-        }
+            if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(SyncError::Unauthorized);
+            }
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                return Err(SyncError::Other(format!("Backend returned status: {}, body: {}", status, error_text)));
+            }
 
-        let sync_res: SyncResponse = response.json().await
-            .map_err(|e| SyncError::Other(format!("Failed to parse sync response: {}", e)))?;
-        let time_block_id = sync_res.time_block.id;
+            let sync_res: SyncResponse = response.json().await
+                .map_err(|e| SyncError::Other(format!("Failed to parse sync response: {}", e)))?;
+            let time_block_id = sync_res.time_block.id;
 
-        // If there's a screenshot, upload it
-        if let Some(ref path_list) = block.screenshot_path {
-            if !path_list.trim().is_empty() {
-                let paths: Vec<&str> = path_list.split(',').collect();
-                for path in paths {
-                    upload_screenshot_file(path, &time_block_id, token, client).await?;
+            // If there's a screenshot, upload it
+            if let Some(ref path_list) = block.screenshot_path {
+                if !path_list.trim().is_empty() {
+                    let paths: Vec<&str> = path_list.split(',').collect();
+                    for path in paths {
+                        upload_screenshot_file(path, &time_block_id, token, client).await?;
+                    }
                 }
             }
+            Ok(())
+        }.await;
+
+        match sync_result {
+            Ok(_) => {
+                // Mark local SQLite row as synced = 1
+                let update_conn = Connection::open(db_path)
+                    .map_err(|e| SyncError::Other(format!("Failed to open DB to mark synced: {}", e)))?;
+                update_conn.execute("UPDATE time_blocks SET synced = 1 WHERE id = ?1", params![block.id])
+                    .map_err(|e| SyncError::Other(format!("Failed to update local DB status: {}", e)))?;
+                synced_any = true;
+            }
+            Err(SyncError::Unauthorized) => {
+                return Err(SyncError::Unauthorized);
+            }
+            Err(SyncError::Network(e)) => {
+                // Abort sync loop since connection/server is offline
+                return Err(SyncError::Network(e));
+            }
+            Err(SyncError::Other(e)) => {
+                // For validation or server errors, increment retry_count to avoid blocking subsequent blocks
+                println!("[Tauri Rust] Validation/Server error syncing block {}: {}. Incrementing retry count.", block.id, e);
+                let update_conn = Connection::open(db_path)
+                    .map_err(|e| SyncError::Other(format!("Failed to open DB to increment retry: {}", e)))?;
+                let _ = update_conn.execute("UPDATE time_blocks SET retry_count = retry_count + 1 WHERE id = ?1", params![block.id]);
+            }
         }
-
-        // Open a short-lived connection to update the synced status
-        let update_conn = Connection::open(db_path)
-            .map_err(|e| SyncError::Other(format!("Failed to open DB to mark synced: {}", e)))?;
-        update_conn.execute("UPDATE time_blocks SET synced = 1 WHERE id = ?1", params![block.id])
-            .map_err(|e| SyncError::Other(format!("Failed to update local DB status: {}", e)))?;
-
-        synced_any = true;
     }
 
     Ok(synced_any)
@@ -875,6 +899,7 @@ pub fn run() {
                     screenshot_path TEXT,
                     active_window_title TEXT,
                     active_app_name TEXT,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
                     synced INTEGER NOT NULL DEFAULT 0
                 )",
                 [],
@@ -887,6 +912,7 @@ pub fn run() {
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN screenshot_path TEXT", []);
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN active_window_title TEXT", []);
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN active_app_name TEXT", []);
+            let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0", []);
             
             let db_path_sync = db_path.clone();
             app.manage(DbState { db_path });
