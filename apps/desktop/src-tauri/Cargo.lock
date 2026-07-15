@@ -102,27 +102,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "appsdesktop"
-version = "0.1.0"
-dependencies = [
- "active-win-pos-rs",
- "chrono",
- "image",
- "keyring",
- "rdev",
- "reqwest 0.12.28",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tauri-plugin-updater",
- "tokio",
- "xcap",
-]
-
-[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5541,6 +5520,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "trackflow-desktop"
+version = "0.1.0"
+dependencies = [
+ "active-win-pos-rs",
+ "chrono",
+ "image",
+ "keyring",
+ "rdev",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tauri-plugin-updater",
+ "tokio",
+ "xcap",
 ]
 
 [[package]]
