@@ -26,6 +26,6 @@ keyring = { version = "3.2", features = ["apple-native", "windows-native", "sync
 tokio = { version = "1", features = ["rt", "time", "sync"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
-rdev = "0.5.3"
+rdev = { git = "https://github.com/rustdesk-org/rdev" }
 
 
