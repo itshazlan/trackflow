@@ -39,7 +39,10 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const syncTimerState = async () => {
     try {
       const state = await invoke<TimerStateResponse>('get_timer_state');
-      setTimerStatus(state.status);
+      const validStatus = (state.status === 'Running' || state.status === 'Paused' || state.status === 'Idle')
+        ? state.status
+        : 'Idle';
+      setTimerStatus(validStatus);
       setStartTime(state.start_time);
       setAccumulatedSeconds(state.accumulated_seconds);
 

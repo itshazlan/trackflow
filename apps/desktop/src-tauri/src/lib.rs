@@ -37,13 +37,24 @@ pub struct ActiveTrackingState {
     pub issue_id: Mutex<Option<String>>,
 }
 
-#[derive(Default)]
 pub struct ActiveTimerState {
     pub status: Mutex<String>, // "Idle", "Running", "Paused"
     pub start_time: Mutex<Option<i64>>, // Unix timestamp of session start
     pub current_block_start: Mutex<Option<i64>>, // Unix timestamp of current 10s block start
     pub accumulated_seconds: Mutex<u64>, // Accumulated seconds from previous periods
     pub abort_handle: Mutex<Option<tokio::task::AbortHandle>>,
+}
+
+impl Default for ActiveTimerState {
+    fn default() -> Self {
+        Self {
+            status: Mutex::new("Idle".to_string()),
+            start_time: Mutex::new(None),
+            current_block_start: Mutex::new(None),
+            accumulated_seconds: Mutex::new(0),
+            abort_handle: Mutex::new(None),
+        }
+    }
 }
 
 pub struct DbState {
