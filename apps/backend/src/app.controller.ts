@@ -11,6 +11,13 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('desktop-updater/download/appsdesktop.app.tar.gz')
+  downloadUpdate(@Res() res: express.Response) {
+    const filePath = '/Users/itshazlan/Developer/Personal/Backend/trackflow/apps/desktop/src-tauri/target/release/bundle/macos/appsdesktop.app.tar.gz';
+    console.log(`[Updater] Streaming update file: ${filePath}`);
+    return res.sendFile(filePath);
+  }
+
   @Get('desktop-updater/:target/:version')
   getUpdateManifest(
     @Param('target') target: string,
@@ -53,12 +60,5 @@ export class AppController {
 
     // Return 204 No Content to signify that the client version is up to date.
     return res.status(204).send();
-  }
-
-  @Get('desktop-updater/download/appsdesktop.app.tar.gz')
-  downloadUpdate(@Res() res: express.Response) {
-    const filePath = '/Users/itshazlan/Developer/Personal/Backend/trackflow/apps/desktop/src-tauri/target/release/bundle/macos/appsdesktop.app.tar.gz';
-    console.log(`[Updater] Streaming update file: ${filePath}`);
-    return res.sendFile(filePath);
   }
 }
