@@ -15,6 +15,7 @@ services:
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
+      network: host
     restart: always
     depends_on:
       - postgres
@@ -33,6 +34,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      network: host
     restart: always
     depends_on:
       - backend
