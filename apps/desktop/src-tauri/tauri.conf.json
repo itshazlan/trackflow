@@ -31,5 +31,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "pubkey": "RWQVodCDLVXxpFNuhpy84sMxETOdbTLEUQ55mOd5taD7yzY+eFuWpveC",
+      "endpoints": [
+        "http://localhost:3000/desktop-updater/{{target}}/{{current_version}}"
+      ]
+    }
   }
 }
