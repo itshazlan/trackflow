@@ -157,7 +157,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
       // 2. Check if there's an active tracking task stored in Rust core
       try {
-        const [activeProjId, activeIssueId] = await invoke<[string | null, string | null]>('get_active_task');
+        const [activeProjId, activeIssueId, _activeIssueTitle] = await invoke<[string | null, string | null, string | null]>('get_active_task');
         
         if (activeProjId && projectList.some((p) => p.id === activeProjId)) {
           setSelectedProjectId(activeProjId);
@@ -206,6 +206,38 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     };
   }, [timerStatus, startTime, accumulatedSeconds]);
 
+  // Listen for timer-state-changed event from Rust (synchronized from tray menu actions)
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+
+    const setupListener = async () => {
+      try {
+        const unlisten = await listen<TimerStateResponse>('timer-state-changed', (event) => {
+          const state = event.payload;
+          setTimerStatus(state.status);
+          setStartTime(state.start_time);
+          setAccumulatedSeconds(state.accumulated_seconds);
+          
+          if (state.status === 'Running' && state.start_time) {
+            const now = Math.floor(Date.now() / 1000);
+            setElapsedSeconds(state.accumulated_seconds + (now - state.start_time));
+          } else {
+            setElapsedSeconds(state.accumulated_seconds);
+          }
+        });
+        unlistenFn = unlisten;
+      } catch (err) {
+        console.error('[Dashboard Timer Listener] Failed to listen to timer-state-changed:', err);
+      }
+    };
+
+    void setupListener();
+
+    return () => {
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
+
   const handleProjectChange = async (projectId: string) => {
     setSelectedProjectId(projectId);
     setSelectedIssueId('');
@@ -217,6 +249,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       await invoke('set_active_task', {
         projectId: projectId || null,
         issueId: null,
+        issueTitle: null,
       });
     } catch (err) {
       console.error('[Dashboard] Failed to sync active task to Rust:', err);
@@ -240,12 +273,15 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const handleIssueChange = async (issueId: string) => {
     setSelectedIssueId(issueId);
     setError(null);
+    const selectedIssue = issues.find((issue) => issue.id === issueId);
+    const issueTitle = selectedIssue ? selectedIssue.title : null;
 
     // Sync state to Rust
     try {
       await invoke('set_active_task', {
         projectId: selectedProjectId || null,
         issueId: issueId || null,
+        issueTitle: issueTitle,
       });
     } catch (err) {
       console.error('[Dashboard] Failed to sync active task to Rust:', err);
@@ -302,7 +338,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       // Delete token from OS Keychain
       await invoke('delete_token');
       // Also clear active task in Rust core
-      await invoke('set_active_task', { projectId: null, issueId: null });
+      await invoke('set_active_task', { projectId: null, issueId: null, issueTitle: null });
     } catch (err) {
       console.error('[Dashboard] Failed to delete token from keychain:', err);
     }

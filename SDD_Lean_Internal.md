@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.2 (Lean Internal) |
+| **Versi Dokumen** | 2.3 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: strategi autentikasi Desktop Client — Bearer token via Better Auth Bearer plugin, bukan cookie sharing) |
+| **Tanggal** | 14 Juli 2026 (revisi: Tray Icon/menu bar, Floating Widget preview/submit/discard, kolom `time_blocks.note` untuk default task Activity) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -166,6 +166,8 @@ Better Auth secara default memakai **session cookie httpOnly**, cocok untuk `app
 ```mermaid
 flowchart LR
     UI["Tauri WebView UI (Login, Start/Stop, pemilihan task)"]
+    TRAY["Tray Icon Manager (menu bar)"]
+    WIDGET["Floating Widget (Preview/Submit/Discard)"]
     CORE["Rust Core Process"]
     AUTH["Auth/Token Manager (keychain)"]
     HOOK["OS-level Input Hook (keyboard/mouse count)"]
@@ -175,11 +177,15 @@ flowchart LR
 
     UI <--> CORE
     UI -- login/logout --> AUTH
+    TRAY <--> CORE
     CORE --> HOOK
     CORE --> CAP
     CORE --> AUTH
+    CAP -- screenshot diambil --> WIDGET
+    WIDGET -- Submit/Discard/timeout --> CORE
     HOOK --> LOCALDB
     CAP --> LOCALDB
+    CORE -- hanya jika Submit --> LOCALDB
     LOCALDB --> SYNC
     SYNC -- ambil Bearer token --> AUTH
     SYNC -- "HTTPS batch upload + Authorization: Bearer <token>" --> API["Backend API"]
@@ -187,16 +193,20 @@ flowchart LR
 
 | Komponen | Tanggung Jawab |
 |---|---|
-| **Rust Core Process** | Siklus blok waktu 10 menit, jadwal screenshot acak |
+| **Rust Core Process** | Siklus blok waktu 10 menit, jadwal screenshot acak, orkestrasi state Start/Pause/Stop, dipicu juga dari Tray & Widget (bukan cuma window utama) |
+| **Tray Icon Manager** | Icon di tray/menu bar OS (mis. macOS menu bar), menu cepat (status task+durasi, Pause/Resume, Buka Aplikasi, Keluar). Window utama **hide ke tray** saat ditutup (bukan quit), quit sungguhan hanya lewat menu tray — lihat §10.8 |
+| **Floating Widget** | Window kedua (multi-window Tauri), always-on-top, tanpa border, pojok kanan bawah layar. Muncul setiap kali screenshot diambil: preview thumbnail + timer + tombol Preview/Submit/Discard. Auto-Submit jika tidak ada aksi ~90 detik (FR-090) — lihat §10.9 |
 | **Auth/Token Manager** | Login via `/api/auth/sign-in/email` (Bearer plugin), simpan token di OS keychain (bukan file plaintext), sediakan token ke Sync Service tiap request, tangani refresh & logout (hapus dari keychain + panggil sign-out) — lihat §4.2 |
 | **OS-level Input Hook** | Hitung klik/ketukan tanpa merekam konten (privasi) |
-| **Screenshot Capture Module** | Screenshot pada detik acak + notifikasi shutter |
-| **Local SQLite Buffer** | Buffer offline sebelum berhasil diunggah |
+| **Screenshot Capture Module** | Screenshot pada detik acak + notifikasi shutter, hasil ditahan dulu menunggu keputusan di Floating Widget (bukan langsung lanjut ke buffer) |
+| **Local SQLite Buffer** | Buffer offline sebelum berhasil diunggah. **Hanya diisi kalau widget di-Submit/timeout** — kalau di-Discard, data blok tersebut tidak pernah masuk ke buffer ini sama sekali (§10.9) |
 | **Sync Service** | Ambil token dari Auth/Token Manager, sertakan sebagai header `Authorization: Bearer <token>` di tiap request, upload per blok selesai, retry dengan backoff. Jika server balas `401 Unauthorized` (token expired), pause sync → picu refresh via Auth/Token Manager → resume; jika refresh gagal, tampilkan prompt re-login di WebView UI |
 
 **Prinsip privasi tidak berubah:** idle detection, tidak ada keylogging konten, randomisasi jadwal screenshot lokal.
 
 **Prinsip keamanan token (baru):** token tidak pernah disimpan sebagai file teks biasa di disk maupun di `localStorage`-equivalent WebView — wajib lewat mekanisme keychain native OS (Keychain di macOS, Credential Manager di Windows, Secret Service di Linux), diakses lewat plugin Tauri resmi.
+
+**Keputusan desain — konsekuensi Discard (default direkomendasikan & disetujui):** Discard pada Floating Widget membuat blok waktu **tidak pernah dikirim ke server sama sekali** — bukan dikirim lalu dihapus. Konsekuensi ke pekerja setara dengan hapus blok waktu self-service (FR-060/061, unpaid otomatis), namun **tanpa audit log** di `time_block_audit_logs`, karena secara teknis data tersebut memang tidak pernah eksis di sisi server (berbeda dari self-delete di Time Book yang menghapus data yang *sudah* tersimpan di database).
 
 ---
 
@@ -421,13 +431,14 @@ erDiagram
 | id | uuid (PK) | |
 | user_id | uuid (FK) | Pemilik blok waktu |
 | project_id | uuid (FK) | |
-| issue_id | uuid (FK, nullable) | |
+| issue_id | uuid (FK, nullable) | `NULL` berarti blok waktu berkategori **"Activity"** (tanpa tiket spesifik), lihat kolom `note` |
+| note | text (nullable) | Deskripsi bebas opsional, relevan khususnya saat `issue_id IS NULL` (FR-091/092) — ditampilkan di Time Book/Reports sebagai keterangan tambahan |
 | block_start | timestamptz | |
 | block_end | timestamptz | |
 | is_deleted | boolean default false | |
 | deleted_at | timestamptz nullable | |
 | deleted_by | uuid (FK → users, nullable) | Pemilik sendiri (self) atau Admin (override) |
-| deletion_type | enum(`self`,`admin_override`) nullable | Disederhanakan dari `manager_override` menjadi `admin_override` |
+| deletion_type | enum(`self`,`admin_override`) nullable | Disederhanakan dari `manager_override` menjadi `admin_override`. **Catatan:** Discard di Floating Widget (§6, §10.9) **tidak** menghasilkan baris `time_blocks` sama sekali — bukan kasus `deletion_type` manapun di sini |
 | deletion_reason | text nullable | Wajib untuk `admin_override`; opsional untuk `self` |
 | is_paid | boolean | |
 | synced_at | timestamptz | |
@@ -579,6 +590,7 @@ POST /time-blocks/sync
   "userId": "uuid",
   "projectId": "uuid",
   "issueId": "uuid",
+  "note": null,
   "blockStart": "2026-07-14T09:00:00Z",
   "blockEnd": "2026-07-14T09:10:00Z",
   "activity": {
@@ -587,6 +599,20 @@ POST /time-blocks/sync
     "activeAppName": "Visual Studio Code",
     "activeWindowTitle": "trackflow-backend — main.ts"
   }
+}
+```
+
+**Varian — task default "Activity" tanpa tiket (FR-091/092):**
+```json
+POST /time-blocks/sync
+{
+  "userId": "uuid",
+  "projectId": "uuid",
+  "issueId": null,
+  "note": "Riset library upload file untuk lampiran issue",
+  "blockStart": "2026-07-14T09:10:00Z",
+  "blockEnd": "2026-07-14T09:20:00Z",
+  "activity": { "...": "..." }
 }
 ```
 
@@ -745,6 +771,56 @@ sequenceDiagram
     Note over QA: Panel Aktivitas QA ter-update tanpa refresh jika issue yang sama sedang terbuka
 ```
 
+### 10.8 Alur Tray Icon — Hide, Bukan Quit
+
+```mermaid
+sequenceDiagram
+    participant U as Pengguna
+    participant WIN as Window Utama
+    participant TRAY as Tray Icon Manager
+    participant CORE as Rust Core Process
+
+    U->>WIN: Klik tombol close (X)
+    WIN->>WIN: on_close_requested → event.prevent_default()
+    WIN->>WIN: window.hide() (bukan keluar)
+    Note over CORE: Timer & Sync Service tetap berjalan di background
+    U->>TRAY: Klik icon tray
+    TRAY-->>U: Tampilkan menu (status task+durasi, Pause/Resume, Buka Aplikasi, Keluar)
+    alt Pilih "Buka Aplikasi"
+        TRAY->>WIN: window.show()
+    else Pilih "Keluar"
+        TRAY->>CORE: Hentikan timer & Sync Service
+        TRAY->>WIN: Tutup aplikasi sepenuhnya
+    end
+```
+
+### 10.9 Alur Floating Widget — Preview/Submit/Discard
+
+```mermaid
+sequenceDiagram
+    participant CAP as Screenshot Capture Module
+    participant W as Floating Widget
+    participant CORE as Rust Core Process
+    participant DB as Local SQLite Buffer
+    participant SYNC as Sync Service
+
+    CAP->>W: Screenshot diambil → tampilkan widget (thumbnail + timer + tombol)
+    alt Pengguna klik "Preview"
+        W->>W: Buka window preview ukuran penuh
+        Note over W: Widget tetap terbuka menunggu keputusan Submit/Discard
+    else Pengguna klik "Submit" ATAU timeout ~90 detik
+        W->>CORE: Konfirmasi Submit
+        CORE->>DB: Simpan blok waktu + screenshot ke buffer lokal
+        DB->>SYNC: Lanjut alur sync normal (§10.1)
+        W->>W: Widget hilang
+    else Pengguna klik "Discard"
+        W->>CORE: Konfirmasi Discard
+        CORE->>CORE: Buang data blok waktu & file screenshot lokal
+        Note over DB: TIDAK ADA baris yang masuk ke Local SQLite Buffer — blok ini tidak pernah ada di server
+        W->>W: Widget hilang
+    end
+```
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -873,6 +949,8 @@ Tidak berubah dari revisi sebelumnya — `turbo.json` mengatur pipeline `build`/
 | Kesalahan pengisian field Issue Template (selain Environment) tidak divalidasi wajib | Diterima sebagai trade-off kecepatan; Manager dapat mengubah field mana saja jadi wajib via pengaturan template kapan saja |
 | `key` proyek harus unik secara global (termasuk lintas sub-proyek) — makin banyak proyek, makin mudah terjadi konflik kode singkat | Validasi uniqueness real-time saat pengisian form (cek via API saat blur), sarankan konvensi penamaan internal (mis. selalu awali sub-proyek dengan kode induk + suffix) |
 | Description issue kini teks bebas — konsistensi laporan bug (semua field terisi) bergantung sepenuhnya pada kedisiplinan penulis, bukan validasi sistem | Diterima sebagai trade-off kesederhanaan; dapat dipantau manual oleh Manager/QA, atau ditambah linter/reminder ringan di masa depan jika kualitas laporan menurun |
+| Discard di Floating Widget tidak tercatat di audit log (karena data memang tidak pernah sampai ke server) — Admin tidak bisa melihat riwayat berapa kali/kapan seorang pekerja men-discard screenshot | Diterima sebagai trade-off kesederhanaan sesuai keputusan desain (§6); jika suatu saat dibutuhkan visibilitas ini, opsi lanjutan: kirim event count-only (tanpa gambar) ke server saat discard, tanpa menyimpan screenshot itu sendiri |
+| Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
 
 ---
 

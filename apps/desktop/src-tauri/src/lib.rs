@@ -36,7 +36,21 @@ fn check_input_permission() -> Result<bool, String> {
 pub struct ActiveTrackingState {
     pub project_id: Mutex<Option<String>>,
     pub issue_id: Mutex<Option<String>>,
+    pub issue_title: Mutex<Option<String>>,
 }
+
+pub struct AppState {
+    pub is_quitting: Mutex<bool>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            is_quitting: Mutex::new(false),
+        }
+    }
+}
+
 
 pub struct ScreenshotData {
     pub screenshot_path: String,
@@ -139,13 +153,15 @@ fn delete_token() -> Result<(), String> {
 fn set_active_task(
     project_id: Option<String>,
     issue_id: Option<String>,
+    issue_title: Option<String>,
     state: tauri::State<'_, ActiveTrackingState>,
 ) -> Result<(), String> {
     *state.project_id.lock().unwrap() = project_id.clone();
     *state.issue_id.lock().unwrap() = issue_id.clone();
+    *state.issue_title.lock().unwrap() = issue_title.clone();
     println!(
-        "[Tauri Rust] set_active_task called. Project: {:?}, Issue: {:?}",
-        project_id, issue_id
+        "[Tauri Rust] set_active_task called. Project: {:?}, Issue: {:?}, Title: {:?}",
+        project_id, issue_id, issue_title
     );
     Ok(())
 }
@@ -153,10 +169,11 @@ fn set_active_task(
 #[tauri::command]
 fn get_active_task(
     state: tauri::State<'_, ActiveTrackingState>,
-) -> Result<(Option<String>, Option<String>), String> {
+) -> Result<(Option<String>, Option<String>, Option<String>), String> {
     let project_id = state.project_id.lock().unwrap().clone();
     let issue_id = state.issue_id.lock().unwrap().clone();
-    Ok((project_id, issue_id))
+    let issue_title = state.issue_title.lock().unwrap().clone();
+    Ok((project_id, issue_id, issue_title))
 }
 
 fn classify_activity(keyboard: u32, mouse: u32) -> &'static str {
@@ -383,13 +400,89 @@ fn start_background_tick_loop(
     task.abort_handle()
 }
 
-#[tauri::command]
-async fn start_timer(
-    app_handle: tauri::AppHandle,
-    tracking_state: tauri::State<'_, ActiveTrackingState>,
-    timer_state: tauri::State<'_, ActiveTimerState>,
-    db_state: tauri::State<'_, DbState>,
-) -> Result<(), String> {
+#[derive(serde::Serialize, Clone)]
+struct TimerStateChangedPayload {
+    status: String,
+    start_time: Option<i64>,
+    accumulated_seconds: u64,
+}
+
+pub struct TrayAssets {
+    pub icon_idle: tauri::image::Image<'static>,
+    pub icon_active: tauri::image::Image<'static>,
+}
+
+pub struct TrayMenuState {
+    pub info_item: tauri::menu::MenuItem<tauri::Wry>,
+    pub pause_resume_item: tauri::menu::MenuItem<tauri::Wry>,
+}
+
+fn emit_timer_state(app_handle: &tauri::AppHandle) {
+    let timer_state = app_handle.state::<ActiveTimerState>();
+    let status = timer_state.status.lock().unwrap().clone();
+    let start_time = *timer_state.start_time.lock().unwrap();
+    let accumulated_seconds = *timer_state.accumulated_seconds.lock().unwrap();
+    let _ = app_handle.emit("timer-state-changed", TimerStateChangedPayload {
+        status,
+        start_time,
+        accumulated_seconds,
+    });
+}
+
+fn update_tray_state(app_handle: &tauri::AppHandle) {
+    let timer_state = app_handle.state::<ActiveTimerState>();
+    let tracking_state = app_handle.state::<ActiveTrackingState>();
+    
+    if let (Some(menu_state), Some(assets)) = (app_handle.try_state::<TrayMenuState>(), app_handle.try_state::<TrayAssets>()) {
+        if let Some(tray) = app_handle.tray_by_id("main") {
+            let status = timer_state.status.lock().unwrap().clone();
+            let start_time = *timer_state.start_time.lock().unwrap();
+            let accumulated_seconds = *timer_state.accumulated_seconds.lock().unwrap();
+            let issue_title = tracking_state.issue_title.lock().unwrap().clone().unwrap_or_else(|| "Tidak Ada Task".to_string());
+
+            let elapsed = if status == "Running" && start_time.is_some() {
+                let now = chrono::Utc::now().timestamp();
+                accumulated_seconds + (now - start_time.unwrap()) as u64
+            } else {
+                accumulated_seconds
+            };
+
+            let hours = elapsed / 3600;
+            let minutes = (elapsed % 3600) / 60;
+            let seconds = elapsed % 60;
+            let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
+
+            if status == "Running" {
+                let _ = menu_state.info_item.set_text(format!("Sedang Melacak: {} — {}", issue_title, time_str));
+                let _ = menu_state.pause_resume_item.set_text("⏸ Pause");
+                let _ = menu_state.pause_resume_item.set_enabled(true);
+                let _ = tray.set_icon(Some(assets.icon_active.clone()));
+                #[cfg(target_os = "macos")]
+                let _ = tray.set_icon_as_template(true);
+            } else if status == "Paused" {
+                let _ = menu_state.info_item.set_text(format!("Melacak Terjeda: {} — {}", issue_title, time_str));
+                let _ = menu_state.pause_resume_item.set_text("▶ Resume");
+                let _ = menu_state.pause_resume_item.set_enabled(true);
+                let _ = tray.set_icon(Some(assets.icon_idle.clone()));
+                #[cfg(target_os = "macos")]
+                let _ = tray.set_icon_as_template(true);
+            } else {
+                let _ = menu_state.info_item.set_text("Tidak Melacak Task");
+                let _ = menu_state.pause_resume_item.set_text("⏸ Pause / ▶ Resume");
+                let _ = menu_state.pause_resume_item.set_enabled(false);
+                let _ = tray.set_icon(Some(assets.icon_idle.clone()));
+                #[cfg(target_os = "macos")]
+                let _ = tray.set_icon_as_template(true);
+            }
+        }
+    }
+}
+
+fn do_start_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
+    let tracking_state = app_handle.state::<ActiveTrackingState>();
+    let timer_state = app_handle.state::<ActiveTimerState>();
+    let db_state = app_handle.state::<DbState>();
+
     let mut status = timer_state.status.lock().unwrap();
     if *status == "Running" {
         return Err("Timer is already running".to_string());
@@ -420,7 +513,7 @@ async fn start_timer(
     *status = "Running".to_string();
 
     let handle = start_background_tick_loop(
-        app_handle,
+        app_handle.clone(),
         project_id,
         issue_id,
         db_state.db_path.clone(),
@@ -429,15 +522,22 @@ async fn start_timer(
     *timer_state.abort_handle.lock().unwrap() = Some(handle);
 
     println!("[Tauri Rust] Timer started at Unix time {}", now);
+
+    // Drop locks before emitting/updating to avoid deadlocks
+    drop(status);
+    drop(start_time);
+    drop(current_block_start);
+
+    emit_timer_state(app_handle);
+    update_tray_state(app_handle);
     Ok(())
 }
 
-#[tauri::command]
-async fn pause_timer(
-    tracking_state: tauri::State<'_, ActiveTrackingState>,
-    timer_state: tauri::State<'_, ActiveTimerState>,
-    db_state: tauri::State<'_, DbState>,
-) -> Result<(), String> {
+fn do_pause_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
+    let tracking_state = app_handle.state::<ActiveTrackingState>();
+    let timer_state = app_handle.state::<ActiveTimerState>();
+    let db_state = app_handle.state::<DbState>();
+
     let mut status = timer_state.status.lock().unwrap();
     if *status != "Running" {
         return Err("Timer is not running".to_string());
@@ -492,15 +592,21 @@ async fn pause_timer(
 
     *status = "Paused".to_string();
     println!("[Tauri Rust] Timer paused");
+
+    // Drop locks before emitting/updating to avoid deadlocks
+    drop(status);
+    drop(current_block_start);
+
+    emit_timer_state(app_handle);
+    update_tray_state(app_handle);
     Ok(())
 }
 
-#[tauri::command]
-async fn stop_timer(
-    tracking_state: tauri::State<'_, ActiveTrackingState>,
-    timer_state: tauri::State<'_, ActiveTimerState>,
-    db_state: tauri::State<'_, DbState>,
-) -> Result<(), String> {
+fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
+    let tracking_state = app_handle.state::<ActiveTrackingState>();
+    let timer_state = app_handle.state::<ActiveTimerState>();
+    let db_state = app_handle.state::<DbState>();
+
     let mut status = timer_state.status.lock().unwrap();
     if *status == "Idle" {
         return Ok(());
@@ -562,7 +668,28 @@ async fn stop_timer(
     *status = "Idle".to_string();
 
     println!("[Tauri Rust] Timer stopped and reset");
+
+    // Drop locks before emitting/updating to avoid deadlocks
+    drop(status);
+
+    emit_timer_state(app_handle);
+    update_tray_state(app_handle);
     Ok(())
+}
+
+#[tauri::command]
+async fn start_timer(app_handle: tauri::AppHandle) -> Result<(), String> {
+    do_start_timer(&app_handle)
+}
+
+#[tauri::command]
+async fn pause_timer(app_handle: tauri::AppHandle) -> Result<(), String> {
+    do_pause_timer(&app_handle)
+}
+
+#[tauri::command]
+async fn stop_timer(app_handle: tauri::AppHandle) -> Result<(), String> {
+    do_stop_timer(&app_handle)
 }
 
 #[derive(serde::Serialize)]
@@ -880,6 +1007,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ActiveTrackingState::default())
         .manage(ActiveTimerState::default())
+        .manage(AppState::default())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let is_quitting = window.state::<AppState>().is_quitting.lock().unwrap().clone();
+                if !is_quitting {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().unwrap();
             std::fs::create_dir_all(&app_data_dir).unwrap();
@@ -917,6 +1054,74 @@ pub fn run() {
             
             let db_path_sync = db_path.clone();
             app.manage(DbState { db_path });
+
+            // macOS dock icon setup (Accessory mode)
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Load tray assets
+            let icon_idle = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-idle.png")).unwrap();
+            let icon_active = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-active.png")).unwrap();
+
+            app.manage(TrayAssets {
+                icon_idle: icon_idle.clone(),
+                icon_active: icon_active.clone(),
+            });
+
+            // Create tray menu
+            let info_item = tauri::menu::MenuItem::with_id(app, "tray_info", "Tidak Melacak Task", false, None::<&str>)?;
+            let pause_resume_item = tauri::menu::MenuItem::with_id(app, "tray_pause_resume", "⏸ Pause / ▶ Resume", true, None::<&str>)?;
+            let open_item = tauri::menu::MenuItem::with_id(app, "tray_open", "↗ Buka TrackFlow", true, None::<&str>)?;
+            let quit_item = tauri::menu::MenuItem::with_id(app, "tray_quit", "⏻ Keluar", true, None::<&str>)?;
+
+            let tray_menu = tauri::menu::Menu::with_items(app, &[
+                &info_item,
+                &tauri::menu::PredefinedMenuItem::separator(app)?,
+                &pause_resume_item,
+                &open_item,
+                &tauri::menu::PredefinedMenuItem::separator(app)?,
+                &quit_item,
+            ])?;
+
+            app.manage(TrayMenuState {
+                info_item: info_item.clone(),
+                pause_resume_item: pause_resume_item.clone(),
+            });
+
+            let _tray = tauri::tray::TrayIconBuilder::with_id("main")
+                .icon(icon_idle.clone())
+                .icon_as_template(true)
+                .menu(&tray_menu)
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "tray_quit" => {
+                            *app.state::<AppState>().is_quitting.lock().unwrap() = true;
+                            let _ = do_stop_timer(app);
+                            app.exit(0);
+                        }
+                        "tray_open" => {
+                            if let Some(win) = app.get_webview_window("main") {
+                                let _ = win.show();
+                                let _ = win.set_focus();
+                            }
+                        }
+                        "tray_pause_resume" => {
+                            let timer_state = app.state::<ActiveTimerState>();
+                            let status = timer_state.status.lock().unwrap().clone();
+                            if status == "Running" {
+                                if let Err(e) = do_pause_timer(app) {
+                                    println!("[Tauri Rust] Tray pause error: {}", e);
+                                }
+                            } else if status == "Paused" {
+                                if let Err(e) = do_start_timer(app) {
+                                    println!("[Tauri Rust] Tray resume error: {}", e);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .build(app)?;
 
             // Spawn resilient global input hook listener in OS thread
             std::thread::spawn(move || {
@@ -1007,6 +1212,15 @@ pub fn run() {
                     Err(e) => {
                         println!("[Tauri Rust] Failed to get updater instance: {}", e);
                     }
+                }
+            });
+
+            // Spawn background tray update routine (1 second interval)
+            let app_handle_tray = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    update_tray_state(&app_handle_tray);
                 }
             });
 
