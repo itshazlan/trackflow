@@ -19,6 +19,7 @@ export default function App() {
       const label = getCurrentWindow().label;
       setWindowLabel(label);
       if (label === 'screenshot-widget') {
+        document.documentElement.classList.add('screenshot-widget-window');
         document.documentElement.style.backgroundColor = 'transparent';
         document.body.style.backgroundColor = 'transparent';
         const root = document.getElementById('root');

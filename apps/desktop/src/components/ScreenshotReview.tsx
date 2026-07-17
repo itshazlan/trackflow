@@ -247,7 +247,7 @@ export function ScreenshotReview() {
       <div className="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
         <div
           className={`h-full transition-all duration-1000 ease-linear ${getProgressBarColor()}`}
-          style={{ width: `${isPaused ? 100 : (countdown / 15) * 100}%` }}
+          style={{ width: `${(countdown / 15) * 100}%` }}
         />
       </div>
     </div>

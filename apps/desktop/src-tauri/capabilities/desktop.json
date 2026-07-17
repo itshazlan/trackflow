@@ -6,7 +6,9 @@
     "linux"
   ],
   "windows": [
-    "main"
+    "main",
+    "screenshot-widget",
+    "screenshot-preview"
   ],
   "permissions": [
     "updater:default"

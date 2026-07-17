@@ -355,7 +355,9 @@ fn pause_countdown(app_handle: &tauri::AppHandle) {
         println!("[Tauri Rust] Pausing countdown task");
         handle.abort();
     }
-    let _ = app_handle.emit("countdown-paused", ());
+    if let Some(win) = app_handle.get_webview_window("screenshot-widget") {
+        let _ = win.emit("countdown-paused", ());
+    }
 }
 
 fn resume_countdown(app_handle: &tauri::AppHandle) {
@@ -387,7 +389,9 @@ fn resume_countdown(app_handle: &tauri::AppHandle) {
             let remaining = state.remaining_seconds.load(Ordering::SeqCst);
             println!("[Tauri Rust] Countdown tick: remaining = {}", remaining);
             
-            let _ = app_handle_clone.emit("countdown-tick", remaining);
+            if let Some(win) = app_handle_clone.get_webview_window("screenshot-widget") {
+                let _ = win.emit("countdown-tick", remaining);
+            }
             
             if remaining <= 0 {
                 println!("[Tauri Rust] Screenshot review timeout reached on resume. Auto-submitting block: {}", id_clone_task);
@@ -451,12 +455,11 @@ fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screensh
         }
         let _ = win.show();
         let _ = win.set_focus();
-        let _ = app_handle.emit("review-data-changed", ());
+        let _ = win.emit("review-data-changed", ());
     } else {
         println!("[Tauri Rust] Warning: screenshot-widget window was not found!");
     }
 }
-
 #[tauri::command]
 fn get_pending_review(
     state: tauri::State<'_, PendingReviewState>,
@@ -534,7 +537,7 @@ fn open_screenshot_preview(
     if let Some(win) = app_handle.get_webview_window("screenshot-preview") {
         let _ = win.show();
         let _ = win.set_focus();
-        let _ = app_handle.emit("preview-path-changed", ());
+        let _ = win.emit("preview-path-changed", ());
     } else {
         let preview_win = tauri::WebviewWindowBuilder::new(
             &app_handle,

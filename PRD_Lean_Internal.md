@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.2 (Lean Internal) |
+| **Versi Dokumen** | 2.3 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: tray icon/menu bar, floating widget preview/submit/discard screenshot, default task Activity + deskripsi opsional) |
+| **Tanggal** | 14 Juli 2026 (revisi: Floating Widget final — countdown 15 detik, window Preview independen dengan pause/resume) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -214,9 +214,10 @@ Field:
 | FR-085 | Setiap blok selesai, data (screenshot, aktivitas, log aplikasi) otomatis diunggah ke server |
 | FR-086 | Jika koneksi terputus, data disimpan lokal sementara dan diunggah otomatis saat online kembali |
 | FR-087 | Aplikasi tetap berjalan di **tray/menu bar** OS (mis. macOS menu bar) saat window utama ditutup — bukan keluar sepenuhnya. Tray menampilkan status tracking saat ini (task aktif, durasi berjalan) dan menu cepat: Pause/Resume, Buka Aplikasi, Keluar |
-| FR-088 | Setelah screenshot diambil, muncul **widget kecil** di pojok kanan bawah layar (always-on-top) berisi: preview thumbnail, timer berjalan, dan 3 aksi: **Preview** (lihat gambar penuh), **Submit** (kirim seperti biasa), **Discard** (batalkan blok waktu ini) |
-| FR-089 | **Discard** pada widget membuat blok waktu tersebut **tidak pernah dikirim ke server** — waktu tersebut otomatis tidak dihitung/tidak dibayar, setara konsekuensi hapus blok waktu (FR-060/FR-061), namun tanpa perlu audit log karena data memang tidak pernah sampai ke server |
-| FR-090 | Widget otomatis dianggap **Submit** jika tidak ada aksi dalam ~90 detik, supaya tidak menumpuk pengingat yang diabaikan |
+| FR-088 | Setelah screenshot diambil, muncul **widget kecil** di pojok kanan bawah layar (always-on-top) dengan **countdown 15 detik** yang terlihat (angka mundur + progress bar), berisi: preview thumbnail, timer kerja berjalan, dan 3 aksi: **Preview** (lihat gambar penuh), **Submit** (kirim seperti biasa), **Discard** (batalkan blok waktu ini) |
+| FR-088a | Window **Preview** (gambar penuh) bersifat independen dari widget — menutup window Preview (tombol close, Cmd+W, atau Esc) **tidak pernah** ikut menutup widget. Countdown **di-pause** selama Preview terbuka dan **dilanjutkan** dari sisa detik terakhir setelah Preview ditutup |
+| FR-089 | **Discard** pada widget menghapus screenshot dari penyimpanan lokal, dan blok waktu tersebut **tidak pernah dikirim ke server** sama sekali — waktu tersebut otomatis tidak dihitung/tidak dibayar, setara konsekuensi hapus blok waktu (FR-060/FR-061), namun tanpa perlu audit log karena data memang tidak pernah sampai ke server |
+| FR-090 | Widget otomatis dianggap **Submit** jika countdown mencapai 0 tanpa aksi, sehingga tidak menumpuk pengingat yang diabaikan |
 | FR-091 | Jika belum ada tiket yang sedang dikerjakan, pengguna dapat memilih task default **"Activity (Tanpa Tiket)"** untuk tetap mencatat waktu kerja |
 | FR-092 | Saat memilih "Activity", pengguna dapat mengisi **deskripsi singkat (opsional)** mengenai apa yang sedang dikerjakan |
 | FR-093 | Blok waktu berkategori "Activity" ditampilkan dengan label **"Activity"** (bukan Issue ID kosong) di Time Book & Reports, disertai deskripsinya jika diisi |
@@ -275,10 +276,11 @@ Field:
 
 ### 9.7 Meninjau Screenshot via Widget (Preview/Submit/Discard)
 1. Desktop client mengambil screenshot otomatis di waktu acak dalam blok 10 menit berjalan.
-2. Widget kecil muncul di pojok kanan bawah layar: thumbnail screenshot, timer tetap berjalan, tombol Preview/Submit/Discard.
-3. Pekerja klik **Preview** untuk melihat gambar penuh sebelum memutuskan.
-4. Kalau tidak masalah → klik **Submit** (atau dibiarkan hingga 90 detik → otomatis submit) → blok waktu terkirim seperti biasa.
-5. Kalau ada data sensitif tertangkap → klik **Discard** → blok waktu tersebut tidak pernah terkirim ke server, waktu otomatis hangus.
+2. Widget kecil muncul di pojok kanan bawah layar dengan countdown 15 detik berjalan (angka mundur + progress bar): thumbnail screenshot, timer kerja tetap berjalan, tombol Preview/Submit/Discard.
+3. Pekerja klik **Preview** untuk melihat gambar penuh di window terpisah — countdown otomatis berhenti sementara selama window ini terbuka.
+4. Menutup window Preview (cara apapun) → widget tetap ada, countdown lanjut dari sisa detik terakhir.
+5. Kalau tidak masalah → klik **Submit** (atau dibiarkan hingga countdown habis → otomatis submit) → blok waktu terkirim seperti biasa.
+6. Kalau ada data sensitif tertangkap → klik **Discard** → screenshot terhapus dari penyimpanan lokal, blok waktu tersebut tidak pernah terkirim ke server, waktu otomatis hangus.
 
 ### 9.8 Mencatat Waktu Tanpa Tiket (Default Activity)
 1. Pekerja belum memiliki tiket spesifik untuk dikerjakan saat ini (mis. sedang riset umum, technical debt kecil).

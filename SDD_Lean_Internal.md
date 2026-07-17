@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.3 (Lean Internal) |
+| **Versi Dokumen** | 2.4 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Tray Icon/menu bar, Floating Widget preview/submit/discard, kolom `time_blocks.note` untuk default task Activity) |
+| **Tanggal** | 14 Juli 2026 (revisi: Floating Widget final — countdown 15 detik, window `screenshot-preview` independen dengan pause/resume countdown, tidak pernah ikut menutup widget) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -167,7 +167,8 @@ Better Auth secara default memakai **session cookie httpOnly**, cocok untuk `app
 flowchart LR
     UI["Tauri WebView UI (Login, Start/Stop, pemilihan task)"]
     TRAY["Tray Icon Manager (menu bar)"]
-    WIDGET["Floating Widget (Preview/Submit/Discard)"]
+    WIDGET["Floating Widget: screenshot-widget (countdown 15s)"]
+    PREVIEW["Screenshot Preview: screenshot-preview (window terpisah)"]
     CORE["Rust Core Process"]
     AUTH["Auth/Token Manager (keychain)"]
     HOOK["OS-level Input Hook (keyboard/mouse count)"]
@@ -182,7 +183,9 @@ flowchart LR
     CORE --> CAP
     CORE --> AUTH
     CAP -- screenshot diambil --> WIDGET
-    WIDGET -- Submit/Discard/timeout --> CORE
+    WIDGET -- klik Preview: buka/tampilkan --> PREVIEW
+    PREVIEW -- window ditutup: resume countdown --> WIDGET
+    WIDGET -- Submit/Discard/countdown habis --> CORE
     HOOK --> LOCALDB
     CAP --> LOCALDB
     CORE -- hanya jika Submit --> LOCALDB
@@ -195,7 +198,8 @@ flowchart LR
 |---|---|
 | **Rust Core Process** | Siklus blok waktu 10 menit, jadwal screenshot acak, orkestrasi state Start/Pause/Stop, dipicu juga dari Tray & Widget (bukan cuma window utama) |
 | **Tray Icon Manager** | Icon di tray/menu bar OS (mis. macOS menu bar), menu cepat (status task+durasi, Pause/Resume, Buka Aplikasi, Keluar). Window utama **hide ke tray** saat ditutup (bukan quit), quit sungguhan hanya lewat menu tray — lihat §10.8 |
-| **Floating Widget** | Window kedua (multi-window Tauri), always-on-top, tanpa border, pojok kanan bawah layar. Muncul setiap kali screenshot diambil: preview thumbnail + timer + tombol Preview/Submit/Discard. Auto-Submit jika tidak ada aksi ~90 detik (FR-090) — lihat §10.9 |
+| **Floating Widget** | Window `screenshot-widget` (multi-window Tauri), always-on-top, tanpa border, pojok kanan bawah layar. Muncul setiap kali screenshot diambil dengan **countdown 15 detik** (angka mundur + progress bar): preview thumbnail + timer + tombol Preview/Submit/Discard. Tombol Preview membuka window **terpisah** (`screenshot-preview`) — countdown di-pause selama window itu terbuka, resume setelah ditutup (dengan cara apapun: close button, Cmd+W, atau Esc), **tanpa pernah ikut menutup widget**. Auto-Submit jika countdown mencapai 0 tanpa aksi (FR-090) — lihat §10.9 |
+| **Screenshot Preview** | Window `screenshot-preview` — window biasa (ada title bar, bisa di-resize/close), menampilkan gambar screenshot ukuran penuh. **Sepenuhnya independen** dari Floating Widget — menutupnya (cara apapun) hanya memicu event resume countdown ke widget, tidak pernah menutup/menghapus widget itu sendiri |
 | **Auth/Token Manager** | Login via `/api/auth/sign-in/email` (Bearer plugin), simpan token di OS keychain (bukan file plaintext), sediakan token ke Sync Service tiap request, tangani refresh & logout (hapus dari keychain + panggil sign-out) — lihat §4.2 |
 | **OS-level Input Hook** | Hitung klik/ketukan tanpa merekam konten (privasi) |
 | **Screenshot Capture Module** | Screenshot pada detik acak + notifikasi shutter, hasil ditahan dulu menunggu keputusan di Floating Widget (bukan langsung lanjut ke buffer) |
@@ -206,7 +210,7 @@ flowchart LR
 
 **Prinsip keamanan token (baru):** token tidak pernah disimpan sebagai file teks biasa di disk maupun di `localStorage`-equivalent WebView — wajib lewat mekanisme keychain native OS (Keychain di macOS, Credential Manager di Windows, Secret Service di Linux), diakses lewat plugin Tauri resmi.
 
-**Keputusan desain — konsekuensi Discard (default direkomendasikan & disetujui):** Discard pada Floating Widget membuat blok waktu **tidak pernah dikirim ke server sama sekali** — bukan dikirim lalu dihapus. Konsekuensi ke pekerja setara dengan hapus blok waktu self-service (FR-060/061, unpaid otomatis), namun **tanpa audit log** di `time_block_audit_logs`, karena secara teknis data tersebut memang tidak pernah eksis di sisi server (berbeda dari self-delete di Time Book yang menghapus data yang *sudah* tersimpan di database).
+**Keputusan desain — konsekuensi Discard (default direkomendasikan & disetujui):** Discard pada Floating Widget menghapus file screenshot dari penyimpanan lokal, dan blok waktu terkait **tidak pernah dikirim ke server sama sekali** — bukan dikirim lalu dihapus. Konsekuensi ke pekerja setara dengan hapus blok waktu self-service (FR-060/061, unpaid otomatis), namun **tanpa audit log** di `time_block_audit_logs`, karena secara teknis data tersebut memang tidak pernah eksis di sisi server (berbeda dari self-delete di Time Book yang menghapus data yang *sudah* tersimpan di database).
 
 ---
 
@@ -794,30 +798,45 @@ sequenceDiagram
     end
 ```
 
-### 10.9 Alur Floating Widget — Preview/Submit/Discard
+### 10.9 Alur Floating Widget — Countdown 15 Detik, Preview/Submit/Discard
 
 ```mermaid
 sequenceDiagram
     participant CAP as Screenshot Capture Module
-    participant W as Floating Widget
     participant CORE as Rust Core Process
+    participant W as Widget (screenshot-widget)
+    participant P as Preview (screenshot-preview)
     participant DB as Local SQLite Buffer
     participant SYNC as Sync Service
 
-    CAP->>W: Screenshot diambil → tampilkan widget (thumbnail + timer + tombol)
-    alt Pengguna klik "Preview"
-        W->>W: Buka window preview ukuran penuh
-        Note over W: Widget tetap terbuka menunggu keputusan Submit/Discard
-    else Pengguna klik "Submit" ATAU timeout ~90 detik
+    CAP->>CORE: Screenshot diambil
+    CORE->>W: Tampilkan widget (thumbnail + timer)
+    CORE->>CORE: Mulai countdown 15 detik
+    loop Tiap detik
+        CORE->>W: emit countdown-tick(remaining)
+        W-->>W: Update angka mundur + progress bar
+    end
+
+    alt Pengguna klik "Preview" (kapan saja sebelum countdown habis)
+        W->>CORE: Pause countdown (simpan sisa detik)
+        CORE->>P: Buka/tampilkan window screenshot-preview
+        Note over W: Widget TETAP TERLIHAT, tidak ikut hilang
+        P->>P: Pengguna menutup window (close/Cmd+W/Esc) — cara apapun
+        P->>CORE: window "screenshot-preview" CloseRequested
+        CORE->>W: Resume countdown dari sisa detik terakhir
+        Note over W,P: Tidak ada kode yang memanggil close() ke widget dari handler ini
+    else Pengguna klik "Submit" ATAU countdown mencapai 0
         W->>CORE: Konfirmasi Submit
+        CORE->>P: Jika preview masih terbuka, tutup otomatis
         CORE->>DB: Simpan blok waktu + screenshot ke buffer lokal
         DB->>SYNC: Lanjut alur sync normal (§10.1)
-        W->>W: Widget hilang
+        CORE->>W: Tutup widget
     else Pengguna klik "Discard"
         W->>CORE: Konfirmasi Discard
-        CORE->>CORE: Buang data blok waktu & file screenshot lokal
+        CORE->>P: Jika preview masih terbuka, tutup otomatis
+        CORE->>CORE: Hapus screenshot dari penyimpanan lokal & buang data blok waktu
         Note over DB: TIDAK ADA baris yang masuk ke Local SQLite Buffer — blok ini tidak pernah ada di server
-        W->>W: Widget hilang
+        CORE->>W: Tutup widget
     end
 ```
 

@@ -45,3 +45,11 @@
     font-family: inherit;
   }
 }
+
+/* Make widget window layers transparent */
+.screenshot-widget-window,
+.screenshot-widget-window body,
+.screenshot-widget-window #root {
+  background: transparent !important;
+  background-color: transparent !important;
+}
