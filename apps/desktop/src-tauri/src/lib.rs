@@ -441,23 +441,73 @@ fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screensh
     
     resume_countdown(app_handle);
     
+    // Calculate logical screen coordinates for bottom right corner layout
+    let mut x = 0.0;
+    let mut y = 0.0;
+    let mut scale_factor = 1.0;
+    
+    if let Ok(Some(monitor)) = app_handle.primary_monitor() {
+        let size = monitor.size();
+        scale_factor = monitor.scale_factor();
+        let margin = 20.0 * scale_factor;
+        let win_w = 280.0 * scale_factor;
+        let win_h = 180.0 * scale_factor;
+        
+        x = (size.width as f64 - win_w - margin).max(0.0);
+        y = (size.height as f64 - win_h - margin).max(0.0);
+    }
+    
     if let Some(win) = app_handle.get_webview_window("screenshot-widget") {
-        if let Some(monitor) = win.primary_monitor().ok().flatten().or_else(|| win.current_monitor().ok().flatten()) {
-            let size = monitor.size();
-            let scale_factor = monitor.scale_factor();
-            let margin = 20.0 * scale_factor;
-            let win_w = 280.0 * scale_factor;
-            let win_h = 180.0 * scale_factor;
-            
-            let x = (size.width as f64 - win_w - margin).max(0.0);
-            let y = (size.height as f64 - win_h - margin).max(0.0);
-            let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x as i32, y as i32)));
-        }
+        let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x as i32, y as i32)));
         let _ = win.show();
         let _ = win.set_focus();
         let _ = win.emit("review-data-changed", ());
     } else {
-        println!("[Tauri Rust] Warning: screenshot-widget window was not found!");
+        println!("[Tauri Rust] screenshot-widget window not found, building programmatically...");
+        let logical_x = x / scale_factor;
+        let logical_y = y / scale_factor;
+        
+        #[cfg(any(not(target_os = "macos"), feature = "macos-private-api"))]
+        let widget_win = tauri::WebviewWindowBuilder::new(
+            app_handle,
+            "screenshot-widget",
+            tauri::WebviewUrl::App("index.html".into())
+        )
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .inner_size(280.0, 180.0)
+        .position(logical_x, logical_y)
+        .build();
+
+        #[cfg(all(target_os = "macos", not(feature = "macos-private-api")))]
+        let widget_win = tauri::WebviewWindowBuilder::new(
+            app_handle,
+            "screenshot-widget",
+            tauri::WebviewUrl::App("index.html".into())
+        )
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .inner_size(280.0, 180.0)
+        .position(logical_x, logical_y)
+        .build();
+        
+        match widget_win {
+            Ok(win) => {
+                let _ = win.show();
+                let _ = win.set_focus();
+                let _ = win.emit("review-data-changed", ());
+            }
+            Err(e) => {
+                println!("[Tauri Rust] Failed to build screenshot-widget window programmatically: {:?}", e);
+            }
+        }
     }
 }
 #[tauri::command]
