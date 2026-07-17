@@ -62,7 +62,7 @@ pub struct PendingReviewData {
 pub struct PendingReviewState {
     pub data: Mutex<Option<PendingReviewData>>,
     pub preview_path: Mutex<Option<String>>,
-    pub countdown_abort_handle: Mutex<Option<tokio::task::AbortHandle>>,
+    pub countdown_abort_handle: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     pub remaining_seconds: std::sync::atomic::AtomicI32,
 }
 
@@ -352,6 +352,7 @@ fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<Screensh
 fn pause_countdown(app_handle: &tauri::AppHandle) {
     let review_state = app_handle.state::<PendingReviewState>();
     if let Some(handle) = review_state.countdown_abort_handle.lock().unwrap().take() {
+        println!("[Tauri Rust] Pausing countdown task");
         handle.abort();
     }
     let _ = app_handle.emit("countdown-paused", ());
@@ -364,8 +365,14 @@ fn resume_countdown(app_handle: &tauri::AppHandle) {
     let data_opt = review_state.data.lock().unwrap().clone();
     let id_clone = match data_opt {
         Some(data) => data.id,
-        None => return,
+        None => {
+            println!("[Tauri Rust] resume_countdown called but no pending review data found");
+            return;
+        }
     };
+    
+    let remaining_on_resume = review_state.remaining_seconds.load(Ordering::SeqCst);
+    println!("[Tauri Rust] Resuming screenshot countdown. Remaining seconds: {}", remaining_on_resume);
     
     // Abort any existing countdown task
     if let Some(handle) = review_state.countdown_abort_handle.lock().unwrap().take() {
@@ -374,10 +381,11 @@ fn resume_countdown(app_handle: &tauri::AppHandle) {
     
     let app_handle_clone = app_handle.clone();
     let id_clone_task = id_clone.clone();
-    let countdown_task = tokio::spawn(async move {
+    let countdown_task = tauri::async_runtime::spawn(async move {
         loop {
             let state = app_handle_clone.state::<PendingReviewState>();
             let remaining = state.remaining_seconds.load(Ordering::SeqCst);
+            println!("[Tauri Rust] Countdown tick: remaining = {}", remaining);
             
             let _ = app_handle_clone.emit("countdown-tick", remaining);
             
@@ -394,7 +402,7 @@ fn resume_countdown(app_handle: &tauri::AppHandle) {
         }
     });
     
-    *review_state.countdown_abort_handle.lock().unwrap() = Some(countdown_task.abort_handle());
+    *review_state.countdown_abort_handle.lock().unwrap() = Some(countdown_task);
 }
 
 fn do_submit_review(app_handle: &tauri::AppHandle, id: String) -> Result<(), String> {

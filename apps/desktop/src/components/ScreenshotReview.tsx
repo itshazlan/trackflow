@@ -70,23 +70,39 @@ export function ScreenshotReview() {
 
   // Listen to Rust countdown ticks and paused events
   useEffect(() => {
+    let active = true;
     let unlistenTick: (() => void) | null = null;
     let unlistenPaused: (() => void) | null = null;
 
     const setupListeners = async () => {
-      unlistenTick = await listen<number>('countdown-tick', (event) => {
+      const uTick = await listen<number>('countdown-tick', (event) => {
+        if (!active) return;
+        console.log('[Widget UI] Received countdown-tick:', event.payload);
         setCountdown(event.payload);
         setIsPaused(false);
       });
+      if (!active) {
+        uTick();
+        return;
+      }
+      unlistenTick = uTick;
 
-      unlistenPaused = await listen('countdown-paused', () => {
+      const uPaused = await listen('countdown-paused', () => {
+        if (!active) return;
+        console.log('[Widget UI] Received countdown-paused');
         setIsPaused(true);
       });
+      if (!active) {
+        uPaused();
+        return;
+      }
+      unlistenPaused = uPaused;
     };
 
     void setupListeners();
 
     return () => {
+      active = false;
       if (unlistenTick) unlistenTick();
       if (unlistenPaused) unlistenPaused();
     };
