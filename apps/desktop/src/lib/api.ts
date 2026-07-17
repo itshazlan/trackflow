@@ -15,7 +15,8 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  const url = `${BASE_URL}${path}`;
+  const cleanPath = path.startsWith('/api') ? path : `/api${path}`;
+  const url = `${BASE_URL}${cleanPath}`;
   const headers = new Headers(options.headers || {});
 
   // 1. Get bearer token from Rust keyring securely

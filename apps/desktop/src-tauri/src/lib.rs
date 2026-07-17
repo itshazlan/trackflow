@@ -1109,7 +1109,7 @@ async fn upload_screenshot_file(
     token: &str,
     client: &reqwest::Client,
 ) -> Result<(), SyncError> {
-    let url_endpoint = format!("https://trackflow.chimney.id/time-blocks/{}/screenshot", time_block_id);
+    let url_endpoint = format!("https://trackflow.chimney.id/api/time-blocks/{}/screenshot", time_block_id);
     let response = client.post(&url_endpoint)
         .header("Authorization", format!("Bearer {}", token))
         .send()
@@ -1279,7 +1279,7 @@ async fn sync_pending_blocks(
         println!("[Tauri Rust] Syncing block {} (Proj={}) to backend...", block.id, block.project_id);
 
         let sync_result = async {
-            let response = client.post("https://trackflow.chimney.id/time-blocks/sync")
+            let response = client.post("https://trackflow.chimney.id/api/time-blocks/sync")
                 .header("Authorization", format!("Bearer {}", token))
                 .json(&sync_dto)
                 .send()
