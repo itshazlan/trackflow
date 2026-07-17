@@ -1,14 +1,30 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { api } from './lib/api';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
+import { ScreenshotReview } from './components/ScreenshotReview';
+import { ScreenshotPreview } from './components/ScreenshotPreview';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
+  const [windowLabel, setWindowLabel] = useState<string>('main');
   const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    try {
+      const label = getCurrentWindow().label;
+      setWindowLabel(label);
+      if (label === 'screenshot-review') {
+        document.body.style.backgroundColor = 'transparent';
+      }
+    } catch (e) {
+      console.warn('[App] Failed to get window label:', e);
+    }
+  }, []);
 
   useEffect(() => {
     async function checkAuth() {
@@ -82,6 +98,14 @@ export default function App() {
       if (unlistenFn) unlistenFn();
     };
   }, []);
+
+  if (windowLabel === 'screenshot-review') {
+    return <ScreenshotReview />;
+  }
+
+  if (windowLabel === 'screenshot-preview') {
+    return <ScreenshotPreview />;
+  }
 
   if (loading) {
     return (

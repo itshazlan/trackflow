@@ -1,10 +1,12 @@
 use keyring::{Entry, Error};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use std::path::PathBuf;
 use rusqlite::{Connection, params};
 use tauri::Manager;
 use tauri::Emitter;
+
+static ALLOW_REAL_EXIT: AtomicBool = AtomicBool::new(false);
 
 // Global Atomic Event Counters for OS Input Hook (Keyboard / Mouse)
 static KEYBOARD_COUNT: AtomicU32 = AtomicU32::new(0);
@@ -49,6 +51,18 @@ impl Default for AppState {
             is_quitting: Mutex::new(false),
         }
     }
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct PendingReviewData {
+    pub id: String,
+    pub screenshot_path: String,
+}
+
+#[derive(Default)]
+pub struct PendingReviewState {
+    pub data: Mutex<Option<PendingReviewData>>,
+    pub preview_path: Mutex<Option<String>>,
 }
 
 
@@ -201,11 +215,13 @@ fn commit_block_to_db(
     screenshot_path: Option<&str>,
     active_window_title: Option<&str>,
     active_app_name: Option<&str>,
-) -> Result<(), String> {
+    review_pending: i32,
+) -> Result<String, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
-    conn.execute(
-        "INSERT INTO time_blocks (id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, synced)
-         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0)",
+    let id: String = conn.query_row(
+        "INSERT INTO time_blocks (id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, synced, review_pending)
+         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, ?11)
+         RETURNING id",
         params![
             project_id,
             issue_id,
@@ -217,9 +233,11 @@ fn commit_block_to_db(
             screenshot_path,
             active_window_title,
             active_app_name,
+            review_pending,
         ],
+        |row| row.get(0)
     ).map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(id)
 }
 
 fn input_callback(event: rdev::Event) {
@@ -319,6 +337,135 @@ fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<Screensh
     })
 }
 
+fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screenshot_path: String) {
+    let review_state = app_handle.state::<PendingReviewState>();
+    *review_state.data.lock().unwrap() = Some(PendingReviewData {
+        id,
+        screenshot_path,
+    });
+    
+    if let Some(win) = app_handle.get_webview_window("screenshot-review") {
+        let _ = win.hide();
+        let _ = app_handle.emit("review-data-changed", ());
+        
+        if let Some(monitor) = win.primary_monitor().ok().flatten().or_else(|| win.current_monitor().ok().flatten()) {
+            let size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+            let margin = 20.0 * scale_factor;
+            let win_w = 280.0 * scale_factor;
+            let win_h = 180.0 * scale_factor;
+            
+            let x = (size.width as f64 - win_w - margin).max(0.0);
+            let y = (size.height as f64 - win_h - margin).max(0.0);
+            let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x as i32, y as i32)));
+        }
+        let _ = win.show();
+    } else {
+        println!("[Tauri Rust] Warning: screenshot-review window was not found!");
+    }
+}
+
+#[tauri::command]
+fn get_pending_review(
+    state: tauri::State<'_, PendingReviewState>,
+) -> Result<Option<PendingReviewData>, String> {
+    Ok(state.data.lock().unwrap().clone())
+}
+
+#[tauri::command]
+fn submit_review(
+    id: String,
+    app_handle: tauri::AppHandle,
+    db_state: tauri::State<'_, DbState>,
+    review_state: tauri::State<'_, PendingReviewState>,
+) -> Result<(), String> {
+    let conn = Connection::open(&db_state.db_path).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE time_blocks SET review_pending = 0 WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    
+    *review_state.data.lock().unwrap() = None;
+    
+    if let Some(win) = app_handle.get_webview_window("screenshot-review") {
+        let _ = win.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn discard_review(
+    id: String,
+    app_handle: tauri::AppHandle,
+    db_state: tauri::State<'_, DbState>,
+    review_state: tauri::State<'_, PendingReviewState>,
+) -> Result<(), String> {
+    let conn = Connection::open(&db_state.db_path).map_err(|e| e.to_string())?;
+    let screenshot_path: Option<String> = conn.query_row(
+        "SELECT screenshot_path FROM time_blocks WHERE id = ?1",
+        params![id],
+        |row| row.get(0)
+    ).ok();
+    
+    conn.execute("DELETE FROM time_blocks WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    
+    if let Some(path_list) = screenshot_path {
+        if !path_list.trim().is_empty() {
+            let paths: Vec<&str> = path_list.split(',').collect();
+            for path in paths {
+                let file_path = std::path::Path::new(path);
+                if file_path.exists() {
+                    let _ = std::fs::remove_file(file_path);
+                }
+            }
+        }
+    }
+    
+    *review_state.data.lock().unwrap() = None;
+    
+    if let Some(win) = app_handle.get_webview_window("screenshot-review") {
+        let _ = win.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_preview_window(
+    screenshot_path: String,
+    app_handle: tauri::AppHandle,
+    review_state: tauri::State<'_, PendingReviewState>,
+) -> Result<(), String> {
+    *review_state.preview_path.lock().unwrap() = Some(screenshot_path);
+    
+    if let Some(win) = app_handle.get_webview_window("screenshot-preview") {
+        let _ = win.hide();
+        let _ = app_handle.emit("preview-path-changed", ());
+        let _ = win.show();
+        let _ = win.set_focus();
+    } else {
+        let preview_win = tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "screenshot-preview",
+            tauri::WebviewUrl::App("index.html".into())
+        )
+        .title("Screenshot Preview")
+        .inner_size(800.0, 600.0)
+        .decorations(true)
+        .resizable(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+        
+        let _ = preview_win.show();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_preview_path(
+    review_state: tauri::State<'_, PendingReviewState>,
+) -> Result<Option<String>, String> {
+    Ok(review_state.preview_path.lock().unwrap().clone())
+}
+
 fn start_background_tick_loop(
     app_handle: tauri::AppHandle,
     project_id: String,
@@ -386,13 +533,22 @@ fn start_background_tick_loop(
                 }
             };
 
-            if let Err(e) = commit_block_to_db(&db_path, &project_id, &issue_id, block_start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app)) {
-                println!("[Tauri Rust] Error committing time block: {}", e);
-            } else {
-                println!(
-                    "[Tauri Rust] Committed 10m block: Proj={}, Issue={}, Start={}, End={}, Keys={}, Mouse={}, Activity={}, Screenshot={:?}",
-                    project_id, issue_id, block_start, now, k_count, m_count, activity, s_path
-                );
+            let has_screenshot = s_path.is_some() && !s_path.unwrap().trim().is_empty();
+            let review_pending = if has_screenshot { 1 } else { 0 };
+
+            match commit_block_to_db(&db_path, &project_id, &issue_id, block_start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
+                Ok(inserted_id) => {
+                    println!(
+                        "[Tauri Rust] Committed 10m block: Proj={}, Issue={}, Start={}, End={}, Keys={}, Mouse={}, Activity={}, Screenshot={:?}",
+                        project_id, issue_id, block_start, now, k_count, m_count, activity, s_path
+                    );
+                    if has_screenshot {
+                        trigger_screenshot_review(&app_handle, inserted_id, s_path.unwrap().to_string());
+                    }
+                }
+                Err(e) => {
+                    println!("[Tauri Rust] Error committing time block: {}", e);
+                }
             }
         }
     });
@@ -576,13 +732,22 @@ fn do_pause_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     let mut current_block_start = timer_state.current_block_start.lock().unwrap();
     if let Some(start) = current_block_start.take() {
         if now > start {
-            if let Err(e) = commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app)) {
-                println!("[Tauri Rust] Error committing partial block on pause: {}", e);
-            } else {
-                println!(
-                    "[Tauri Rust] Committed partial block on pause ({}s). Keys={}, Mouse={}, Activity={}",
-                    now - start, k_count, m_count, activity
-                );
+            let has_screenshot = s_path.is_some() && !s_path.unwrap().trim().is_empty();
+            let review_pending = if has_screenshot { 1 } else { 0 };
+
+            match commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
+                Ok(inserted_id) => {
+                    println!(
+                        "[Tauri Rust] Committed partial block on pause ({}s). Keys={}, Mouse={}, Activity={}",
+                        now - start, k_count, m_count, activity
+                    );
+                    if has_screenshot {
+                        trigger_screenshot_review(app_handle, inserted_id, s_path.unwrap().to_string());
+                    }
+                }
+                Err(e) => {
+                    println!("[Tauri Rust] Error committing partial block on pause: {}", e);
+                }
             }
 
             let mut accumulated = timer_state.accumulated_seconds.lock().unwrap();
@@ -645,13 +810,22 @@ fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
         let mut current_block_start = timer_state.current_block_start.lock().unwrap();
         if let Some(start) = current_block_start.take() {
             if now > start {
-                if let Err(e) = commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app)) {
-                    println!("[Tauri Rust] Error committing final partial block on stop: {}", e);
-                } else {
-                    println!(
-                        "[Tauri Rust] Committed final partial block on stop ({}s). Keys={}, Mouse={}, Activity={}",
-                        now - start, k_count, m_count, activity
-                    );
+                let has_screenshot = s_path.is_some() && !s_path.unwrap().trim().is_empty();
+                let review_pending = if has_screenshot { 1 } else { 0 };
+
+                match commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
+                    Ok(inserted_id) => {
+                        println!(
+                            "[Tauri Rust] Committed final partial block on stop ({}s). Keys={}, Mouse={}, Activity={}",
+                            now - start, k_count, m_count, activity
+                        );
+                        if has_screenshot {
+                            trigger_screenshot_review(app_handle, inserted_id, s_path.unwrap().to_string());
+                        }
+                    }
+                    Err(e) => {
+                        println!("[Tauri Rust] Error committing final partial block on stop: {}", e);
+                    }
                 }
             }
         }
@@ -842,11 +1016,11 @@ async fn sync_pending_blocks(
         let conn = Connection::open(db_path)
             .map_err(|e| SyncError::Other(format!("Failed to open DB for sync: {}", e)))?;
 
-        // Query all unsynced blocks that have failed less than 5 times
+        // Query all unsynced blocks that have failed less than 5 times and are not pending review
         let mut stmt = conn
             .prepare(
                 "SELECT id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, retry_count 
-                 FROM time_blocks WHERE synced = 0 AND retry_count < 5 ORDER BY block_start ASC",
+                 FROM time_blocks WHERE synced = 0 AND review_pending = 0 AND retry_count < 5 ORDER BY block_start ASC",
             )
             .map_err(|e| SyncError::Other(format!("Failed to prepare select statement: {}", e)))?;
 
@@ -1008,10 +1182,10 @@ pub fn run() {
         .manage(ActiveTrackingState::default())
         .manage(ActiveTimerState::default())
         .manage(AppState::default())
+        .manage(PendingReviewState::default())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let is_quitting = window.state::<AppState>().is_quitting.lock().unwrap().clone();
-                if !is_quitting {
+                if !ALLOW_REAL_EXIT.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -1038,7 +1212,8 @@ pub fn run() {
                     active_window_title TEXT,
                     active_app_name TEXT,
                     retry_count INTEGER NOT NULL DEFAULT 0,
-                    synced INTEGER NOT NULL DEFAULT 0
+                    synced INTEGER NOT NULL DEFAULT 0,
+                    review_pending INTEGER NOT NULL DEFAULT 0
                 )",
                 [],
             ).unwrap();
@@ -1051,13 +1226,40 @@ pub fn run() {
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN active_window_title TEXT", []);
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN active_app_name TEXT", []);
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0", []);
+            let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN review_pending INTEGER NOT NULL DEFAULT 0", []);
             
             let db_path_sync = db_path.clone();
             app.manage(DbState { db_path });
 
-            // macOS dock icon setup (Accessory mode)
+            // macOS dock icon setup (Accessory mode) and custom menu (excl. Quit to disable Cmd+Q)
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                use tauri::menu::{MenuBuilder, SubmenuBuilder};
+                let app_menu = SubmenuBuilder::new(app, "TrackFlow")
+                    .about(None)
+                    .separator()
+                    .hide()
+                    .build()?;
+
+                let edit_menu = SubmenuBuilder::new(app, "Edit")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .select_all()
+                    .build()?;
+
+                let menu = MenuBuilder::new(app)
+                    .item(&app_menu)
+                    .item(&edit_menu)
+                    .build()?;
+
+                app.set_menu(menu)?;
+            }
 
             // Load tray assets
             let icon_idle = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-idle.png")).unwrap();
@@ -1095,6 +1297,7 @@ pub fn run() {
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
                         "tray_quit" => {
+                            ALLOW_REAL_EXIT.store(true, Ordering::SeqCst);
                             *app.state::<AppState>().is_quitting.lock().unwrap() = true;
                             let _ = do_stop_timer(app);
                             app.exit(0);
@@ -1238,8 +1441,24 @@ pub fn run() {
             pause_timer,
             stop_timer,
             get_timer_state,
-            check_input_permission
+            check_input_permission,
+            get_pending_review,
+            submit_review,
+            discard_review,
+            open_preview_window,
+            get_preview_path
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| match event {
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                if !ALLOW_REAL_EXIT.load(Ordering::SeqCst) {
+                    api.prevent_exit();
+                    if let Some(win) = app_handle.get_webview_window("main") {
+                        let _ = win.hide();
+                    }
+                }
+            }
+            _ => {}
+        });
 }

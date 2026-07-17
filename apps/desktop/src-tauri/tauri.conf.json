@@ -12,13 +12,42 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Trackflow Desktop",
+        "width": 460,
+        "height": 580
+      },
+      {
+        "label": "screenshot-review",
+        "title": "Screenshot Review",
+        "width": 280,
+        "height": 180,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "transparent": true,
+        "visible": false
+      },
+      {
+        "label": "screenshot-preview",
+        "title": "Screenshot Preview",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "decorations": true,
+        "resizable": true,
+        "visible": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' asset: https: data:; connect-src 'self' http://localhost:3000; style-src 'self' 'unsafe-inline';",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/*",
+          "$APPDATA/**/*"
+        ]
+      }
     }
   },
   "bundle": {
