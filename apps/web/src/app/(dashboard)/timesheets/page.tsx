@@ -753,7 +753,7 @@ export default function TimesheetsPage() {
             timesheetDetail && (
               <div className="flex flex-col gap-4 text-xs">
                 <DialogHeader className="border-b border-border pb-3">
-                  <div className="flex items-center justify-between mt-1">
+                  <div className="flex items-center justify-between mt-1 pr-8">
                     <DialogTitle className="text-[14px] font-semibold">
                       Detail Berkas Timesheet
                     </DialogTitle>

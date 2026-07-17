@@ -175,8 +175,15 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
     setActiveDate(current.toLocaleDateString("en-CA"));
   };
 
-  // Filter blocks for activeDate
-  const activeDateBlocks = timeBlocks.filter((b) => b.blockStart.startsWith(activeDate));
+  // Filter blocks for activeDate, converting blockStart to local timezone date string to match activeDate
+  const activeDateBlocks = timeBlocks.filter((b) => {
+    try {
+      const localDateStr = new Date(b.blockStart).toLocaleDateString("en-CA");
+      return localDateStr === activeDate;
+    } catch {
+      return false;
+    }
+  });
   const maxKeyboard = Math.max(...activeDateBlocks.map((b) => b.activity.keyboardCount), 1);
   const maxMouse = Math.max(...activeDateBlocks.map((b) => b.activity.mouseCount), 1);
   const screenshotBlocks = activeDateBlocks.filter((b) => b.screenshot !== null);

@@ -26,6 +26,8 @@ import {
   Folder,
   FileSpreadsheet,
   FileText,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 export default function ReportsPage() {
@@ -53,6 +55,10 @@ export default function ReportsPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(15);
 
   const loadInitialConfig = useCallback(async () => {
     try {
@@ -127,6 +133,7 @@ export default function ReportsPage() {
       );
       setReportItems(data.rows || []);
       setTotalMinutes(data.totalMinutes);
+      setCurrentPage(1);
     } catch (err: unknown) {
       console.error(err);
       setError("Gagal memuat pratinjau data laporan.");
@@ -178,6 +185,13 @@ export default function ReportsPage() {
     return hrs > 0 ? `${hrs}j ${m}m` : `${m}m`;
   };
 
+  // Paginated items calculations
+  const totalItems = reportItems.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+  const paginatedItems = reportItems.slice(startIndex, endIndex);
+
   if (loading && projects.length === 0) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -187,7 +201,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6">
+    <div className="p-6 pb-20 max-w-5xl mx-auto flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
@@ -373,8 +387,8 @@ export default function ReportsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                reportItems.map((item, idx) => (
-                  <TableRow key={idx} className="hover:bg-muted/40 transition-colors">
+                paginatedItems.map((item, idx) => (
+                  <TableRow key={startIndex + idx} className="hover:bg-muted/40 transition-colors">
                     <TableCell className="pl-4 font-medium text-foreground text-[12.5px]">
                       {new Date(item.date).toLocaleDateString("id-ID", {
                         day: "numeric",
@@ -416,6 +430,103 @@ export default function ReportsPage() {
             </TableBody>
           </Table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalItems > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2 px-1">
+            {/* Info */}
+            <div className="text-xs text-muted-foreground">
+              Menampilkan <span className="font-semibold text-foreground">{totalItems === 0 ? 0 : startIndex + 1}</span> hingga{" "}
+              <span className="font-semibold text-foreground">{endIndex}</span> dari{" "}
+              <span className="font-semibold text-foreground">{totalItems}</span> entri log
+            </div>
+
+            {/* Pagination Controls & Page Size Selector */}
+            <div className="flex items-center gap-4">
+              {/* Page Size Select */}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase">Baris per halaman:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-7.5 rounded border border-border bg-card px-2 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                >
+                  {[10, 15, 25, 50].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Prev/Next Buttons */}
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7.5 w-7.5 border-border bg-card hover:bg-muted text-foreground disabled:opacity-50"
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                >
+                  <span className="sr-only">Previous Page</span>
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }).map((_, i) => {
+                    const page = i + 1;
+                    if (
+                      page === 1 ||
+                      page === totalPages ||
+                      Math.abs(page - currentPage) <= 1
+                    ) {
+                      return (
+                        <Button
+                          key={page}
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="icon"
+                          className={`h-7.5 w-7.5 border-border ${
+                            currentPage === page
+                              ? "bg-primary text-primary-foreground font-bold shadow-xs hover:brightness-110"
+                              : "bg-card hover:bg-muted text-foreground"
+                          } text-[11px]`}
+                          onClick={() => setCurrentPage(page)}
+                        >
+                          {page}
+                        </Button>
+                      );
+                    } else if (
+                      (page === 2 && currentPage > 3) ||
+                      (page === totalPages - 1 && currentPage < totalPages - 2)
+                    ) {
+                      return (
+                        <span key={page} className="text-muted-foreground/60 text-xs px-1 select-none">
+                          ...
+                        </span>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7.5 w-7.5 border-border bg-card hover:bg-muted text-foreground disabled:opacity-50"
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                >
+                  <span className="sr-only">Next Page</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
