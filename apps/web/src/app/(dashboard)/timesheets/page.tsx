@@ -371,11 +371,11 @@ export default function TimesheetsPage() {
       {/* Tabs list */}
       <Tabs defaultValue="timesheets" className="w-full flex flex-col gap-4">
         <TabsList className="w-fit h-8.5 bg-muted/40 border border-border p-0.5 rounded-lg shrink-0">
-          <TabsTrigger value="timesheets" className="text-[11.5px] font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5">
+          <TabsTrigger value="timesheets" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
             <FileCheck2 className="h-3.5 w-3.5" />
             Persetujuan Timesheet
           </TabsTrigger>
-          <TabsTrigger value="manual" className="text-[11.5px] font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5">
+          <TabsTrigger value="manual" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
             Entri Waktu Manual
           </TabsTrigger>

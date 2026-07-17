@@ -393,15 +393,15 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
 
       <Tabs defaultValue="workflow" className="w-full flex flex-col gap-4">
         <TabsList className="w-fit h-8.5 bg-muted/40 border border-border p-0.5 rounded-lg shrink-0">
-          <TabsTrigger value="workflow" className="text-[11.5px] font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5">
+          <TabsTrigger value="workflow" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
             <Sliders className="h-3.5 w-3.5" />
             Workflow Status
           </TabsTrigger>
-          <TabsTrigger value="templates" className="text-[11.5px] font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5">
+          <TabsTrigger value="templates" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5" />
             Template Tiket
           </TabsTrigger>
-          <TabsTrigger value="members" className="text-[11.5px] font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5">
+          <TabsTrigger value="members" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
             Anggota Proyek
           </TabsTrigger>

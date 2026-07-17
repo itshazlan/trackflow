@@ -195,15 +195,15 @@ export default function ProjectDetailPage() {
       {/* Tabs Menu */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full flex flex-col gap-4">
         <TabsList className="w-fit h-9 bg-muted/50 border border-border p-0.5 rounded-lg">
-          <TabsTrigger value="issues" className="text-[12px] font-medium px-4 h-8 rounded-md flex items-center gap-1.5">
+          <TabsTrigger value="issues" className="text-[12px] font-medium px-4 rounded-md flex items-center gap-1.5">
             <CheckSquare className="h-3.5 w-3.5" />
             Issues
           </TabsTrigger>
-          <TabsTrigger value="timebook" className="text-[12px] font-medium px-4 h-8 rounded-md flex items-center gap-1.5">
+          <TabsTrigger value="timebook" className="text-[12px] font-medium px-4 rounded-md flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
             Time Book
           </TabsTrigger>
-          <TabsTrigger value="settings" className="text-[12px] font-medium px-4 h-8 rounded-md flex items-center gap-1.5">
+          <TabsTrigger value="settings" className="text-[12px] font-medium px-4 rounded-md flex items-center gap-1.5">
             <Settings className="h-3.5 w-3.5" />
             Settings
           </TabsTrigger>
