@@ -90,18 +90,7 @@ export function ScreenshotPreview() {
 
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-white overflow-hidden">
-      {/* Top Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 bg-zinc-950 select-none">
-        <div className="flex flex-col">
-          <span className="text-xs font-semibold text-zinc-200">Screenshot Preview</span>
-        </div>
-        <button
-          onClick={() => getCurrentWindow().close()}
-          className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-        >
-          Close
-        </button>
-      </div>
+
 
       {/* Image Container */}
       <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-zinc-900/50">

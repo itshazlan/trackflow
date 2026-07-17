@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, BASE_URL } from '../lib/api';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { ChevronDown, LogOut, Play, Shield, User, Wifi } from 'lucide-react';
 
 interface DashboardProps {
@@ -29,6 +30,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [issues, setIssues] = useState<any[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState<string>('');
+  const [activityNote, setActivityNote] = useState<string>('');
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingIssues, setLoadingIssues] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +159,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
       // 2. Check if there's an active tracking task stored in Rust core
       try {
-        const [activeProjId, activeIssueId, _activeIssueTitle] = await invoke<[string | null, string | null, string | null]>('get_active_task');
+        const [activeProjId, activeIssueId, _activeIssueTitle, _activeNote] = await invoke<[string | null, string | null, string | null, string | null]>('get_active_task');
         
         if (activeProjId && projectList.some((p) => p.id === activeProjId)) {
           setSelectedProjectId(activeProjId);
@@ -175,6 +177,11 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
             if (activeIssueId && assignedIssues.some((i) => i.id === activeIssueId)) {
               setSelectedIssueId(activeIssueId);
+            } else if (!activeIssueId && _activeIssueTitle === 'Activity (Tanpa Tiket)') {
+              setSelectedIssueId('activity');
+              if (_activeNote) {
+                setActivityNote(_activeNote);
+              }
             }
           }
           setLoadingIssues(false);
@@ -238,6 +245,25 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     };
   }, []);
 
+  // Dynamic window resizing based on task selection
+  useEffect(() => {
+    async function adjustWindowSize() {
+      try {
+        const win = getCurrentWindow();
+        if (win.label === 'main') {
+          if (selectedIssueId === 'activity') {
+            await win.setSize(new LogicalSize(460, 640));
+          } else {
+            await win.setSize(new LogicalSize(460, 580));
+          }
+        }
+      } catch (err) {
+        console.warn('[Dashboard Resize] Failed to resize window:', err);
+      }
+    }
+    void adjustWindowSize();
+  }, [selectedIssueId]);
+
   const handleProjectChange = async (projectId: string) => {
     setSelectedProjectId(projectId);
     setSelectedIssueId('');
@@ -273,18 +299,46 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const handleIssueChange = async (issueId: string) => {
     setSelectedIssueId(issueId);
     setError(null);
-    const selectedIssue = issues.find((issue) => issue.id === issueId);
-    const issueTitle = selectedIssue ? selectedIssue.title : null;
+    
+    let resolvedIssueId: string | null = null;
+    let resolvedIssueTitle: string | null = null;
+    let resolvedNote: string | null = null;
+
+    if (issueId === 'activity') {
+      resolvedIssueTitle = 'Activity (Tanpa Tiket)';
+      resolvedNote = activityNote || null;
+    } else {
+      const selectedIssue = issues.find((issue) => issue.id === issueId);
+      resolvedIssueId = issueId || null;
+      resolvedIssueTitle = selectedIssue ? selectedIssue.title : null;
+    }
 
     // Sync state to Rust
     try {
       await invoke('set_active_task', {
         projectId: selectedProjectId || null,
-        issueId: issueId || null,
-        issueTitle: issueTitle,
+        issueId: resolvedIssueId,
+        issueTitle: resolvedIssueTitle,
+        note: resolvedNote,
       });
     } catch (err) {
       console.error('[Dashboard] Failed to sync active task to Rust:', err);
+    }
+  };
+
+  const handleNoteChange = async (noteVal: string) => {
+    setActivityNote(noteVal);
+    if (selectedIssueId === 'activity') {
+      try {
+        await invoke('set_active_task', {
+          projectId: selectedProjectId || null,
+          issueId: null,
+          issueTitle: 'Activity (Tanpa Tiket)',
+          note: noteVal || null,
+        });
+      } catch (err) {
+        console.error('[Dashboard] Failed to sync note to Rust:', err);
+      }
     }
   };
 
@@ -383,7 +437,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 overflow-y-auto p-4 space-y-4">
+      <main className="flex-1 overflow-y-auto p-4 flex flex-col justify-center space-y-4">
         {/* Permission Warning Banner */}
         {!hasPermission && (
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3.5 flex flex-col space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -450,69 +504,6 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         </div>
 
-        {/* Interactive Timer Card */}
-        <div className="rounded-lg border border-border bg-card p-4 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              Time Tracker
-            </h3>
-            <div className="flex items-center space-x-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${
-                timerStatus === 'Running' ? 'bg-emerald-500 animate-pulse' :
-                timerStatus === 'Paused' ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground'
-              }`} />
-              <span className="text-[10px] font-medium text-muted-foreground">
-                {timerStatus}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center justify-center py-4 space-y-2">
-            <div className="text-3xl font-mono tracking-wider font-semibold text-foreground">
-              {formatTime(elapsedSeconds)}
-            </div>
-            <p className="text-[10px] text-muted-foreground text-center max-w-[220px]">
-              {timerStatus === 'Idle'
-                ? 'Select a task below to start tracking your block time.'
-                : timerStatus === 'Running'
-                ? 'Tracking time... Blocks will be auto-saved every 10s.'
-                : 'Timer paused. Your partial block has been saved.'}
-            </p>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex space-x-2.5">
-            {timerStatus === 'Idle' || timerStatus === 'Paused' ? (
-              <button
-                onClick={handleStartTimer}
-                disabled={!selectedProjectId || !selectedIssueId}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-foreground text-background font-semibold py-2 px-4 rounded text-xs hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <Play className="h-3.5 w-3.5 fill-current" />
-                <span>{timerStatus === 'Paused' ? 'Resume' : 'Start'}</span>
-              </button>
-            ) : (
-              <button
-                onClick={handlePauseTimer}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-secondary hover:bg-secondary/80 text-foreground font-semibold py-2 px-4 rounded text-xs transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><rect x="14" y="4" width="4" height="16" rx="1"></rect><rect x="6" y="4" width="4" height="16" rx="1"></rect></svg>
-                <span>Pause</span>
-              </button>
-            )}
-
-            {timerStatus !== 'Idle' && (
-              <button
-                onClick={handleStopTimer}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-destructive/10 hover:bg-destructive/25 text-destructive-foreground font-semibold py-2 px-4 rounded text-xs transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><rect x="4" y="4" width="16" height="16" rx="1"></rect></svg>
-                <span>Stop</span>
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Project & Task Selector Card */}
         <div className="rounded-lg border border-border bg-card p-4 space-y-4 shadow-sm">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -562,32 +553,99 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
             {loadingIssues ? (
               <div className="h-8 w-full rounded border border-border bg-secondary animate-pulse" />
             ) : (
-              <div className="relative">
-                <select
-                  value={selectedIssueId}
-                  onChange={(e) => handleIssueChange(e.target.value)}
-                  disabled={timerStatus !== 'Idle' || !selectedProjectId || issues.length === 0}
-                  className="w-full appearance-none rounded border border-input bg-background py-2 pl-3 pr-10 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none disabled:opacity-50 transition-colors cursor-pointer"
-                >
-                  {!selectedProjectId ? (
-                    <option value="" className="bg-[#0a0a0c]">Select a project first...</option>
-                  ) : issues.length === 0 ? (
-                    <option value="" className="bg-[#0a0a0c]">No tasks assigned to you</option>
-                  ) : (
-                    <>
-                      <option value="" className="bg-[#0a0a0c]">Select a task...</option>
-                      {issues.map((issue) => (
-                        <option key={issue.id} value={issue.id} className="bg-[#0a0a0c]">
-                          {issue.displayId ? `[${issue.displayId}] ` : ''}{issue.title}
-                        </option>
-                      ))}
-                    </>
-                  )}
-                </select>
-                <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-muted-foreground">
-                  <ChevronDown className="h-4 w-4" />
-                </span>
+              <div className="space-y-2">
+                <div className="relative">
+                  <select
+                    value={selectedIssueId}
+                    onChange={(e) => handleIssueChange(e.target.value)}
+                    disabled={timerStatus !== 'Idle' || !selectedProjectId}
+                    className="w-full appearance-none rounded border border-input bg-background py-2 pl-3 pr-10 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    {!selectedProjectId ? (
+                      <option value="" className="bg-[#0a0a0c]">Select a project first...</option>
+                    ) : (
+                      <>
+                        <option value="" className="bg-[#0a0a0c]">Select a task...</option>
+                        <option value="activity" className="bg-[#0a0a0c]">Activity (Tanpa Tiket)</option>
+                        {issues.map((issue) => (
+                          <option key={issue.id} value={issue.id} className="bg-[#0a0a0c]">
+                            {issue.displayId ? `[${issue.displayId}] ` : ''}{issue.title}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                  <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-muted-foreground">
+                    <ChevronDown className="h-4 w-4" />
+                  </span>
+                </div>
+
+                {selectedIssueId === 'activity' && (
+                  <div className="space-y-1 pt-0.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Deskripsi (opsional)
+                    </label>
+                    <input
+                      type="text"
+                      value={activityNote}
+                      onChange={(e) => handleNoteChange(e.target.value)}
+                      disabled={timerStatus !== 'Idle'}
+                      placeholder="Apa yang sedang Anda kerjakan?"
+                      className="w-full rounded border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none transition-colors"
+                    />
+                  </div>
+                )}
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Action Buttons & Status Card */}
+        <div className="rounded-lg border border-border bg-card p-4 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Time Tracker
+            </h3>
+            <div className="flex items-center space-x-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${
+                timerStatus === 'Running' ? 'bg-emerald-500 animate-pulse' :
+                timerStatus === 'Paused' ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground'
+              }`} />
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {timerStatus} {timerStatus !== 'Idle' && `(${formatTime(elapsedSeconds)})`}
+              </span>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex space-x-2.5">
+            {timerStatus === 'Idle' || timerStatus === 'Paused' ? (
+              <button
+                onClick={handleStartTimer}
+                disabled={!selectedProjectId || !selectedIssueId}
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-foreground text-background font-semibold py-2 px-4 rounded text-xs hover:bg-foreground/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+                <span>{timerStatus === 'Paused' ? 'Resume' : 'Start'}</span>
+              </button>
+            ) : (
+              <button
+                onClick={handlePauseTimer}
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-secondary hover:bg-secondary/80 text-foreground font-semibold py-2 px-4 rounded text-xs transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><rect x="14" y="4" width="4" height="16" rx="1"></rect><rect x="6" y="4" width="4" height="16" rx="1"></rect></svg>
+                <span>Pause</span>
+              </button>
+            )}
+
+            {timerStatus !== 'Idle' && (
+              <button
+                onClick={handleStopTimer}
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-destructive/10 hover:bg-destructive/25 text-destructive-foreground font-semibold py-2 px-4 rounded text-xs transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><rect x="4" y="4" width="16" height="16" rx="1"></rect></svg>
+                <span>Stop</span>
+              </button>
             )}
           </div>
         </div>

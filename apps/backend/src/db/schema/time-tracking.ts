@@ -39,6 +39,7 @@ export const timeBlocks = pgTable('time_blocks', {
   issueId: uuid('issue_id').references(() => issues.id, {
     onDelete: 'set null',
   }),
+  note: text('note'),
   blockStart: timestamp('block_start', { withTimezone: true }).notNull(),
   blockEnd: timestamp('block_end', { withTimezone: true }).notNull(),
   isDeleted: boolean('is_deleted').default(false).notNull(),

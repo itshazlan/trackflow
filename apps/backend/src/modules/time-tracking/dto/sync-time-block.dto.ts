@@ -35,6 +35,10 @@ export class SyncTimeBlockDto {
   @IsOptional()
   issueId?: string | null;
 
+  @IsString()
+  @IsOptional()
+  note?: string | null;
+
   @IsDateString()
   @IsNotEmpty()
   blockStart: string;

@@ -39,6 +39,7 @@ pub struct ActiveTrackingState {
     pub project_id: Mutex<Option<String>>,
     pub issue_id: Mutex<Option<String>>,
     pub issue_title: Mutex<Option<String>>,
+    pub note: Mutex<Option<String>>,
 }
 
 pub struct AppState {
@@ -180,14 +181,16 @@ fn set_active_task(
     project_id: Option<String>,
     issue_id: Option<String>,
     issue_title: Option<String>,
+    note: Option<String>,
     state: tauri::State<'_, ActiveTrackingState>,
 ) -> Result<(), String> {
     *state.project_id.lock().unwrap() = project_id.clone();
     *state.issue_id.lock().unwrap() = issue_id.clone();
     *state.issue_title.lock().unwrap() = issue_title.clone();
+    *state.note.lock().unwrap() = note.clone();
     println!(
-        "[Tauri Rust] set_active_task called. Project: {:?}, Issue: {:?}, Title: {:?}",
-        project_id, issue_id, issue_title
+        "[Tauri Rust] set_active_task called. Project: {:?}, Issue: {:?}, Title: {:?}, Note: {:?}",
+        project_id, issue_id, issue_title, note
     );
     Ok(())
 }
@@ -195,11 +198,12 @@ fn set_active_task(
 #[tauri::command]
 fn get_active_task(
     state: tauri::State<'_, ActiveTrackingState>,
-) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+) -> Result<(Option<String>, Option<String>, Option<String>, Option<String>), String> {
     let project_id = state.project_id.lock().unwrap().clone();
     let issue_id = state.issue_id.lock().unwrap().clone();
     let issue_title = state.issue_title.lock().unwrap().clone();
-    Ok((project_id, issue_id, issue_title))
+    let note = state.note.lock().unwrap().clone();
+    Ok((project_id, issue_id, issue_title, note))
 }
 
 fn classify_activity(keyboard: u32, mouse: u32) -> &'static str {
@@ -218,7 +222,8 @@ fn classify_activity(keyboard: u32, mouse: u32) -> &'static str {
 fn commit_block_to_db(
     db_path: &std::path::Path,
     project_id: &str,
-    issue_id: &str,
+    issue_id: Option<&str>,
+    note: Option<&str>,
     block_start: i64,
     block_end: i64,
     keyboard_count: u32,
@@ -231,12 +236,13 @@ fn commit_block_to_db(
 ) -> Result<String, String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     let id: String = conn.query_row(
-        "INSERT INTO time_blocks (id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, synced, review_pending)
-         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, ?11)
+        "INSERT INTO time_blocks (id, project_id, issue_id, note, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, synced, review_pending)
+         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, ?12)
          RETURNING id",
         params![
             project_id,
             issue_id,
+            note,
             block_start.to_string(),
             block_end.to_string(),
             keyboard_count,
@@ -616,7 +622,8 @@ fn get_preview_path(
 fn start_background_tick_loop(
     app_handle: tauri::AppHandle,
     project_id: String,
-    issue_id: String,
+    issue_id: Option<String>,
+    note: Option<String>,
     db_path: PathBuf,
 ) -> tokio::task::AbortHandle {
     let task = tokio::spawn(async move {
@@ -684,10 +691,10 @@ fn start_background_tick_loop(
             let has_screenshot = s_path.is_some() && !s_path.unwrap().trim().is_empty();
             let review_pending = if has_screenshot { 1 } else { 0 };
 
-            match commit_block_to_db(&db_path, &project_id, &issue_id, block_start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
+            match commit_block_to_db(&db_path, &project_id, issue_id.as_deref(), note.as_deref(), block_start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
                 Ok(inserted_id) => {
                     println!(
-                        "[Tauri Rust] Committed 10m block: Proj={}, Issue={}, Start={}, End={}, Keys={}, Mouse={}, Activity={}, Screenshot={:?}",
+                        "[Tauri Rust] Committed 10m block: Proj={}, Issue={:?}, Start={}, End={}, Keys={}, Mouse={}, Activity={}, Screenshot={:?}",
                         project_id, issue_id, block_start, now, k_count, m_count, activity, s_path
                     );
                     if has_screenshot {
@@ -794,8 +801,8 @@ fn do_start_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
 
     let project_id = tracking_state.project_id.lock().unwrap().clone()
         .ok_or_else(|| "No project selected".to_string())?;
-    let issue_id = tracking_state.issue_id.lock().unwrap().clone()
-        .ok_or_else(|| "No task selected".to_string())?;
+    let issue_id = tracking_state.issue_id.lock().unwrap().clone();
+    let note = tracking_state.note.lock().unwrap().clone();
 
     let now = chrono::Utc::now().timestamp();
 
@@ -820,6 +827,7 @@ fn do_start_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
         app_handle.clone(),
         project_id,
         issue_id,
+        note,
         db_state.db_path.clone(),
     );
 
@@ -860,8 +868,8 @@ fn do_pause_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
 
     let project_id = tracking_state.project_id.lock().unwrap().clone()
         .ok_or_else(|| "No project selected".to_string())?;
-    let issue_id = tracking_state.issue_id.lock().unwrap().clone()
-        .ok_or_else(|| "No task selected".to_string())?;
+    let issue_id = tracking_state.issue_id.lock().unwrap().clone();
+    let note = tracking_state.note.lock().unwrap().clone();
 
     let k_count = KEYBOARD_COUNT.swap(0, Ordering::SeqCst);
     let m_count = MOUSE_COUNT.swap(0, Ordering::SeqCst);
@@ -883,7 +891,7 @@ fn do_pause_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
             let has_screenshot = s_path.is_some() && !s_path.unwrap().trim().is_empty();
             let review_pending = if has_screenshot { 1 } else { 0 };
 
-            match commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
+            match commit_block_to_db(&db_state.db_path, &project_id, issue_id.as_deref(), note.as_deref(), start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
                 Ok(inserted_id) => {
                     println!(
                         "[Tauri Rust] Committed partial block on pause ({}s). Keys={}, Mouse={}, Activity={}",
@@ -939,8 +947,8 @@ fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     if *status == "Running" {
         let project_id = tracking_state.project_id.lock().unwrap().clone()
             .ok_or_else(|| "No project selected".to_string())?;
-        let issue_id = tracking_state.issue_id.lock().unwrap().clone()
-            .ok_or_else(|| "No task selected".to_string())?;
+        let issue_id = tracking_state.issue_id.lock().unwrap().clone();
+        let note = tracking_state.note.lock().unwrap().clone();
 
         let k_count = KEYBOARD_COUNT.swap(0, Ordering::SeqCst);
         let m_count = MOUSE_COUNT.swap(0, Ordering::SeqCst);
@@ -961,7 +969,7 @@ fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
                 let has_screenshot = s_path.is_some() && !s_path.unwrap().trim().is_empty();
                 let review_pending = if has_screenshot { 1 } else { 0 };
 
-                match commit_block_to_db(&db_state.db_path, &project_id, &issue_id, start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
+                match commit_block_to_db(&db_state.db_path, &project_id, issue_id.as_deref(), note.as_deref(), start, now, k_count, m_count, activity, s_path, Some(&s_title), Some(&s_app), review_pending) {
                     Ok(inserted_id) => {
                         println!(
                             "[Tauri Rust] Committed final partial block on stop ({}s). Keys={}, Mouse={}, Activity={}",
@@ -1052,6 +1060,8 @@ struct SyncTimeBlockDto {
     project_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     issue_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
     block_start: String,
     block_end: String,
     activity: ActivityDto,
@@ -1144,6 +1154,7 @@ struct LocalTimeBlock {
     id: String,
     project_id: String,
     issue_id: Option<String>,
+    note: Option<String>,
     block_start: String,
     block_end: String,
     keyboard_count: u32,
@@ -1167,7 +1178,7 @@ async fn sync_pending_blocks(
         // Query all unsynced blocks that have failed less than 5 times and are not pending review
         let mut stmt = conn
             .prepare(
-                "SELECT id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, retry_count 
+                "SELECT id, project_id, issue_id, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, retry_count, note 
                  FROM time_blocks WHERE synced = 0 AND review_pending = 0 AND retry_count < 5 ORDER BY block_start ASC",
             )
             .map_err(|e| SyncError::Other(format!("Failed to prepare select statement: {}", e)))?;
@@ -1187,6 +1198,7 @@ async fn sync_pending_blocks(
                     row.get::<_, Option<String>>(9)?,
                     row.get::<_, Option<String>>(10)?,
                     row.get::<_, u32>(11)?,
+                    row.get::<_, Option<String>>(12)?,
                 ))
             })
             .map_err(|e| SyncError::Other(format!("Failed to query time blocks: {}", e)))?;
@@ -1206,12 +1218,14 @@ async fn sync_pending_blocks(
                 active_window_title,
                 active_app_name,
                 retry_count,
+                note,
             ) = row_res.map_err(|e| SyncError::Other(format!("Row error: {}", e)))?;
 
             pending.push(LocalTimeBlock {
                 id: local_id,
                 project_id,
                 issue_id,
+                note,
                 block_start: block_start_str,
                 block_end: block_end_str,
                 keyboard_count: k_count,
@@ -1243,6 +1257,7 @@ async fn sync_pending_blocks(
         let sync_dto = SyncTimeBlockDto {
             project_id: block.project_id.clone(),
             issue_id: block.issue_id.clone(),
+            note: block.note.clone(),
             block_start: start_iso,
             block_end: end_iso,
             activity: ActivityDto {
@@ -1356,7 +1371,8 @@ pub fn run() {
                 "CREATE TABLE IF NOT EXISTS time_blocks (
                     id TEXT PRIMARY KEY,
                     project_id TEXT NOT NULL,
-                    issue_id TEXT NOT NULL,
+                    issue_id TEXT,
+                    note TEXT,
                     block_start TEXT NOT NULL,
                     block_end TEXT NOT NULL,
                     keyboard_count INTEGER NOT NULL DEFAULT 0,
@@ -1381,6 +1397,7 @@ pub fn run() {
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN active_app_name TEXT", []);
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0", []);
             let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN review_pending INTEGER NOT NULL DEFAULT 0", []);
+            let _ = conn.execute("ALTER TABLE time_blocks ADD COLUMN note TEXT", []);
             
             let db_path_sync = db_path.clone();
             app.manage(DbState { db_path });

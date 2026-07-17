@@ -1,0 +1,1 @@
+ALTER TABLE "time_blocks" ADD COLUMN "note" text;

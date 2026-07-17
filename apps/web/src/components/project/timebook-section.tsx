@@ -447,6 +447,16 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
                       </span>
                     </div>
 
+                    {/* Task / Activity Info */}
+                    <div className="rounded bg-muted/40 border border-border/50 p-2 text-[11px] flex flex-col gap-0.5 min-h-[44px]">
+                      <span className="font-semibold text-foreground text-[10.5px] truncate">
+                        {block.issueId ? `🏷️ Task: #${block.issueId}` : "🎯 Activity"}
+                      </span>
+                      <span className="text-muted-foreground truncate leading-normal italic">
+                        {block.issueId ? "Task Ticket" : (block.note || "Tanpa deskripsi")}
+                      </span>
+                    </div>
+
                     {/* Active App Log */}
                     <div className="rounded bg-muted/40 border border-border/50 p-2 text-[11px] flex flex-col gap-0.5 min-h-[44px]">
                       <span className="font-semibold text-foreground text-[10.5px] truncate">
@@ -507,6 +517,11 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
                   </span>
                   <p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[350px]">
                     {screenshotBlocks[lightboxIndex].activity.activeAppName} &mdash; {screenshotBlocks[lightboxIndex].activity.activeWindowTitle}
+                  </p>
+                  <p className="text-[11px] font-semibold text-primary mt-1 truncate max-w-[350px]">
+                    {screenshotBlocks[lightboxIndex].issueId 
+                      ? `Task: #${screenshotBlocks[lightboxIndex].issueId}` 
+                      : `Activity${screenshotBlocks[lightboxIndex].note ? `: ${screenshotBlocks[lightboxIndex].note}` : ''}`}
                   </p>
                 </div>
                 <div className="flex gap-3 text-[11px] text-muted-foreground font-semibold bg-muted/60 border border-border px-2.5 py-1.5 rounded-lg">
