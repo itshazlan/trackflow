@@ -78,6 +78,17 @@ export default function DashboardLayout({
       try {
         const s = await getSession();
         if (!s) {
+          // Hapus cookie better-auth secara manual di sisi client untuk mencegah loop redirect di middleware
+          document.cookie = "better-auth.session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+          document.cookie = "__Secure-better-auth.session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+          document.cookie = "__secure-better-auth.session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+          
+          try {
+            await logout();
+          } catch (logoutErr) {
+            console.error("Gagal memanggil API logout pada sesi tidak valid:", logoutErr);
+          }
+          
           router.push("/login");
           return;
         }
