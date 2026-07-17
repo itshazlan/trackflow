@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.4 (Lean Internal) |
+| **Versi Dokumen** | 2.5 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Floating Widget final — countdown 15 detik, window `screenshot-preview` independen dengan pause/resume countdown, tidak pernah ikut menutup widget) |
+| **Tanggal** | 14 Juli 2026 (revisi: implementasi Kanban view — dnd-kit, drag antar kolom saja; Calendar view — date-fns, berbasis due_date saja) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -29,6 +29,8 @@ Menjadi acuan teknis tim engineering untuk membangun TrackFlow versi internal-ka
 | Realtime Layer | Socket.io | Adapter in-memory bawaan — cukup untuk single-instance |
 | Frontend Web | Next.js (React) | Dashboard & Web Project Management |
 | UI Component | Shadcn UI + TanStack Table | Konsistensi desain kelas Linear/Plane |
+| Drag & Drop | `@dnd-kit/core` | Kanban view — drag kartu antar kolom status |
+| Utilitas Tanggal | `date-fns` | Calendar view — grid bulan custom (bukan library kalender berat) |
 | Database Utama | PostgreSQL biasa | Tanpa TimescaleDB; index biasa sudah cukup di skala internal |
 | Desktop Client | Tauri | Ringan, cross-platform, akses OS-level |
 | File Storage | Cloudflare R2 | Screenshot & dokumen proyek |
@@ -155,7 +157,10 @@ Better Auth secara default memakai **session cookie httpOnly**, cocok untuk `app
 - **Routing:** App Router Next.js (`/projects/:projectId/issues`, tanpa prefix `/org/:orgId` karena tidak ada konsep multi-organisasi).
 - **Data table tiket:** TanStack Table + Shadcn UI.
 - **State realtime:** koneksi Socket.io di root layout, invalidate cache TanStack Query saat menerima event (`issue.updated`, `timeblock.synced`, `user.status_changed`).
-- **Mode tampilan tiket:** List, Kanban, Calendar — dari endpoint issues yang sama.
+- **Mode tampilan tiket:** List, Kanban, Calendar — ketiganya membaca dari endpoint `GET /projects/:id/issues` yang sama (tanpa parameter `view` mengubah bentuk response backend); pengelompokan per-status/per-tanggal dilakukan di frontend.
+  - **Kanban:** `@dnd-kit/core` untuk drag-and-drop (bukan `react-beautiful-dnd`, sudah deprecated). Scope: kartu hanya bisa dipindah **antar kolom** (mengubah `status_id` via `PATCH /issues/:id/status`); **tidak ada** reorder posisi dalam satu kolom (FR-025a) — urutan kartu dalam kolom mengikuti `priority`/`created_at`. Validasi `restricted_to_role` dicek di frontend **sebelum** drop diizinkan (visual drop-disabled), dengan fallback revert + toast kalau backend tetap menolak (403).
+  - **Calendar:** grid bulan dibangun sendiri dengan `date-fns` (bukan library kalender berat seperti FullCalendar/`react-big-calendar`, kebutuhan cukup "chip issue per tanggal"). Berbasis **`due_date` saja** (FR-025b) — tiket tanpa `due_date` tidak dikelompokkan ke tanggal manapun. Tidak ada drag-to-reschedule di versi ini; ubah `due_date` lewat form edit issue biasa.
+  - Klik kartu/chip di Kanban maupun Calendar membuka drawer detail issue yang sama dengan List (FR-025c) — komponen drawer di-reuse, bukan dibuat ulang per view.
 - **Pengaturan Workflow:** halaman admin/manager proyek untuk CRUD status tiket (drag-drop reorder, toggle "restricted to role").
 - **Pengaturan Template:** halaman untuk mengelola Issue Template per proyek/global (form builder sederhana: daftar field + toggle wajib/opsional).
 
@@ -839,6 +844,36 @@ sequenceDiagram
         CORE->>W: Tutup widget
     end
 ```
+
+### 10.10 Alur Drag-and-Drop Kanban (Validasi Client-Side + Fallback Server)
+
+```mermaid
+sequenceDiagram
+    participant U as Pengguna
+    participant FE as Frontend (dnd-kit)
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    U->>FE: Mulai drag kartu issue
+    FE->>FE: Cek restricted_to_role kolom target vs role user (data sudah di-cache dari GET issue-statuses)
+    alt Role tidak cocok
+        FE-->>U: Kolom target ditandai drop-disabled (visual saja, drop dicegah di sisi client)
+    else Role cocok (atau kolom tidak dibatasi)
+        U->>FE: Drop kartu ke kolom target
+        FE->>FE: Optimistic update — pindahkan kartu di UI seketika
+        FE->>A: PATCH /issues/:id/status {statusId}
+        A->>PG: Cek ulang restricted_to_role (validasi tetap di server, tidak percaya client)
+        alt Backend menolak (403) — mis. race condition role berubah
+            A-->>FE: 403 Forbidden
+            FE->>FE: Revert kartu ke kolom asal + tampilkan toast error
+        else Backend mengizinkan
+            A-->>FE: 200 OK
+            Note over FE: Tidak ada perubahan tambahan — optimistic update sudah benar
+        end
+    end
+```
+
+**Prinsip penting:** validasi di frontend (langkah pertama) murni untuk **UX** (mencegah user drag ke kolom yang jelas-jelas akan ditolak) — validasi otoritatif tetap di backend (langkah kedua), karena frontend tidak pernah bisa dipercaya sepenuhnya untuk keputusan otorisasi.
 
 ---
 

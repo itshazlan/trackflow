@@ -635,9 +635,11 @@ fn start_background_tick_loop(
         loop {
             let timer_state = app_handle.state::<ActiveTimerState>();
 
-            // Calculate random offset within the 2-minute block with a minimum delay of 15 seconds (e.g. 15 to 119 seconds)
-            let min_delay = 15;
-            let random_offset_secs = (min_delay + (chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0).abs() % (120 - min_delay))) as u64;
+             // Calculate random offset within the first minute of the 2-minute block (e.g., 15 to 60 seconds)
+             // to guarantee capture completes before the 120-second interval tick and stop/pause actions.
+             let min_delay = 15;
+             let max_delay = 60;
+             let random_offset_secs = (min_delay + (chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0).abs() % (max_delay - min_delay + 1))) as u64;
             
             // Spawn screenshot task
             let app_handle_clone = app_handle.clone();

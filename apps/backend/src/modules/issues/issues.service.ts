@@ -111,6 +111,10 @@ export class IssuesService {
     const list = await this.db
       .select({
         id: issues.id,
+        projectId: issues.projectId,
+        trackerId: issues.trackerId,
+        statusId: issues.statusId,
+        assigneeId: issues.assigneeId,
         number: issues.number,
         title: issues.title,
         description: issues.description,

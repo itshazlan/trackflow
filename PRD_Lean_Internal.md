@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.3 (Lean Internal) |
+| **Versi Dokumen** | 2.4 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Floating Widget final — countdown 15 detik, window Preview independen dengan pause/resume) |
+| **Tanggal** | 14 Juli 2026 (revisi: scope Kanban view — drag antar kolom saja, tanpa reorder dalam kolom; scope Calendar view — berbasis due_date saja) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -132,6 +132,9 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-023 | Setiap status **opsional** dapat dibatasi hanya boleh diset oleh satu role tertentu. Default: hanya **QA** yang boleh mengubah status menjadi **Done**; status lain bebas diset anggota proyek manapun. Aturan ini dapat diubah/dihapus per status oleh Manager/Admin |
 | FR-024 | Atribut tiket: Assignee, Priority, Tanggal mulai, Tenggat waktu, Estimasi waktu |
 | FR-025 | Tiket dapat ditampilkan sebagai List (default), Kanban, atau Calendar |
+| FR-025a | **Kanban:** kartu dapat dipindah antar kolom (mengubah status) via drag-and-drop, tervalidasi terhadap `restricted_to_role` (FR-023). **Tidak ada** pengurutan ulang posisi kartu di dalam kolom yang sama — urutan dalam kolom mengikuti priority/tanggal dibuat, bukan urutan manual |
+| FR-025b | **Calendar:** menampilkan tiket berdasarkan **tenggat waktu (`due_date`)** saja — bukan rentang tanggal mulai/selesai. Tiket **tanpa** `due_date` tidak muncul di Calendar (tetap muncul normal di List/Kanban) |
+| FR-025c | Klik tiket di Kanban maupun Calendar membuka detail/edit tiket yang sama seperti dari List — bukan tampilan terpisah |
 | FR-026 | Tiket dapat **diedit** setelah dibuat (judul, deskripsi, assignee, priority, tanggal, lampiran) oleh Assignee, Manager proyek terkait, atau Admin |
 | FR-027 | Pengguna dapat **melampirkan file** pada tiket, baik saat pembuatan maupun setelahnya, disimpan di Cloudflare R2 |
 | FR-028 | Setiap tiket memiliki panel **Aktivitas/Komentar** ala forum — **seluruh anggota proyek (peran manapun: Manager/Developer/Reporter-QA)** dapat menulis dan membaca komentar, tanpa dibatasi role tertentu (berbeda dari transisi status yang bisa dibatasi role) |

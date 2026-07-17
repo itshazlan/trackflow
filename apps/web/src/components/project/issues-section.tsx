@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { io } from "socket.io-client";
 import {
   getIssues,
@@ -30,6 +30,30 @@ import {
   IssueComment,
 } from "@/lib/issues-service";
 import { getSession, UserSession } from "@/lib/auth-service";
+import {
+  DndContext,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  DragEndEvent,
+  DragStartEvent,
+  useDroppable,
+  useDraggable,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  format,
+  isSameMonth,
+  isSameDay,
+  addMonths,
+  subMonths,
+} from "date-fns";
+import { id as idLocale } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,6 +102,8 @@ import {
   MessageSquare,
   Send,
   Edit2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
@@ -124,6 +150,173 @@ const getFileIcon = (fileName: string) => {
   }
 };
 
+function KanbanCard({ issue, onClick }: { issue: Issue; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: issue.id,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      onClick={onClick}
+      className={`p-3 rounded-lg border border-border bg-card shadow-xs hover:border-muted-foreground/30 transition-all cursor-grab active:cursor-grabbing flex flex-col gap-2 relative ${
+        isDragging ? "opacity-20 border-dashed border-muted-foreground/30 bg-muted/30 text-transparent select-none pointer-events-none *" : ""
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[9.5px] font-semibold text-muted-foreground bg-muted/80 border border-border/80 px-1.5 py-0.25 rounded uppercase">
+          {issue.displayId || `#${issue.id.slice(0, 6)}`}
+        </span>
+        <span
+          className={`text-[9.5px] font-bold px-1.5 py-0.25 rounded-full capitalize select-none ${
+            issue.priority === "urgent"
+              ? "bg-destructive/10 border border-destructive/20 text-destructive font-bold"
+              : issue.priority === "high"
+              ? "bg-red-400/10 border border-red-400/20 text-red-500"
+              : issue.priority === "medium"
+              ? "bg-amber-400/10 border border-amber-400/20 text-amber-600"
+              : "bg-muted border border-border text-muted-foreground"
+          }`}
+        >
+          {issue.priority}
+        </span>
+      </div>
+
+      <h4 className="text-[12px] font-medium text-foreground line-clamp-2 leading-snug">
+        {issue.title}
+      </h4>
+
+      <div className="flex items-center justify-between border-t border-border/40 pt-2 mt-1">
+        <span className="inline-flex items-center rounded border border-border px-1.5 py-0.25 text-[9px] font-medium bg-muted/20 text-muted-foreground select-none">
+          {issue.tracker?.name || "Task"}
+        </span>
+
+        <div className="flex items-center gap-1.5">
+          <Avatar className="h-4.5 w-4.5">
+            <AvatarFallback className="text-[7.5px] font-bold bg-primary/10 border border-primary/20 text-primary uppercase">
+              {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+            </AvatarFallback>
+          </Avatar>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KanbanCardOverlay({ issue }: { issue: Issue }) {
+  if (!issue) return null;
+  return (
+    <div
+      className="p-3 rounded-lg border border-border bg-card shadow-md flex flex-col gap-2 relative w-[252px] select-none cursor-grabbing opacity-95 rotate-2 scale-[1.02] z-50 pointer-events-none"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[9.5px] font-semibold text-muted-foreground bg-muted/80 border border-border/80 px-1.5 py-0.25 rounded uppercase">
+          {issue.displayId || `#${issue.id.slice(0, 6)}`}
+        </span>
+        <span
+          className={`text-[9.5px] font-bold px-1.5 py-0.25 rounded-full capitalize select-none ${
+            issue.priority === "urgent"
+              ? "bg-destructive/10 border border-destructive/20 text-destructive font-bold"
+              : issue.priority === "high"
+              ? "bg-red-400/10 border border-red-400/20 text-red-500"
+              : issue.priority === "medium"
+              ? "bg-amber-400/10 border border-amber-400/20 text-amber-600"
+              : "bg-muted border border-border text-muted-foreground"
+          }`}
+        >
+          {issue.priority}
+        </span>
+      </div>
+
+      <h4 className="text-[12px] font-medium text-foreground line-clamp-2 leading-snug">
+        {issue.title}
+      </h4>
+
+      <div className="flex items-center justify-between border-t border-border/40 pt-2 mt-1">
+        <span className="inline-flex items-center rounded border border-border px-1.5 py-0.25 text-[9px] font-medium bg-muted/20 text-muted-foreground select-none">
+          {issue.tracker?.name || "Task"}
+        </span>
+
+        <div className="flex items-center gap-1.5">
+          <Avatar className="h-4.5 w-4.5">
+            <AvatarFallback className="text-[7.5px] font-bold bg-primary/10 border border-primary/20 text-primary uppercase">
+              {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+            </AvatarFallback>
+          </Avatar>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KanbanColumn({
+  status,
+  issues,
+  isDragging,
+  isDropAllowed,
+  onCardClick,
+}: {
+  status: IssueStatus;
+  issues: Issue[];
+  isDragging: boolean;
+  isDropAllowed: boolean;
+  onCardClick: (id: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: status.id,
+    disabled: isDragging && !isDropAllowed,
+  });
+
+  const columnBg = isOver && isDropAllowed
+    ? "bg-accent/20 border-accent/40"
+    : isDragging && !isDropAllowed
+    ? "opacity-50 border-destructive/20 bg-destructive/5 cursor-not-allowed"
+    : "bg-muted/10 border-border/60";
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col gap-3 p-3.5 rounded-xl border min-w-[280px] max-w-[300px] h-[calc(100vh-270px)] min-h-[480px] transition-all shrink-0 ${columnBg}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[12px] font-semibold text-foreground truncate max-w-[150px]">
+            {status.name}
+          </h3>
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-muted/80 px-1 text-[9.5px] font-semibold text-muted-foreground border border-border">
+            {issues.length}
+          </span>
+        </div>
+        {status.restrictedToRole && (
+          <span className="rounded bg-destructive/10 border border-destructive/20 text-destructive text-[8px] px-1.5 py-0.25 uppercase font-bold tracking-wider">
+            {status.restrictedToRole.replace("_", " ")}
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto pr-1 scrollbar-thin select-none">
+        {issues.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center border border-dashed border-border/30 rounded-lg p-6 bg-card/10">
+            <span className="text-[10.5px] text-muted-foreground/60 italic text-center">
+              Belum ada tiket
+            </span>
+          </div>
+        ) : (
+          issues.map((issue) => (
+            <KanbanCard
+              key={issue.id}
+              issue={issue}
+              onClick={() => onCardClick(issue.id)}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface IssuesSectionProps {
   projectId: string;
 }
@@ -132,14 +325,10 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const router = useRouter();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
-  const [session, setSession] = useState<UserSession | null>(null);
-  const [issuesList, setIssuesList] = useState<Issue[]>([]);
-  const [statuses, setStatuses] = useState<IssueStatus[]>([]);
-  const [trackers, setTrackers] = useState<Tracker[]>([]);
-  const [members, setMembers] = useState<ProjectMember[]>([]);
-  const [templates, setTemplates] = useState<IssueTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "kanban" | "calendar">("list");
+  const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   // Create Issue Modal state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -194,48 +383,195 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const s = await getSession();
-      setSession(s);
-      
-      const [issuesData, statusesData, trackersData, membersData, templatesData] = await Promise.all([
-        getIssues(projectId),
-        getProjectStatuses(projectId),
-        getTrackers(),
-        getProjectMembers(projectId),
-        getProjectTemplates(projectId),
-      ]);
-
-      setIssuesList(issuesData);
-      setStatuses(statusesData);
-      setTrackers(trackersData);
-      setMembers(membersData);
-      setTemplates(templatesData);
-
-      if (statusesData.length > 0) setStatusId(statusesData[0].id);
-      if (trackersData.length > 0) setSelectedTrackerId(trackersData[0].id);
-    } catch (err) {
-      console.error(err);
-      setError("Gagal memuat data issues.");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
     }
-  }, [projectId]);
+  }, [toast]);
+
+  // TanStack Query queries
+  const { data: session = null } = useQuery<UserSession | null>({
+    queryKey: ["session"],
+    queryFn: () => getSession(),
+  });
+
+  const { data: issuesList = [], isLoading: issuesLoading, error: issuesError } = useQuery<Issue[]>({
+    queryKey: ["issues", projectId],
+    queryFn: () => getIssues(projectId),
+  });
+
+  const { data: statuses = [], isLoading: statusesLoading } = useQuery<IssueStatus[]>({
+    queryKey: ["issue-statuses", projectId],
+    queryFn: () => getProjectStatuses(projectId),
+  });
+
+  const { data: trackers = [] } = useQuery<Tracker[]>({
+    queryKey: ["trackers"],
+    queryFn: () => getTrackers(),
+  });
+
+  const { data: members = [] } = useQuery<ProjectMember[]>({
+    queryKey: ["members", projectId],
+    queryFn: () => getProjectMembers(projectId),
+  });
+
+  const { data: templates = [] } = useQuery<IssueTemplate[]>({
+    queryKey: ["templates", projectId],
+    queryFn: () => getProjectTemplates(projectId),
+  });
+
+  const loading = issuesLoading || statusesLoading;
+  const error = issuesError ? "Gagal memuat data issues." : "";
+
+  // Auto-set defaults when data becomes available
+  useEffect(() => {
+    if (statuses.length > 0 && !statusId) {
+      setStatusId(statuses[0].id);
+    }
+  }, [statuses, statusId]);
 
   useEffect(() => {
-    let active = true;
-    Promise.resolve().then(() => {
-      if (active) {
-        void fetchData();
+    if (trackers.length > 0 && !selectedTrackerId) {
+      setSelectedTrackerId(trackers[0].id);
+    }
+  }, [trackers, selectedTrackerId]);
+
+  // dnd-kit configuration
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const sortedStatuses = useMemo(() => {
+    return [...statuses].sort((a, b) => a.orderIndex - b.orderIndex);
+  }, [statuses]);
+
+  const issuesByStatus = useMemo(() => {
+    const map: Record<string, Issue[]> = {};
+    statuses.forEach((s) => {
+      map[s.id] = [];
+    });
+    issuesList.forEach((iss) => {
+      const sId = iss.statusId || iss.status?.id;
+      if (sId && map[sId]) {
+        map[sId].push(iss);
       }
     });
-    return () => {
-      active = false;
-    };
-  }, [fetchData]);
+    return map;
+  }, [statuses, issuesList]);
+
+  const issuesByDueDate = useMemo(() => {
+    const map: Record<string, Issue[]> = {};
+    issuesList.forEach((iss) => {
+      if (iss.dueDate) {
+        try {
+          const dateKey = format(new Date(iss.dueDate), "yyyy-MM-dd");
+          if (!map[dateKey]) map[dateKey] = [];
+          map[dateKey].push(iss);
+        } catch (err) {
+          console.error("Gagal memformat tanggal due date:", err);
+        }
+      }
+    });
+    return map;
+  }, [issuesList]);
+
+  const calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(currentMonthDate);
+    const monthEnd = endOfMonth(monthStart);
+    const weekStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+    const weekEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+    return eachDayOfInterval({ start: weekStart, end: weekEnd });
+  }, [currentMonthDate]);
+
+  // Determine current user project role
+  const currentMember = members.find(
+    (m) => m.email === session?.user?.email || m.username === session?.user?.username
+  );
+  const userRole = currentMember?.role;
+  const isAdmin = session?.user?.isAdmin;
+
+  // Determine if a status is allowed for dropping
+  const isDropAllowed = useCallback((status: IssueStatus) => {
+    if (isAdmin) return true;
+    if (!status.restrictedToRole) return true;
+    return userRole === status.restrictedToRole;
+  }, [isAdmin, userRole]);
+
+  // Mutation for updating status with optimistic updates
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, statusId }: { id: string; statusId: string }) =>
+      updateIssueStatus(id, statusId),
+    onMutate: async ({ id, statusId }) => {
+      await queryClient.cancelQueries({ queryKey: ["issues", projectId] });
+      const previousIssues = queryClient.getQueryData<Issue[]>(["issues", projectId]);
+
+      if (previousIssues) {
+        const nextStatus = statuses.find((s) => s.id === statusId);
+        queryClient.setQueryData<Issue[]>(
+          ["issues", projectId],
+          previousIssues.map((iss) =>
+            iss.id === id
+              ? {
+                  ...iss,
+                  statusId,
+                  status: nextStatus
+                    ? { id: nextStatus.id, name: nextStatus.name }
+                    : iss.status,
+                }
+              : iss
+          )
+        );
+      }
+      return { previousIssues };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousIssues) {
+        queryClient.setQueryData(["issues", projectId], context.previousIssues);
+      }
+      setToast({
+        message: err instanceof Error ? err.message : "Gagal memindahkan tiket",
+        type: "error",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
+    },
+  });
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragId(null);
+
+    if (!over) return;
+
+    const issueId = active.id as string;
+    const targetStatusId = over.id as string;
+
+    const issue = issuesList.find((iss) => iss.id === issueId);
+    if (!issue) return;
+
+    if (issue.statusId === targetStatusId) return;
+
+    const targetStatus = statuses.find((s) => s.id === targetStatusId);
+    if (targetStatus && !isDropAllowed(targetStatus)) {
+      setToast({
+        message: `Status "${targetStatus.name}" dibatasi untuk peran "${targetStatus.restrictedToRole?.replace("_", " ")}"`,
+        type: "error",
+      });
+      return;
+    }
+
+    updateStatusMutation.mutate({ id: issueId, statusId: targetStatusId });
+  };
 
   useEffect(() => {
     if (selectedIssue && isDetailOpen) {
@@ -458,7 +794,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       setAssigneeId("");
       setDueDate("");
       setSelectedFiles([]);
-      await fetchData();
+      queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : "Gagal membuat issue.");
     } finally {
@@ -536,13 +872,6 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       };
 
       setSelectedIssue(nextIssue);
-
-      setIssuesList((prev) =>
-        prev.map((iss) =>
-          iss.id === selectedIssue.id ? nextIssue : iss
-        )
-      );
-
       setIsEditOpen(false);
       setEditSelectedFiles([]);
     } catch (err: unknown) {
@@ -557,10 +886,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     setDetailError("");
     try {
       const updated = await updateIssueStatus(issueId, newStatusId);
-      // Update in local state list
-      setIssuesList((prev) =>
-        prev.map((iss) => (iss.id === issueId ? { ...iss, statusId: newStatusId, status: updated.status } : iss))
-      );
+      queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
       if (selectedIssue && selectedIssue.id === issueId) {
         setSelectedIssue((prev) => prev ? { ...prev, statusId: newStatusId, status: updated.status } : null);
       }
@@ -581,7 +907,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     if (!ok) return;
     try {
       await deleteIssue(projectId, issueId);
-      setIssuesList((prev) => prev.filter((iss) => iss.id !== issueId));
+      queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
       setIsDetailOpen(false);
       setSelectedIssue(null);
     } catch (err) {
@@ -596,12 +922,6 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     }
   };
 
-  // Determine current user project role
-  const currentMember = members.find(
-    (m) => m.email === session?.user?.email || m.username === session?.user?.username
-  );
-  const userRole = currentMember?.role;
-  const isAdmin = session?.user?.isAdmin;
 
   // Determine if user can edit this issue
   const isIssueAssignee = selectedIssue?.assigneeId === session?.user?.id;
@@ -613,7 +933,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
 
   // Filter issues
   const filteredIssues = issuesList.filter((iss) => {
-    const matchesStatus = filterStatus === "all" || iss.statusId === filterStatus;
+    const matchesStatus = filterStatus === "all" || (iss.statusId || iss.status?.id) === filterStatus;
     const matchesPriority = filterPriority === "all" || iss.priority === filterPriority;
     const matchesAssignee =
       filterAssignee === "all" ||
@@ -678,6 +998,46 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
               </option>
             ))}
           </select>
+
+          {/* View Toggle */}
+          <div className="flex items-center gap-1 bg-muted p-[3px] rounded-md border border-border h-8 box-border">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-6 px-2.5 text-[11px] font-medium rounded-sm transition-all ${
+                viewMode === "list"
+                  ? "bg-background text-foreground shadow-xs border border-border/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setViewMode("list")}
+            >
+              List
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-6 px-2.5 text-[11px] font-medium rounded-sm transition-all ${
+                viewMode === "kanban"
+                  ? "bg-background text-foreground shadow-xs border border-border/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setViewMode("kanban")}
+            >
+              Kanban
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-6 px-2.5 text-[11px] font-medium rounded-sm transition-all ${
+                viewMode === "calendar"
+                  ? "bg-background text-foreground shadow-xs border border-border/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setViewMode("calendar")}
+            >
+              Kalender
+            </Button>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -704,100 +1064,277 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
         </div>
       )}
 
-      {/* Issues Table */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-20 pl-4">ID</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead className="w-24">Tracker</TableHead>
-              <TableHead className="w-28">Status</TableHead>
-              <TableHead className="w-36">Assignee</TableHead>
-              <TableHead className="w-24">Priority</TableHead>
-              <TableHead className="w-28 pr-4">Due Date</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredIssues.length === 0 ? (
+      {viewMode === "list" ? (
+        /* Issues Table */
+        <div className="rounded-lg border border-border bg-card overflow-hidden shadow-sm">
+          <Table>
+            <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
-                  Tidak ada tiket ditemukan.
-                </TableCell>
+                <TableHead className="w-20 pl-4">ID</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead className="w-24">Tracker</TableHead>
+                <TableHead className="w-28">Status</TableHead>
+                <TableHead className="w-36">Assignee</TableHead>
+                <TableHead className="w-24">Priority</TableHead>
+                <TableHead className="w-28 pr-4">Due Date</TableHead>
               </TableRow>
-            ) : (
-              filteredIssues.map((issue) => (
-                <TableRow
-                  key={issue.id}
-                  className="cursor-pointer hover:bg-muted/40 transition-colors"
-                  onClick={() => {
-                    router.push(`/projects/${projectId}/issues/${issue.id}`);
-                  }}
-                >
-                  <TableCell className="font-mono text-[11px] text-muted-foreground pl-4">
-                    #{issue.id.slice(0, 6)}
-                  </TableCell>
-                  <TableCell className="font-medium text-foreground">
-                    <div className="flex items-center gap-1.5 max-w-[280px]">
-                      {issue.displayId && (
-                        <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
-                          {issue.displayId}
-                        </span>
-                      )}
-                      <span className="truncate">{issue.title}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground select-none">
-                      {issue.tracker?.name || "Task"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold border border-border text-muted-foreground">
-                      {issue.status?.name || "New"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-4.5 w-4.5">
-                        <AvatarFallback className="text-[8px] font-bold">
-                          {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="truncate max-w-[100px] text-[12.5px]">
-                        {issue.assignee?.name || "Unassigned"}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`text-[11px] font-semibold capitalize ${
-                        issue.priority === "urgent"
-                          ? "text-red-500 font-bold"
-                          : issue.priority === "high"
-                          ? "text-red-400"
-                          : issue.priority === "medium"
-                          ? "text-amber-400"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {issue.priority}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-[12px] pr-4">
-                    {issue.dueDate
-                      ? new Date(issue.dueDate).toLocaleDateString("id-ID", {
-                          day: "numeric",
-                          month: "short",
-                        })
-                      : "—"}
+            </TableHeader>
+            <TableBody>
+              {filteredIssues.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                    Tidak ada tiket ditemukan.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                filteredIssues.map((issue) => (
+                  <TableRow
+                    key={issue.id}
+                    className="cursor-pointer hover:bg-muted/40 transition-colors"
+                    onClick={() => {
+                      router.push(`/projects/${projectId}/issues/${issue.id}`);
+                    }}
+                  >
+                    <TableCell className="font-mono text-[11px] text-muted-foreground pl-4">
+                      #{issue.id.slice(0, 6)}
+                    </TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      <div className="flex items-center gap-1.5 max-w-[280px]">
+                        {issue.displayId && (
+                          <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
+                            {issue.displayId}
+                          </span>
+                        )}
+                        <span className="truncate">{issue.title}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground select-none">
+                        {issue.tracker?.name || "Task"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold border border-border text-muted-foreground">
+                        {issue.status?.name || "New"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-4.5 w-4.5">
+                          <AvatarFallback className="text-[8px] font-bold">
+                            {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="truncate max-w-[100px] text-[12.5px]">
+                          {issue.assignee?.name || "Unassigned"}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`text-[11px] font-semibold capitalize ${
+                          issue.priority === "urgent"
+                            ? "text-red-500 font-bold"
+                            : issue.priority === "high"
+                            ? "text-red-400"
+                            : issue.priority === "medium"
+                            ? "text-amber-400"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {issue.priority}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-[12px] pr-4">
+                      {issue.dueDate
+                        ? new Date(issue.dueDate).toLocaleDateString("id-ID", {
+                            day: "numeric",
+                            month: "short",
+                          })
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      ) : viewMode === "kanban" ? (
+        /* Kanban Board */
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin max-w-full">
+            {sortedStatuses.map((status) => {
+              const columnIssues = (issuesByStatus[status.id] || []).filter((iss) => {
+                const matchesPriority = filterPriority === "all" || iss.priority === filterPriority;
+                const matchesAssignee =
+                  filterAssignee === "all" ||
+                  (filterAssignee === "unassigned" && !iss.assigneeId) ||
+                  iss.assigneeId === filterAssignee;
+                const matchesSearch =
+                  iss.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (iss.description && iss.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                  iss.id.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesPriority && matchesAssignee && matchesSearch;
+              });
+
+              return (
+                <KanbanColumn
+                  key={status.id}
+                  status={status}
+                  issues={columnIssues}
+                  isDragging={activeDragId !== null}
+                  isDropAllowed={isDropAllowed(status)}
+                  onCardClick={(id) => router.push(`/projects/${projectId}/issues/${id}`)}
+                />
+              );
+            })}
+            
+            {/* Add Status Button at the end of columns */}
+            <div className="flex flex-col min-w-[280px] shrink-0 pt-4">
+              <Button
+                variant="outline"
+                className="h-10 text-[11px] font-medium border-dashed text-muted-foreground w-full hover:text-foreground hover:bg-muted/30"
+                onClick={() => router.push(`/projects/${projectId}?tab=settings`)}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" /> Tambah Status
+              </Button>
+            </div>
+          </div>
+
+          <DragOverlay>
+            {activeDragId ? (
+              <KanbanCardOverlay
+                issue={issuesList.find((iss) => iss.id === activeDragId)!}
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        /* Calendar View */
+        <div className="flex flex-col gap-3">
+          {/* Calendar Toolbar */}
+          <div className="flex items-center justify-between border border-border bg-card p-3 rounded-lg shadow-xs select-none">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs px-2.5 font-medium"
+                onClick={() => setCurrentMonthDate(new Date())}
+              >
+                Hari Ini
+              </Button>
+              <div className="flex items-center border border-border rounded-md overflow-hidden bg-muted/40 p-0.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 hover:bg-background rounded-sm"
+                  onClick={() => setCurrentMonthDate(subMonths(currentMonthDate, 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 hover:bg-background rounded-sm"
+                  onClick={() => setCurrentMonthDate(addMonths(currentMonthDate, 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <h2 className="text-[13px] font-semibold text-foreground capitalize">
+              {format(currentMonthDate, "MMMM yyyy", { locale: idLocale })}
+            </h2>
+          </div>
+
+          {/* Calendar Grid */}
+          <div className="rounded-lg border border-border bg-card overflow-hidden shadow-xs">
+            {/* Days of Week Headers */}
+            <div className="grid grid-cols-7 border-b border-border bg-muted/30 select-none">
+              {["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"].map((dayName) => (
+                <div key={dayName} className="py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border last:border-r-0">
+                  {dayName}
+                </div>
+              ))}
+            </div>
+
+            {/* Days Grid */}
+            <div className="grid grid-cols-7 auto-rows-[100px] md:auto-rows-[120px]">
+              {calendarDays.map((day, idx) => {
+                const dateKey = format(day, "yyyy-MM-dd");
+                
+                // Get issues that belong to this date (taking filter state into account)
+                const dayIssues = (issuesByDueDate[dateKey] || []).filter((iss) => {
+                  const matchesStatus = filterStatus === "all" || (iss.statusId || iss.status?.id) === filterStatus;
+                  const matchesPriority = filterPriority === "all" || iss.priority === filterPriority;
+                  const matchesAssignee =
+                    filterAssignee === "all" ||
+                    (filterAssignee === "unassigned" && !iss.assigneeId) ||
+                    iss.assigneeId === filterAssignee;
+                  const matchesSearch =
+                    iss.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (iss.description && iss.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    iss.id.toLowerCase().includes(searchQuery.toLowerCase());
+                  return matchesStatus && matchesPriority && matchesAssignee && matchesSearch;
+                });
+
+                const isCurrentMonth = isSameMonth(day, currentMonthDate);
+                const isTodayDate = isSameDay(day, new Date());
+                const displayedIssues = dayIssues.slice(0, 3);
+                const hiddenCount = dayIssues.length - 3;
+
+                return (
+                  <div
+                    key={idx}
+                    className={`p-1.5 border-r border-b border-border last:border-r-0 flex flex-col gap-1 min-w-0 ${
+                      !isCurrentMonth ? "bg-muted/10 text-muted-foreground/50" : "bg-card text-foreground"
+                    }`}
+                  >
+                    <div className="flex justify-between items-center select-none mb-0.5">
+                      <span className={`text-[10.5px] font-semibold flex h-5 w-5 items-center justify-center rounded-full ${
+                        isTodayDate ? "bg-primary text-primary-foreground font-bold shadow-xs" : "text-muted-foreground"
+                      }`}>
+                        {format(day, "d")}
+                      </span>
+                    </div>
+
+                    <div className="flex-1 flex flex-col gap-1 overflow-y-auto pr-0.5 scrollbar-none">
+                      {displayedIssues.map((issue) => (
+                        <button
+                          key={issue.id}
+                          onClick={() => router.push(`/projects/${projectId}/issues/${issue.id}`)}
+                          className={`w-full text-left p-1 rounded border text-[10px] font-medium leading-none truncate flex items-center justify-between gap-1 select-none hover:brightness-95 transition-all ${
+                            issue.priority === "urgent"
+                              ? "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400"
+                              : issue.priority === "high"
+                              ? "bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-400"
+                              : issue.priority === "medium"
+                              ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-500"
+                              : "bg-muted/40 border-border text-muted-foreground"
+                          }`}
+                        >
+                          <span className="truncate flex-1">
+                            {issue.displayId || `#${issue.id.slice(0, 4)}`}: {issue.title}
+                          </span>
+                        </button>
+                      ))}
+                      {hiddenCount > 0 && (
+                        <div className="text-[9px] font-semibold text-muted-foreground/70 pl-1 py-0.5 select-none">
+                          +{hiddenCount} lainnya
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Issue Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -1337,6 +1874,18 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Floating Toast Notification Banner */}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-xs shadow-md backdrop-blur-xs transition-all animate-in fade-in slide-in-from-bottom-2 ${
+          toast.type === "error" 
+            ? "border-destructive/20 bg-destructive/10 text-destructive dark:text-red-400" 
+            : "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+        }`}>
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }
