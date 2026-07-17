@@ -28,14 +28,7 @@ import {
   AlertCircle,
   Eye,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-} from "recharts";
+
 
 interface TimeBookSectionProps {
   projectId: string;
@@ -184,6 +177,8 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
 
   // Filter blocks for activeDate
   const activeDateBlocks = timeBlocks.filter((b) => b.blockStart.startsWith(activeDate));
+  const maxKeyboard = Math.max(...activeDateBlocks.map((b) => b.activity.keyboardCount), 1);
+  const maxMouse = Math.max(...activeDateBlocks.map((b) => b.activity.mouseCount), 1);
   const screenshotBlocks = activeDateBlocks.filter((b) => b.screenshot !== null);
 
   const getDailyHoursText = () => {
@@ -348,14 +343,8 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
                 ? block.screenshot!.r2ObjectKey
                 : `/api/uploads/${block.screenshot!.r2ObjectKey}`;
 
-              // Chart data for activity level
-              const chartData = [
-                {
-                  name: "Aktivitas",
-                  Keyboard: block.activity.keyboardCount,
-                  Mouse: block.activity.mouseCount,
-                },
-              ];
+              const kbPercent = (block.activity.keyboardCount / maxKeyboard) * 100;
+              const msPercent = (block.activity.mouseCount / maxMouse) * 100;
 
               return (
                 <div
@@ -425,35 +414,50 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
                     </span>
                   </div>
 
-                  {/* Activity Bar Chart under screenshot */}
-                  <div className="p-3 flex flex-col gap-2 flex-1">
-                    <div className="h-14 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                          <XAxis dataKey="name" hide />
-                          <YAxis hide />
-                          <RechartsTooltip cursor={{ fill: "transparent" }} />
-                          <Bar dataKey="Keyboard" fill="var(--primary)" radius={[2, 2, 0, 0]} barSize={14} />
-                          <Bar dataKey="Mouse" fill="var(--success)" radius={[2, 2, 0, 0]} barSize={14} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                  {/* Activity progress bars under screenshot */}
+                  <div className="p-3 flex flex-col gap-2.5 flex-1">
+                    <div className="flex flex-col gap-2.5 py-1">
+                      {/* Keyboard Progress */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-[10px] text-muted-foreground font-medium">
+                          <span className="flex items-center gap-1">⌨️ Keyboard: <strong className="text-foreground">{block.activity.keyboardCount}</strong></span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden">
+                          <div 
+                            className="h-full bg-primary transition-all duration-300" 
+                            style={{ width: `${kbPercent}%` }} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* Mouse Progress */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-[10px] text-muted-foreground font-medium">
+                          <span className="flex items-center gap-1">🖱️ Mouse: <strong className="text-foreground">{block.activity.mouseCount}</strong></span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden">
+                          <div 
+                            className="h-full bg-success transition-all duration-300" 
+                            style={{ width: `${msPercent}%` }} 
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex justify-between items-center text-[10px] text-muted-foreground border-t border-border/60 pt-2 font-medium">
-                      <span>⌨️ Keyboard: {block.activity.keyboardCount}</span>
-                      <span>🖱️ Mouse: {block.activity.mouseCount}</span>
+                      <span>Level Aktivitas</span>
                       <span className="capitalize font-semibold text-foreground">
-                        Level: {block.activity.activityLevel}
+                        {block.activity.activityLevel}
                       </span>
                     </div>
 
                     {/* Task / Activity Info */}
                     <div className="rounded bg-muted/40 border border-border/50 p-2 text-[11px] flex flex-col gap-0.5 min-h-[44px]">
                       <span className="font-semibold text-foreground text-[10.5px] truncate">
-                        {block.issueId ? `🏷️ Task: #${block.issueId}` : "🎯 Activity"}
+                        {block.issueId ? `🏷️ Task: #${block.issueNumber || block.issueId}` : "🎯 Activity"}
                       </span>
                       <span className="text-muted-foreground truncate leading-normal italic">
-                        {block.issueId ? "Task Ticket" : (block.note || "Tanpa deskripsi")}
+                        {block.issueId ? (block.issueTitle || "Task Ticket") : (block.note || "Tanpa deskripsi")}
                       </span>
                     </div>
 
@@ -520,7 +524,7 @@ export default function TimeBookSection({ projectId }: TimeBookSectionProps) {
                   </p>
                   <p className="text-[11px] font-semibold text-primary mt-1 truncate max-w-[350px]">
                     {screenshotBlocks[lightboxIndex].issueId 
-                      ? `Task: #${screenshotBlocks[lightboxIndex].issueId}` 
+                      ? `Task: #${screenshotBlocks[lightboxIndex].issueNumber || screenshotBlocks[lightboxIndex].issueId} - ${screenshotBlocks[lightboxIndex].issueTitle || 'Task Ticket'}` 
                       : `Activity${screenshotBlocks[lightboxIndex].note ? `: ${screenshotBlocks[lightboxIndex].note}` : ''}`}
                   </p>
                 </div>

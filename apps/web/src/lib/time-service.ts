@@ -2,6 +2,8 @@ export interface TimeBlock {
   id: string;
   projectId: string;
   issueId: string | null;
+  issueTitle?: string | null;
+  issueNumber?: number | null;
   note: string | null;
   blockStart: string;
   blockEnd: string;

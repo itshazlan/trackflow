@@ -2,11 +2,10 @@ import {
   Injectable,
   Inject,
   NotFoundException,
-  BadRequestException,
   ForbiddenException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { eq, and, or, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, gte, lte } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import {
   timeBlocks,
@@ -16,8 +15,8 @@ import {
 } from '../../db/schema/time-tracking';
 import { appSettings } from '../../db/schema/settings';
 import { projectMemberships } from '../../db/schema/projects';
+import { issues } from '../../db/schema/issues';
 import { SyncTimeBlockDto } from './dto/sync-time-block.dto';
-import { OverrideTimeBlockDto } from './dto/override-time-block.dto';
 import { R2Service } from './r2.service';
 import { randomUUID } from 'crypto';
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
@@ -210,6 +209,8 @@ export class TimeTrackingService {
         id: timeBlocks.id,
         projectId: timeBlocks.projectId,
         issueId: timeBlocks.issueId,
+        issueTitle: issues.title,
+        issueNumber: issues.number,
         note: timeBlocks.note,
         blockStart: timeBlocks.blockStart,
         blockEnd: timeBlocks.blockEnd,
@@ -230,6 +231,7 @@ export class TimeTrackingService {
       .from(timeBlocks)
       .innerJoin(activityLogs, eq(timeBlocks.id, activityLogs.timeBlockId))
       .leftJoin(screenshots, eq(timeBlocks.id, screenshots.timeBlockId))
+      .leftJoin(issues, eq(timeBlocks.issueId, issues.id))
       .where(and(...queryConditions));
   }
 
