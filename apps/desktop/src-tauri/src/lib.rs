@@ -627,18 +627,18 @@ fn start_background_tick_loop(
     db_path: PathBuf,
 ) -> tokio::task::AbortHandle {
     let task = tokio::spawn(async move {
-        // Every 2 minutes (120 seconds) for production tracking
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(120));
+        // Every 10 minutes (600 seconds) for production tracking
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(600));
         // First tick resolves instantly, skip it
         interval.tick().await;
 
         loop {
             let timer_state = app_handle.state::<ActiveTimerState>();
 
-             // Calculate random offset within the first minute of the 2-minute block (e.g., 15 to 60 seconds)
-             // to guarantee capture completes before the 120-second interval tick and stop/pause actions.
+             // Calculate random offset within the first 8 minutes of the 10-minute block (e.g., 15 to 480 seconds)
+             // to guarantee capture completes before the 600-second interval tick and stop/pause actions.
              let min_delay = 15;
-             let max_delay = 60;
+             let max_delay = 480;
              let random_offset_secs = (min_delay + (chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0).abs() % (max_delay - min_delay + 1))) as u64;
             
             // Spawn screenshot task
