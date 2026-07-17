@@ -670,7 +670,7 @@ fn start_background_tick_loop(
             let now = chrono::Utc::now().timestamp();
             let block_start = {
                 let mut curr = timer_state.current_block_start.lock().unwrap();
-                let start = curr.unwrap_or(now - 120);
+                let start = curr.unwrap_or(now - 600);
                 *curr = Some(now);
                 start
             };
