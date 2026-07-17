@@ -542,10 +542,9 @@ fn open_preview_window(
     let _ = app_handle.emit("countdown-paused", ());
     
     if let Some(win) = app_handle.get_webview_window("screenshot-preview") {
-        let _ = win.hide();
-        let _ = app_handle.emit("preview-path-changed", ());
         let _ = win.show();
         let _ = win.set_focus();
+        let _ = app_handle.emit("preview-path-changed", ());
     } else {
         let preview_win = tauri::WebviewWindowBuilder::new(
             &app_handle,

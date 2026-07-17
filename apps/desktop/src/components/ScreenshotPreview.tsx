@@ -20,6 +20,13 @@ export function ScreenshotPreview() {
     }
     void fetchPreviewPath();
 
+    // Listen to window focus and document visibilitychange events
+    const handleFocus = () => {
+      void fetchPreviewPath();
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
     let unlistenFn: (() => void) | null = null;
     const setupListener = async () => {
       try {
@@ -34,6 +41,8 @@ export function ScreenshotPreview() {
     void setupListener();
 
     return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
       if (unlistenFn) unlistenFn();
     };
   }, []);

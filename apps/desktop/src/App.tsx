@@ -19,7 +19,12 @@ export default function App() {
       const label = getCurrentWindow().label;
       setWindowLabel(label);
       if (label === 'screenshot-review') {
+        document.documentElement.style.backgroundColor = 'transparent';
         document.body.style.backgroundColor = 'transparent';
+        const root = document.getElementById('root');
+        if (root) {
+          root.style.backgroundColor = 'transparent';
+        }
       }
     } catch (e) {
       console.warn('[App] Failed to get window label:', e);
