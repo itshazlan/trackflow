@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-export const BASE_URL = 'http://localhost:3000';
+export const BASE_URL = 'https://trackflow.chimney.id';
 
 export interface ApiResponse<T> {
   data: T | null;
