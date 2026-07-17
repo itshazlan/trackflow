@@ -1369,6 +1369,68 @@ pub fn run() {
             
             // Initialize database schema
             let conn = rusqlite::Connection::open(&db_path).unwrap();
+            
+            // Check if table exists and if issue_id has a NOT NULL constraint
+            let table_exists: bool = conn.query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='time_blocks'",
+                [],
+                |row| row.get(0)
+            ).unwrap_or(0) > 0;
+
+            if table_exists {
+                let mut stmt = conn.prepare("PRAGMA table_info(time_blocks)").unwrap();
+                let mut issue_id_not_null = false;
+                let rows = stmt.query_map([], |row| {
+                    let name: String = row.get(1)?;
+                    let notnull: i32 = row.get(3)?;
+                    Ok((name, notnull))
+                }).unwrap();
+
+                for r in rows {
+                    if let Ok((name, notnull)) = r {
+                        if name == "issue_id" && notnull == 1 {
+                            issue_id_not_null = true;
+                        }
+                    }
+                }
+
+                if issue_id_not_null {
+                    println!("[Tauri Rust] Migrating time_blocks to make issue_id nullable...");
+                    let _ = conn.execute("ALTER TABLE time_blocks RENAME TO temp_time_blocks", []);
+                    
+                    conn.execute(
+                        "CREATE TABLE time_blocks (
+                            id TEXT PRIMARY KEY,
+                            project_id TEXT NOT NULL,
+                            issue_id TEXT,
+                            note TEXT,
+                            block_start TEXT NOT NULL,
+                            block_end TEXT NOT NULL,
+                            keyboard_count INTEGER NOT NULL DEFAULT 0,
+                            mouse_count INTEGER NOT NULL DEFAULT 0,
+                            activity_level TEXT NOT NULL DEFAULT 'none',
+                            screenshot_path TEXT,
+                            active_window_title TEXT,
+                            active_app_name TEXT,
+                            retry_count INTEGER NOT NULL DEFAULT 0,
+                            synced INTEGER NOT NULL DEFAULT 0,
+                            review_pending INTEGER NOT NULL DEFAULT 0
+                        )",
+                        [],
+                    ).unwrap();
+
+                    let _ = conn.execute(
+                        "INSERT INTO time_blocks (id, project_id, issue_id, note, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, retry_count, synced, review_pending)
+                         SELECT id, project_id, issue_id, note, block_start, block_end, keyboard_count, mouse_count, activity_level, screenshot_path, active_window_title, active_app_name, retry_count, synced, review_pending
+                         FROM temp_time_blocks",
+                        [],
+                    );
+
+                    let _ = conn.execute("DROP TABLE temp_time_blocks", []);
+                    println!("[Tauri Rust] Migration complete: issue_id is now nullable!");
+                }
+            }
+
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS time_blocks (
                     id TEXT PRIMARY KEY,
