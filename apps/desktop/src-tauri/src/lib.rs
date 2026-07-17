@@ -72,7 +72,7 @@ impl Default for PendingReviewState {
             data: Mutex::new(None),
             preview_path: Mutex::new(None),
             countdown_abort_handle: Mutex::new(None),
-            remaining_seconds: std::sync::atomic::AtomicI32::new(10),
+            remaining_seconds: std::sync::atomic::AtomicI32::new(15),
         }
     }
 }
@@ -349,23 +349,15 @@ fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<Screensh
     })
 }
 
-fn do_submit_review(app_handle: &tauri::AppHandle, id: String) -> Result<(), String> {
-    let db_state = app_handle.state::<DbState>();
+fn pause_countdown(app_handle: &tauri::AppHandle) {
     let review_state = app_handle.state::<PendingReviewState>();
-    
-    let conn = Connection::open(&db_state.db_path).map_err(|e| e.to_string())?;
-    conn.execute("UPDATE time_blocks SET review_pending = 0 WHERE id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
-    
-    *review_state.data.lock().unwrap() = None;
-    
-    if let Some(win) = app_handle.get_webview_window("screenshot-review") {
-        let _ = win.hide();
+    if let Some(handle) = review_state.countdown_abort_handle.lock().unwrap().take() {
+        handle.abort();
     }
-    Ok(())
+    let _ = app_handle.emit("countdown-paused", ());
 }
 
-fn resume_screenshot_countdown(app_handle: &tauri::AppHandle) {
+fn resume_countdown(app_handle: &tauri::AppHandle) {
     let review_state = app_handle.state::<PendingReviewState>();
     
     // Check if we actually have pending review data
@@ -381,29 +373,48 @@ fn resume_screenshot_countdown(app_handle: &tauri::AppHandle) {
     }
     
     let app_handle_clone = app_handle.clone();
+    let id_clone_task = id_clone.clone();
     let countdown_task = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
         loop {
-            interval.tick().await;
-            
             let state = app_handle_clone.state::<PendingReviewState>();
             let remaining = state.remaining_seconds.load(Ordering::SeqCst);
             
             let _ = app_handle_clone.emit("countdown-tick", remaining);
             
             if remaining <= 0 {
-                println!("[Tauri Rust] Screenshot review timeout reached on resume. Auto-submitting block: {}", id_clone);
-                if let Err(e) = do_submit_review(&app_handle_clone, id_clone.clone()) {
+                println!("[Tauri Rust] Screenshot review timeout reached on resume. Auto-submitting block: {}", id_clone_task);
+                if let Err(e) = do_submit_review(&app_handle_clone, id_clone_task.clone()) {
                     println!("[Tauri Rust] Auto-submit review failed: {}", e);
                 }
                 break;
             }
             
             state.remaining_seconds.store(remaining - 1, Ordering::SeqCst);
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
     });
     
     *review_state.countdown_abort_handle.lock().unwrap() = Some(countdown_task.abort_handle());
+}
+
+fn do_submit_review(app_handle: &tauri::AppHandle, id: String) -> Result<(), String> {
+    let db_state = app_handle.state::<DbState>();
+    let review_state = app_handle.state::<PendingReviewState>();
+    
+    let conn = Connection::open(&db_state.db_path).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE time_blocks SET review_pending = 0 WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    
+    *review_state.data.lock().unwrap() = None;
+    
+    if let Some(win) = app_handle.get_webview_window("screenshot-widget") {
+        let _ = win.hide();
+    }
+    
+    if let Some(win) = app_handle.get_webview_window("screenshot-preview") {
+        let _ = win.close();
+    }
+    Ok(())
 }
 
 fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screenshot_path: String) {
@@ -413,41 +424,12 @@ fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screensh
         screenshot_path,
     });
     
-    // Reset countdown to 10 seconds
-    review_state.remaining_seconds.store(10, Ordering::SeqCst);
+    // Reset countdown to 15 seconds
+    review_state.remaining_seconds.store(15, Ordering::SeqCst);
     
-    // Abort any existing countdown task
-    if let Some(handle) = review_state.countdown_abort_handle.lock().unwrap().take() {
-        handle.abort();
-    }
+    resume_countdown(app_handle);
     
-    let app_handle_clone = app_handle.clone();
-    let id_clone = id.clone();
-    let countdown_task = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
-        loop {
-            interval.tick().await;
-            
-            let state = app_handle_clone.state::<PendingReviewState>();
-            let remaining = state.remaining_seconds.load(Ordering::SeqCst);
-            
-            let _ = app_handle_clone.emit("countdown-tick", remaining);
-            
-            if remaining <= 0 {
-                println!("[Tauri Rust] Screenshot review timeout reached. Auto-submitting block: {}", id_clone);
-                if let Err(e) = do_submit_review(&app_handle_clone, id_clone.clone()) {
-                    println!("[Tauri Rust] Auto-submit review failed: {}", e);
-                }
-                break;
-            }
-            
-            state.remaining_seconds.store(remaining - 1, Ordering::SeqCst);
-        }
-    });
-    
-    *review_state.countdown_abort_handle.lock().unwrap() = Some(countdown_task.abort_handle());
-    
-    if let Some(win) = app_handle.get_webview_window("screenshot-review") {
+    if let Some(win) = app_handle.get_webview_window("screenshot-widget") {
         if let Some(monitor) = win.primary_monitor().ok().flatten().or_else(|| win.current_monitor().ok().flatten()) {
             let size = monitor.size();
             let scale_factor = monitor.scale_factor();
@@ -463,7 +445,7 @@ fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screensh
         let _ = win.set_focus();
         let _ = app_handle.emit("review-data-changed", ());
     } else {
-        println!("[Tauri Rust] Warning: screenshot-review window was not found!");
+        println!("[Tauri Rust] Warning: screenshot-widget window was not found!");
     }
 }
 
@@ -521,25 +503,25 @@ fn discard_review(
     
     *review_state.data.lock().unwrap() = None;
     
-    if let Some(win) = app_handle.get_webview_window("screenshot-review") {
+    if let Some(win) = app_handle.get_webview_window("screenshot-widget") {
         let _ = win.hide();
+    }
+    
+    if let Some(win) = app_handle.get_webview_window("screenshot-preview") {
+        let _ = win.close();
     }
     Ok(())
 }
 
 #[tauri::command]
-fn open_preview_window(
+fn open_screenshot_preview(
     screenshot_path: String,
     app_handle: tauri::AppHandle,
     review_state: tauri::State<'_, PendingReviewState>,
 ) -> Result<(), String> {
     *review_state.preview_path.lock().unwrap() = Some(screenshot_path);
     
-    // Pause countdown
-    if let Some(handle) = review_state.countdown_abort_handle.lock().unwrap().take() {
-        handle.abort();
-    }
-    let _ = app_handle.emit("countdown-paused", ());
+    pause_countdown(&app_handle);
     
     if let Some(win) = app_handle.get_webview_window("screenshot-preview") {
         let _ = win.show();
@@ -551,7 +533,7 @@ fn open_preview_window(
             "screenshot-preview",
             tauri::WebviewUrl::App("index.html".into())
         )
-        .title("Screenshot Preview")
+        .title("Preview Screenshot")
         .inner_size(800.0, 600.0)
         .decorations(true)
         .resizable(true)
@@ -1290,8 +1272,12 @@ pub fn run() {
         .manage(PendingReviewState::default())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                println!("[Tauri Rust] CloseRequested event for window: {}", window.label());
                 if window.label() == "screenshot-preview" {
-                    resume_screenshot_countdown(window.app_handle());
+                    resume_countdown(window.app_handle());
+                } else if window.label() == "screenshot-widget" {
+                    api.prevent_close();
+                    let _ = window.hide();
                 } else if !ALLOW_REAL_EXIT.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.hide();
@@ -1552,7 +1538,7 @@ pub fn run() {
             get_pending_review,
             submit_review,
             discard_review,
-            open_preview_window,
+            open_screenshot_preview,
             get_preview_path
         ])
         .build(tauri::generate_context!())

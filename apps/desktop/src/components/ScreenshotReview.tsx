@@ -11,7 +11,7 @@ interface PendingReviewData {
 
 export function ScreenshotReview() {
   const [data, setData] = useState<PendingReviewData | null>(null);
-  const [countdown, setCountdown] = useState(10);
+  const [countdown, setCountdown] = useState(15);
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -122,7 +122,7 @@ export function ScreenshotReview() {
     if (!data) return;
     try {
       const primaryPath = data.screenshot_path.split(',')[0];
-      await invoke('open_preview_window', { screenshotPath: primaryPath });
+      await invoke('open_screenshot_preview', { screenshotPath: primaryPath });
     } catch (err) {
       console.error('Failed to open preview:', err);
     }
@@ -231,7 +231,7 @@ export function ScreenshotReview() {
       <div className="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
         <div
           className={`h-full transition-all duration-1000 ease-linear ${getProgressBarColor()}`}
-          style={{ width: `${isPaused ? 100 : (countdown / 10) * 100}%` }}
+          style={{ width: `${isPaused ? 100 : (countdown / 15) * 100}%` }}
         />
       </div>
     </div>

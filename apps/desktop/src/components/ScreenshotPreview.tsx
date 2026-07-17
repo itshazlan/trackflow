@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export function ScreenshotPreview() {
   const [screenshotPath, setScreenshotPath] = useState<string | null>(null);
@@ -47,6 +48,18 @@ export function ScreenshotPreview() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        void getCurrentWindow().close();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">
@@ -61,7 +74,7 @@ export function ScreenshotPreview() {
         <div className="text-center">
           <div className="text-sm text-zinc-400">No preview screenshot found.</div>
           <button
-            onClick={() => window.close()}
+            onClick={() => getCurrentWindow().close()}
             className="mt-3 bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded text-xs text-zinc-300 transition-colors"
           >
             Close Window
@@ -81,12 +94,9 @@ export function ScreenshotPreview() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 bg-zinc-950 select-none">
         <div className="flex flex-col">
           <span className="text-xs font-semibold text-zinc-200">Screenshot Preview</span>
-          <span className="text-[9px] text-zinc-500 font-mono truncate max-w-[500px]" title={primaryPath}>
-            {primaryPath}
-          </span>
         </div>
         <button
-          onClick={() => window.close()}
+          onClick={() => getCurrentWindow().close()}
           className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
         >
           Close

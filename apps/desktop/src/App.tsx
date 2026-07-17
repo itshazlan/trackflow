@@ -18,7 +18,7 @@ export default function App() {
     try {
       const label = getCurrentWindow().label;
       setWindowLabel(label);
-      if (label === 'screenshot-review') {
+      if (label === 'screenshot-widget') {
         document.documentElement.style.backgroundColor = 'transparent';
         document.body.style.backgroundColor = 'transparent';
         const root = document.getElementById('root');
@@ -104,7 +104,7 @@ export default function App() {
     };
   }, []);
 
-  if (windowLabel === 'screenshot-review') {
+  if (windowLabel === 'screenshot-widget') {
     return <ScreenshotReview />;
   }
 
