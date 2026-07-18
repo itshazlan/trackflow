@@ -197,6 +197,101 @@ describe('Projects and Memberships (e2e)', () => {
       expect(membership[0].userId).toBe(mockUsers.manager.id);
       expect(membership[0].role).toBe('manager');
     });
+
+    it('should create a project with direct members and preserve creator as manager if not in list', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/projects')
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .send({
+          name: 'Direct Member Project',
+          key: 'DIRECT',
+          description: 'Project with pre-defined members',
+          members: [
+            { userId: mockUsers.developer.id, role: 'developer' },
+            { userId: mockUsers.reporter.id, role: 'reporter_qa' },
+          ]
+        })
+        .expect(201);
+
+      const memberships = await db
+        .select()
+        .from(projectMemberships)
+        .where(eq(projectMemberships.projectId, res.body.id));
+
+      expect(memberships).toHaveLength(3);
+      
+      const creatorMem = memberships.find((m: any) => m.userId === mockUsers.manager.id);
+      expect(creatorMem).toBeDefined();
+      expect(creatorMem.role).toBe('manager');
+
+      const devMem = memberships.find((m: any) => m.userId === mockUsers.developer.id);
+      expect(devMem).toBeDefined();
+      expect(devMem.role).toBe('developer');
+
+      const repMem = memberships.find((m: any) => m.userId === mockUsers.reporter.id);
+      expect(repMem).toBeDefined();
+      expect(repMem.role).toBe('reporter_qa');
+
+      await db.delete(projectMemberships).where(eq(projectMemberships.projectId, res.body.id));
+      await db.delete(projects).where(eq(projects.id, res.body.id));
+    });
+
+    it('should respect custom role of creator if they are explicitly passed in members list', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/projects')
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .send({
+          name: 'Creator custom role',
+          key: 'CUSTOM',
+          description: 'Project with creator listed as developer',
+          members: [
+            { userId: mockUsers.manager.id, role: 'developer' },
+          ]
+        })
+        .expect(201);
+
+      const memberships = await db
+        .select()
+        .from(projectMemberships)
+        .where(eq(projectMemberships.projectId, res.body.id));
+
+      expect(memberships).toHaveLength(1);
+      expect(memberships[0].userId).toBe(mockUsers.manager.id);
+      expect(memberships[0].role).toBe('developer');
+
+      await db.delete(projectMemberships).where(eq(projectMemberships.projectId, res.body.id));
+      await db.delete(projects).where(eq(projects.id, res.body.id));
+    });
+
+    it('should deduplicate entries in the members list input', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/projects')
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .send({
+          name: 'Deduplicated Project',
+          key: 'DEDUP',
+          description: 'Testing member list deduplication',
+          members: [
+            { userId: mockUsers.developer.id, role: 'developer' },
+            { userId: mockUsers.developer.id, role: 'manager' },
+          ]
+        })
+        .expect(201);
+
+      const memberships = await db
+        .select()
+        .from(projectMemberships)
+        .where(eq(projectMemberships.projectId, res.body.id));
+
+      expect(memberships).toHaveLength(2);
+      
+      const devMems = memberships.filter((m: any) => m.userId === mockUsers.developer.id);
+      expect(devMems).toHaveLength(1);
+      expect(devMems[0].role).toBe('developer');
+
+      await db.delete(projectMemberships).where(eq(projectMemberships.projectId, res.body.id));
+      await db.delete(projects).where(eq(projects.id, res.body.id));
+    });
   });
 
   describe('Project Memberships', () => {

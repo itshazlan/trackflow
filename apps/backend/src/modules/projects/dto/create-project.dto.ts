@@ -1,4 +1,16 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, Matches, IsArray, IsIn, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CreateProjectMemberDto {
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsIn(['manager', 'developer', 'reporter_qa'])
+  role: 'manager' | 'developer' | 'reporter_qa';
+}
 
 export class CreateProjectDto {
   @IsString()
@@ -19,4 +31,10 @@ export class CreateProjectDto {
   @IsUUID()
   @IsOptional()
   parentProjectId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateProjectMemberDto)
+  members?: CreateProjectMemberDto[];
 }

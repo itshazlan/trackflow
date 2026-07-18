@@ -42,12 +42,26 @@ export class ProjectsService {
           })
           .returning();
 
-        // 2. Automatically make creator the 'manager' member of the project
-        await tx.insert(projectMemberships).values({
-          projectId: newProject.id,
-          userId: userId,
-          role: 'manager',
-        });
+        // 2. Add members directly to the project (including creator fallback if not listed)
+        const inputMembers = createProjectDto.members || [];
+        const uniqueMembersMap = new Map<string, string>();
+        for (const m of inputMembers) {
+          if (!uniqueMembersMap.has(m.userId)) {
+            uniqueMembersMap.set(m.userId, m.role);
+          }
+        }
+
+        if (!uniqueMembersMap.has(userId)) {
+          uniqueMembersMap.set(userId, 'manager');
+        }
+
+        for (const [memberUserId, role] of uniqueMembersMap.entries()) {
+          await tx.insert(projectMemberships).values({
+            projectId: newProject.id,
+            userId: memberUserId,
+            role: role,
+          });
+        }
 
         // 3. Seed default issue statuses (FR-022)
         const defaultStatuses = [

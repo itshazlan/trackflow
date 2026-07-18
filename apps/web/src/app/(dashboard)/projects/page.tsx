@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProjects, createProject, checkProjectKey, Project } from "@/lib/projects-service";
+import { getSystemUsers } from "@/lib/issues-service";
+import { getSession } from "@/lib/auth-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +22,7 @@ import {
   Folder,
   AlertCircle,
   ArrowRight,
+  X,
 } from "lucide-react";
 
 export default function ProjectsPage() {
@@ -28,6 +31,7 @@ export default function ProjectsPage() {
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectKey, setNewProjectKey] = useState("");
   const [newProjectDesc, setNewProjectDesc] = useState("");
@@ -38,6 +42,48 @@ export default function ProjectsPage() {
   const [isKeyManuallyEdited, setIsKeyManuallyEdited] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
+  // Direct membership states
+  const [systemUsers, setSystemUsers] = useState<Array<{ id: string; name: string; email: string; username: string }>>([]);
+  const [selectedMembers, setSelectedMembers] = useState<Array<{ userId: string; name: string; role: 'manager' | 'developer' | 'reporter_qa' }>>([]);
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    if (isDialogOpen) {
+      setCurrentStep(1);
+      setSelectedMembers([]);
+      setUserSearchQuery("");
+      setKeyError("");
+      setIsKeyAvailable(null);
+      setIsKeyManuallyEdited(false);
+      
+      // Load current session
+      void getSession().then((sess) => {
+        if (sess?.user) {
+          setCurrentUser(sess.user);
+        }
+      });
+
+      // Load system users
+      void getSystemUsers().then((data) => {
+        setSystemUsers(data);
+      }).catch((err) => {
+        console.error("Gagal memuat daftar user", err);
+      });
+    }
+  }, [isDialogOpen]);
+
+  const filteredUsers = systemUsers.filter((u) => {
+    // Filter out current user (creator fallback is automatic)
+    if (u.id === currentUser?.id) return false;
+    
+    // Filter out already selected members
+    if (selectedMembers.some((m) => m.userId === u.id)) return false;
+
+    const query = userSearchQuery.toLowerCase();
+    return u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query);
+  });
+
   // Fetch projects via TanStack Query
   const { data: projects = [], isLoading, error: queryError } = useQuery<Project[]>({
     queryKey: ["projects"],
@@ -46,8 +92,17 @@ export default function ProjectsPage() {
 
   // Create project mutation
   const createMutation = useMutation({
-    mutationFn: ({ name, key, description }: { name: string; key: string; description?: string }) =>
-      createProject(name, key, description),
+    mutationFn: ({
+      name,
+      key,
+      description,
+      members,
+    }: {
+      name: string;
+      key: string;
+      description?: string;
+      members?: Array<{ userId: string; role: "manager" | "developer" | "reporter_qa" }>;
+    }) => createProject(name, key, description, undefined, members),
     onSuccess: (newProj) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       setIsDialogOpen(false);
@@ -58,6 +113,8 @@ export default function ProjectsPage() {
       setKeyError("");
       setIsKeyAvailable(null);
       setIsKeyManuallyEdited(false);
+      setSelectedMembers([]);
+      setCurrentStep(1);
       // Navigate to the newly created project tab
       router.push(`/projects/${newProj.id}?tab=issues`);
     },
@@ -138,10 +195,17 @@ export default function ProjectsPage() {
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectName.trim() || !newProjectKey.trim() || keyError) return;
+
+    if (currentStep === 1) {
+      setCurrentStep(2);
+      return;
+    }
+
     createMutation.mutate({
       name: newProjectName.trim(),
       key: newProjectKey.trim(),
       description: newProjectDesc.trim() || undefined,
+      members: selectedMembers.map((m) => ({ userId: m.userId, role: m.role })),
     });
   };
 
@@ -281,10 +345,12 @@ export default function ProjectsPage() {
 
       {/* Create Project Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[360px]">
+        <DialogContent className="sm:max-w-[400px]">
           <form onSubmit={handleCreateSubmit}>
             <DialogHeader>
-              <DialogTitle className="text-[14.5px] font-semibold">Buat Proyek Baru</DialogTitle>
+              <DialogTitle className="text-[14.5px] font-semibold">
+                Buat Proyek Baru {currentStep === 2 && "— Pilih Anggota"}
+              </DialogTitle>
             </DialogHeader>
 
             <div className="flex flex-col gap-3 py-4">
@@ -295,90 +361,197 @@ export default function ProjectsPage() {
                 </div>
               )}
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="proj-name" className="text-[11px] font-medium text-muted-foreground">
-                  Nama Proyek
-                </Label>
-                <Input
-                  id="proj-name"
-                  type="text"
-                  placeholder="Contoh: TrackFlow App"
-                  className="h-8 text-[12.5px]"
-                  value={newProjectName}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  required
-                  disabled={createMutation.isPending}
-                />
-              </div>
+              {currentStep === 1 && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="proj-name" className="text-[11px] font-medium text-muted-foreground">
+                      Nama Proyek
+                    </Label>
+                    <Input
+                      id="proj-name"
+                      type="text"
+                      placeholder="Contoh: TrackFlow App"
+                      className="h-8 text-[12.5px]"
+                      value={newProjectName}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                      required
+                      disabled={createMutation.isPending}
+                    />
+                  </div>
 
-              <div className="flex flex-col gap-1.5">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="proj-key" className="text-[11px] font-medium text-muted-foreground">
-                    Kode Proyek (Project Key)
-                  </Label>
-                  {isCheckingKey && (
-                    <span className="text-[10px] text-muted-foreground animate-pulse">Memeriksa...</span>
-                  )}
-                  {!isCheckingKey && isKeyAvailable === true && (
-                    <span className="text-[10px] text-emerald-500 font-medium">Tersedia</span>
-                  )}
-                </div>
-                <Input
-                  id="proj-key"
-                  type="text"
-                  placeholder="Contoh: TRACK, MOB"
-                  className={`h-8 text-[12.5px] uppercase ${keyError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-                  value={newProjectKey}
-                  onChange={(e) => handleKeyChange(e.target.value)}
-                  onBlur={handleKeyBlur}
-                  required
-                  disabled={createMutation.isPending}
-                />
-                {keyError && (
-                  <span className="text-[10px] text-destructive mt-0.5">{keyError}</span>
-                )}
-              </div>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center">
+                      <Label htmlFor="proj-key" className="text-[11px] font-medium text-muted-foreground">
+                        Kode Proyek (Project Key)
+                      </Label>
+                      {isCheckingKey && (
+                        <span className="text-[10px] text-muted-foreground animate-pulse">Memeriksa...</span>
+                      )}
+                      {!isCheckingKey && isKeyAvailable === true && (
+                        <span className="text-[10px] text-emerald-500 font-medium">Tersedia</span>
+                      )}
+                    </div>
+                    <Input
+                      id="proj-key"
+                      type="text"
+                      placeholder="Contoh: TRACK, MOB"
+                      className={`h-8 text-[12.5px] uppercase ${keyError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                      value={newProjectKey}
+                      onChange={(e) => handleKeyChange(e.target.value)}
+                      onBlur={handleKeyBlur}
+                      required
+                      disabled={createMutation.isPending}
+                    />
+                    {keyError && (
+                      <span className="text-[10px] text-destructive mt-0.5">{keyError}</span>
+                    )}
+                  </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="proj-desc" className="text-[11px] font-medium text-muted-foreground">
-                  Deskripsi Proyek (Opsional)
-                </Label>
-                <textarea
-                  id="proj-desc"
-                  placeholder="Tulis ringkasan singkat mengenai lingkup proyek ini..."
-                  className="min-h-[70px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  value={newProjectDesc}
-                  onChange={(e) => setNewProjectDesc(e.target.value)}
-                  disabled={createMutation.isPending}
-                />
-              </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="proj-desc" className="text-[11px] font-medium text-muted-foreground">
+                      Deskripsi Proyek (Opsional)
+                    </Label>
+                    <textarea
+                      id="proj-desc"
+                      placeholder="Tulis ringkasan singkat mengenai lingkup proyek ini..."
+                      className="min-h-[70px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                      value={newProjectDesc}
+                      onChange={(e) => setNewProjectDesc(e.target.value)}
+                      disabled={createMutation.isPending}
+                    />
+                  </div>
+                </>
+              )}
+
+              {currentStep === 2 && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-[11px] font-medium text-muted-foreground">Cari & Pilih Anggota</Label>
+                    <div className="relative">
+                      <Input
+                        placeholder="Ketik nama atau email..."
+                        value={userSearchQuery}
+                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                        className="h-8 text-[12px]"
+                      />
+                      {userSearchQuery.trim() !== "" && (
+                        <div className="absolute z-50 w-full mt-1 max-h-[140px] overflow-y-auto bg-popover border border-border rounded-md shadow-lg p-1">
+                          {filteredUsers.length === 0 ? (
+                            <div className="p-2 text-center text-muted-foreground text-[11px]">User tidak ditemukan</div>
+                          ) : (
+                            filteredUsers.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                className="w-full text-left px-2 py-1.5 text-[11.5px] rounded hover:bg-accent hover:text-accent-foreground transition-colors flex flex-col"
+                                onClick={() => {
+                                  setSelectedMembers((prev) => [
+                                    ...prev,
+                                    { userId: u.id, name: u.name, role: "developer" },
+                                  ]);
+                                  setUserSearchQuery("");
+                                }}
+                              >
+                                <span className="font-semibold text-foreground">{u.name}</span>
+                                <span className="text-[10px] text-muted-foreground">{u.email}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 mt-1.5">
+                    <Label className="text-[11px] font-medium text-muted-foreground">Anggota Terpilih ({selectedMembers.length})</Label>
+                    <div className="border border-border rounded-md min-h-[120px] max-h-[180px] overflow-y-auto p-1.5 bg-muted/20 flex flex-col gap-1.5">
+                      {selectedMembers.length === 0 ? (
+                        <div className="m-auto text-center text-muted-foreground text-[11px] py-8">
+                          Belum ada anggota yang dipilih.
+                        </div>
+                      ) : (
+                        selectedMembers.map((member) => (
+                          <div key={member.userId} className="flex items-center justify-between bg-card border border-border rounded p-1.5 text-[11.5px]">
+                            <div className="flex flex-col min-w-0 flex-1 pr-2">
+                              <span className="font-semibold text-foreground truncate">{member.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={member.role}
+                                onChange={(e) => {
+                                  const newRole = e.target.value as "manager" | "developer" | "reporter_qa";
+                                  setSelectedMembers((prev) =>
+                                    prev.map((m) =>
+                                      m.userId === member.userId ? { ...m, role: newRole } : m
+                                    )
+                                  );
+                                }}
+                                className="h-7 text-[11px] rounded border border-border bg-background px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                              >
+                                <option value="developer">Developer</option>
+                                <option value="manager">Manager</option>
+                                <option value="reporter_qa">Reporter QA</option>
+                              </select>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded"
+                                onClick={() => {
+                                  setSelectedMembers((prev) => prev.filter((m) => m.userId !== member.userId));
+                                }}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 text-[12px]"
-                onClick={() => setIsDialogOpen(false)}
-                disabled={createMutation.isPending}
-              >
-                Batal
-              </Button>
+            <div className="flex items-center justify-between border-t border-border pt-4 mt-2 w-full">
+              {currentStep === 2 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 text-[12px]"
+                  onClick={() => setCurrentStep(1)}
+                  disabled={createMutation.isPending}
+                >
+                  Kembali
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 text-[12px]"
+                  onClick={() => setIsDialogOpen(false)}
+                  disabled={createMutation.isPending}
+                >
+                  Batal
+                </Button>
+              )}
               <Button
                 type="submit"
                 className="h-8 text-[12px]"
-                disabled={createMutation.isPending || !newProjectName.trim()}
+                disabled={createMutation.isPending || !newProjectName.trim() || !newProjectKey.trim() || !!keyError}
               >
                 {createMutation.isPending ? (
                   <>
                     <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
                     Membuat...
                   </>
+                ) : currentStep === 1 ? (
+                  "Lanjut"
                 ) : (
                   "Buat Proyek"
                 )}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
