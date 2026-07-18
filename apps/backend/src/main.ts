@@ -80,9 +80,34 @@ async function bootstrap() {
         const r2Service = app.get(R2Service);
         if (r2Service && r2Service.isConfigured()) {
           const key = req.path.replace(/^\//, ''); // e.g. project/.../xxx.webp
-          const stream = await r2Service.getObjectStream(key);
+          let stream: any = null;
+
+          try {
+            stream = await r2Service.getObjectStream(key);
+          } catch (err) {
+            // Fallback for double-encoded keys (Latin-1 interpreted as UTF-8)
+            const fallbackKey = Buffer.from(key, 'utf8').toString('latin1');
+            if (fallbackKey !== key) {
+              try {
+                stream = await r2Service.getObjectStream(fallbackKey);
+              } catch (fallbackErr) {
+                // Both keys failed
+              }
+            }
+          }
+
           if (stream) {
-            res.setHeader('Content-Type', 'image/webp');
+            const ext = key.split('.').pop()?.toLowerCase();
+            let contentType = 'application/octet-stream';
+            if (ext === 'pdf') contentType = 'application/pdf';
+            else if (ext === 'png') contentType = 'image/png';
+            else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
+            else if (ext === 'webp') contentType = 'image/webp';
+            else if (ext === 'gif') contentType = 'image/gif';
+            else if (ext === 'svg') contentType = 'image/svg+xml';
+            else if (ext === 'txt') contentType = 'text/plain';
+
+            res.setHeader('Content-Type', contentType);
             return (stream as any).pipe(res);
           }
         }

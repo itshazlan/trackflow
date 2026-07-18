@@ -62,9 +62,17 @@ export class UserIssuesController {
     if (!file) {
       throw new BadRequestException('File tidak ditemukan dalam request.');
     }
+
+    // Decode filename from Latin-1 to UTF-8 to handle Multer encoding issues,
+    // normalize and sanitize spaces to prevent loading/serving issues.
+    const decodedName = Buffer.from(file.originalname, 'latin1')
+      .toString('utf8')
+      .normalize('NFC')
+      .replace(/[\u202F\u00A0]/g, ' ');
+
     return this.issuesService.createAttachment(
       id,
-      file.originalname,
+      decodedName,
       file.mimetype,
       file.buffer,
       req.user.id,
