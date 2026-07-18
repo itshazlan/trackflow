@@ -330,7 +330,7 @@ export default function TimesheetsPage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
@@ -413,8 +413,77 @@ export default function TimesheetsPage() {
             </Button>
           </div>
 
-          {/* Timesheets table */}
-          <div className="rounded-lg border border-border bg-card overflow-hidden shadow-sm">
+          {/* Mobile Card List View (visible on < sm, hidden on >= sm) */}
+          <div className="flex flex-col gap-3 sm:hidden">
+            {displayTimesheets.length === 0 ? (
+              <div className="rounded-lg border border-border bg-card p-6 text-center text-muted-foreground text-[12px] italic">
+                Tidak ada berkas timesheet ditemukan.
+              </div>
+            ) : (
+              displayTimesheets.map((ts) => (
+                <div key={ts.id} className="rounded-lg border border-border bg-card p-4 flex flex-col gap-3 shadow-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      {isManagerOrAdmin && viewMode === "team" && (
+                        <div className="mb-1">
+                          <div className="font-semibold text-foreground text-[13px]">{ts.user?.name || "Karyawan"}</div>
+                          <div className="text-[10px] text-muted-foreground">{ts.user?.email}</div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => {
+                          setSelectedTimesheetId(ts.id);
+                          loadTimesheetDetail(ts.id);
+                        }}
+                        className="font-bold text-foreground text-left hover:underline text-[13px] truncate"
+                      >
+                        {new Date(ts.periodStart).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} - {new Date(ts.periodEnd).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">Dibuat {new Date(ts.createdAt).toLocaleDateString("id-ID")}</span>
+                    </div>
+                    <div className="shrink-0">
+                      {getStatusBadge(ts.status)}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-border/60 pt-2.5">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] text-muted-foreground uppercase font-semibold">Total Durasi</span>
+                      <span className="font-mono font-bold text-foreground text-[13px]">
+                        {formatMinutes(ts.totalMinutes)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7.5 text-[11px] font-medium px-3"
+                        onClick={() => {
+                          setSelectedTimesheetId(ts.id);
+                          loadTimesheetDetail(ts.id);
+                        }}
+                      >
+                        Detail
+                      </Button>
+                      {ts.status === "draft" && ts.userId === session?.user?.id && (
+                        <Button
+                          size="sm"
+                          className="h-7.5 text-[11px] font-medium px-3"
+                          onClick={() => handleSubmitTimesheetTrigger(ts.id)}
+                        >
+                          Kirim
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table View (hidden on < sm, visible on >= sm) */}
+          <div className="hidden sm:block rounded-lg border border-border bg-card overflow-hidden shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -612,7 +681,49 @@ export default function TimesheetsPage() {
               Riwayat Waktu Kerja Manual ({manualEntries.length})
             </h3>
             
-            <div className="rounded-lg border border-border bg-card overflow-hidden shadow-sm">
+            {/* Mobile View for Manual Entries (visible on < sm, hidden on >= sm) */}
+            <div className="flex flex-col gap-2.5 sm:hidden">
+              {manualEntries.length === 0 ? (
+                <div className="rounded-lg border border-border bg-card p-6 text-center text-muted-foreground text-[12px] italic">
+                  Belum ada entri waktu manual.
+                </div>
+              ) : (
+                manualEntries.map((entry) => (
+                  <div key={entry.id} className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 shadow-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-semibold text-foreground text-[12px]">
+                        {new Date(entry.entryDate).toLocaleDateString("id-ID", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </span>
+                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold border uppercase tracking-wider ${
+                        entry.approvalStatus === "approved"
+                          ? "bg-green-500/10 border-green-500/20 text-green-500"
+                          : entry.approvalStatus === "rejected"
+                          ? "bg-red-500/10 border-red-500/20 text-red-500"
+                          : "bg-amber-500/10 border-amber-500/20 text-amber-500"
+                      }`}>
+                        {entry.approvalStatus}
+                      </span>
+                    </div>
+                    <p className="text-[11.5px] text-muted-foreground leading-relaxed line-clamp-2">
+                      {entry.description}
+                    </p>
+                    <div className="flex items-center justify-between border-t border-border/50 pt-2 mt-0.5">
+                      <span className="text-[9px] text-muted-foreground uppercase font-medium">Durasi</span>
+                      <span className="font-mono font-bold text-foreground text-[12px]">
+                        {formatMinutes(entry.durationMinutes)}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop View for Manual Entries (hidden on < sm, visible on >= sm) */}
+            <div className="hidden sm:block rounded-lg border border-border bg-card overflow-hidden shadow-sm">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -845,7 +956,7 @@ export default function TimesheetsPage() {
                       />
                     </div>
 
-                    <div className="flex gap-2 justify-end mt-1">
+                    <div className="grid grid-cols-2 sm:flex sm:justify-end gap-2 mt-1">
                       <Button
                         size="sm"
                         variant="destructive"

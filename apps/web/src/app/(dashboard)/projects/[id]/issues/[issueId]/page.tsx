@@ -645,6 +645,145 @@ export default function IssueDetailPage() {
 
   const creator = members.find((m) => m.id === issue.createdBy);
 
+  const propertiesContent = (
+    <div className="flex flex-col gap-4">
+      {/* Status */}
+      <div className="flex items-center justify-between min-h-[30px]">
+        <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Status</Label>
+        <select
+          value={issue.statusId}
+          onChange={(e) => handleStatusChange(e.target.value)}
+          className="h-8 rounded-md border border-border/80 bg-card px-2.5 text-[12px] font-semibold text-foreground outline-none focus:border-primary/50 transition-colors w-44 shadow-sm cursor-pointer"
+        >
+          {statuses.map((st) => {
+            const isRestricted = st.restrictedToRole !== null;
+            const isRoleMatched = st.restrictedToRole === userRole;
+            const disabled = isRestricted && !isRoleMatched && !isAdmin;
+
+            return (
+              <option key={st.id} value={st.id} disabled={disabled}>
+                {st.name} {disabled ? "🔒" : ""}
+              </option>
+            );
+          })}
+        </select>
+      </div>
+
+      {/* Priority */}
+      <div className="flex items-center justify-between min-h-[30px]">
+        <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Priority</Label>
+        <select
+          value={issue.priority}
+          onChange={(e) => handleUpdateField({ priority: e.target.value as any })}
+          className="h-8 rounded-md border border-border/80 bg-card px-2.5 text-[12px] font-semibold text-foreground outline-none focus:border-primary/50 transition-colors w-44 capitalize shadow-sm cursor-pointer"
+        >
+          <option value="low">Low 🟢</option>
+          <option value="medium">Medium 🟡</option>
+          <option value="high">High 🔴</option>
+          <option value="urgent">Urgent ⚡</option>
+        </select>
+      </div>
+
+      {/* Tracker / Type */}
+      <div className="flex items-center justify-between min-h-[30px]">
+        <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Task Type</Label>
+        <select
+          value={issue.trackerId}
+          onChange={(e) => handleUpdateField({ trackerId: e.target.value })}
+          className="h-8 rounded-md border border-border/80 bg-card px-2.5 text-[12px] font-semibold text-foreground outline-none focus:border-primary/50 transition-colors w-44 shadow-sm cursor-pointer"
+        >
+          {trackers.map((tr) => (
+            <option key={tr.id} value={tr.id}>
+              {tr.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Created By */}
+      <div className="flex items-center justify-between min-h-[30px]">
+        <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Created By</Label>
+        <div className="flex items-center gap-2 h-8 w-44 pl-1">
+          <Avatar className="h-5 w-5 border border-border shadow-sm">
+            <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+              {creator ? creator.name.slice(0, 2).toUpperCase() : "-"}
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-[12px] truncate text-foreground font-medium">
+            {creator?.name || "System"}
+          </span>
+        </div>
+      </div>
+
+      {/* Assignee */}
+      <div className="flex items-center justify-between min-h-[30px]">
+        <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Assignee</Label>
+        <select
+          value={issue.assigneeId || ""}
+          onChange={(e) => handleUpdateField({ assigneeId: e.target.value || null })}
+          className="h-8 rounded-md border border-border/80 bg-card px-2.5 text-[12px] font-semibold text-foreground outline-none focus:border-primary/50 transition-colors w-44 shadow-sm cursor-pointer"
+        >
+          <option value="">Belum Ditugaskan</option>
+          {members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Due Date */}
+      <div className="flex items-center justify-between min-h-[30px]">
+        <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Due Date</Label>
+        <Input
+          type="date"
+          value={issue.dueDate ? issue.dueDate.split("T")[0] : ""}
+          onChange={(e) => handleUpdateField({ dueDate: e.target.value || null })}
+          className="h-8 text-[12px] font-semibold w-44 px-2.5 bg-card border-border/80 shadow-sm"
+        />
+      </div>
+
+      <div className="h-px bg-border/60 my-2" />
+
+      {/* Collaborators / Team */}
+      <div className="flex flex-col gap-2">
+        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Collaborators</span>
+        <div className="flex items-center gap-1.5 py-1">
+          <div className="flex -space-x-2 overflow-hidden">
+            {members.slice(0, 4).map((member) => (
+              <Avatar key={member.id} className="h-6 w-6 border-2 border-background ring-1 ring-border shadow-sm">
+                <AvatarFallback className="text-[9px] font-bold bg-muted text-muted-foreground">
+                  {member.name.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            ))}
+          </div>
+          {members.length > 0 && (
+            <span className="text-[11px] text-muted-foreground font-medium ml-1">
+              {members.length} members
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="h-px bg-border/60 my-2" />
+
+      {/* Timeline Info */}
+      <div className="flex flex-col gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between">
+          <span>Created:</span>
+          <span className="font-semibold text-foreground/80">
+            {new Date(issue.createdAt).toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "long",
+              year: "numeric"
+            })}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden text-[13px]">
       {/* Top Header / Breadcrumbs Bar */}
@@ -914,6 +1053,14 @@ export default function IssueDetailPage() {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Mobile Properties Panel (visible only on < lg) */}
+            <div className="lg:hidden border border-border bg-card/40 p-4.5 rounded-xl shadow-xs flex flex-col gap-4">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                Tiket Properties
+              </span>
+              {propertiesContent}
             </div>
 
             {/* Attachments Section */}
@@ -1353,147 +1500,11 @@ export default function IssueDetailPage() {
             </div>
           </div>
 
-          {/* Right Sidebar properties column (25%) */}
-          <div className="lg:col-span-1 border-t lg:border-t-0 lg:border-l border-border/60 pt-6 lg:pt-0 lg:pl-6 flex flex-col gap-6 bg-background/30 rounded-xl lg:bg-transparent lg:p-0">
-            <div className="flex flex-col gap-4">
-
-              {/* Status */}
-              <div className="flex items-center justify-between min-h-[30px]">
-                <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Status</Label>
-                <select
-                  value={issue.statusId}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  className="h-8 rounded-md border border-border/80 bg-card px-2.5 text-[12px] font-semibold text-foreground outline-none focus:border-primary/50 transition-colors w-44 shadow-sm cursor-pointer"
-                >
-                  {statuses.map((st) => {
-                    const isRestricted = st.restrictedToRole !== null;
-                    const isRoleMatched = st.restrictedToRole === userRole;
-                    const disabled = isRestricted && !isRoleMatched && !isAdmin;
-
-                    return (
-                      <option key={st.id} value={st.id} disabled={disabled}>
-                        {st.name} {disabled ? "🔒" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              {/* Priority */}
-              <div className="flex items-center justify-between min-h-[30px]">
-                <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Priority</Label>
-                <select
-                  value={issue.priority}
-                  onChange={(e) => handleUpdateField({ priority: e.target.value as any })}
-                  className="h-8 rounded-md border border-border/80 bg-card px-2.5 text-[12px] font-semibold text-foreground outline-none focus:border-primary/50 transition-colors w-44 capitalize shadow-sm cursor-pointer"
-                >
-                  <option value="low">Low 🟢</option>
-                  <option value="medium">Medium 🟡</option>
-                  <option value="high">High 🔴</option>
-                  <option value="urgent">Urgent ⚡</option>
-                </select>
-              </div>
-
-              {/* Tracker / Type */}
-              <div className="flex items-center justify-between min-h-[30px]">
-                <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Task Type</Label>
-                <select
-                  value={issue.trackerId}
-                  onChange={(e) => handleUpdateField({ trackerId: e.target.value })}
-                  className="h-8 rounded-md border border-border/80 bg-card px-2.5 text-[12px] font-semibold text-foreground outline-none focus:border-primary/50 transition-colors w-44 shadow-sm cursor-pointer"
-                >
-                  {trackers.map((tr) => (
-                    <option key={tr.id} value={tr.id}>
-                      {tr.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Created By */}
-              <div className="flex items-center justify-between min-h-[30px]">
-                <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Created By</Label>
-                <div className="flex items-center gap-2 h-8 w-44 pl-1">
-                  <Avatar className="h-5 w-5 border border-border shadow-sm">
-                    <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
-                      {creator ? creator.name.slice(0, 2).toUpperCase() : "-"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-[12px] truncate text-foreground font-medium">
-                    {creator?.name || "System"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Assignee */}
-              <div className="flex items-center justify-between min-h-[30px]">
-                <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Assignee</Label>
-                <select
-                  value={issue.assigneeId || ""}
-                  onChange={(e) => handleUpdateField({ assigneeId: e.target.value || null })}
-                  className="h-8 rounded-md border border-border/80 bg-card px-2.5 text-[12px] font-semibold text-foreground outline-none focus:border-primary/50 transition-colors w-44 shadow-sm cursor-pointer"
-                >
-                  <option value="">Belum Ditugaskan</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Due Date */}
-              <div className="flex items-center justify-between min-h-[30px]">
-                <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Due Date</Label>
-                <Input
-                  type="date"
-                  value={issue.dueDate ? issue.dueDate.split("T")[0] : ""}
-                  onChange={(e) => handleUpdateField({ dueDate: e.target.value || null })}
-                  className="h-8 text-[12px] font-semibold w-44 px-2.5 bg-card border-border/80 shadow-sm"
-                />
-              </div>
-
-              <div className="h-px bg-border/60 my-2" />
-
-              {/* Collaborators / Team */}
-              <div className="flex flex-col gap-2">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Collaborators</span>
-                <div className="flex items-center gap-1.5 py-1">
-                  <div className="flex -space-x-2 overflow-hidden">
-                    {members.slice(0, 4).map((member) => (
-                      <Avatar key={member.id} className="h-6 w-6 border-2 border-background ring-1 ring-border shadow-sm">
-                        <AvatarFallback className="text-[9px] font-bold bg-muted text-muted-foreground">
-                          {member.name.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                    ))}
-                  </div>
-                  {members.length > 0 && (
-                    <span className="text-[11px] text-muted-foreground font-medium ml-1">
-                      {members.length} members
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="h-px bg-border/60 my-2" />
-
-              {/* Timeline Info */}
-              <div className="flex flex-col gap-1.5 text-[11px] text-muted-foreground">
-                <div className="flex items-center justify-between">
-                  <span>Created:</span>
-                  <span className="font-semibold text-foreground/80">
-                    {new Date(issue.createdAt).toLocaleDateString("id-ID", {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric"
-                    })}
-                  </span>
-                </div>
-              </div>
-
-            </div>
-          </div>        </div>
+          {/* Right Sidebar properties column (25%) - Desktop only */}
+          <div className="hidden lg:block lg:col-span-1 lg:border-l border-border/60 lg:pl-6">
+            {propertiesContent}
+          </div>
+        </div>
       </div>
 
       {/* Preview Attachment Dialog */}

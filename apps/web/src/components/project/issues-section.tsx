@@ -390,6 +390,17 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     }
   }, [toast]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 640) {
+        setViewMode("list");
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // TanStack Query queries
   const { data: session = null } = useQuery<UserSession | null>({
     queryKey: ["session"],
@@ -1000,7 +1011,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
           </select>
 
           {/* View Toggle */}
-          <div className="flex items-center gap-1 bg-muted p-[3px] rounded-md border border-border h-8 box-border">
+          <div className="hidden sm:flex items-center gap-1 bg-muted p-[3px] rounded-md border border-border h-8 box-border">
             <Button
               variant="ghost"
               size="sm"
@@ -1065,74 +1076,47 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       )}
 
       {viewMode === "list" ? (
-        /* Issues Table */
-        <div className="rounded-lg border border-border bg-card overflow-hidden shadow-sm">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-20 pl-4">ID</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead className="w-24">Tracker</TableHead>
-                <TableHead className="w-28">Status</TableHead>
-                <TableHead className="w-36">Assignee</TableHead>
-                <TableHead className="w-24">Priority</TableHead>
-                <TableHead className="w-28 pr-4">Due Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredIssues.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
-                    Tidak ada tiket ditemukan.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredIssues.map((issue) => (
-                  <TableRow
-                    key={issue.id}
-                    className="cursor-pointer hover:bg-muted/40 transition-colors"
-                    onClick={() => {
-                      router.push(`/projects/${projectId}/issues/${issue.id}`);
-                    }}
-                  >
-                    <TableCell className="font-mono text-[11px] text-muted-foreground pl-4">
-                      #{issue.id.slice(0, 6)}
-                    </TableCell>
-                    <TableCell className="font-medium text-foreground">
-                      <div className="flex items-center gap-1.5 max-w-[280px]">
-                        {issue.displayId && (
-                          <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
-                            {issue.displayId}
-                          </span>
-                        )}
-                        <span className="truncate">{issue.title}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground select-none">
-                        {issue.tracker?.name || "Task"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold border border-border text-muted-foreground">
+        <>
+          {/* Mobile Card List View (visible on < sm, hidden on >= sm) */}
+          <div className="flex flex-col gap-2.5 sm:hidden">
+            {filteredIssues.length === 0 ? (
+              <div className="rounded-lg border border-border bg-card p-6 text-center text-muted-foreground text-[12px] italic">
+                Tidak ada tiket ditemukan.
+              </div>
+            ) : (
+              filteredIssues.map((issue) => (
+                <div
+                  key={issue.id}
+                  className="rounded-lg border border-border bg-card p-3.5 flex flex-col gap-2.5 shadow-xs cursor-pointer hover:bg-muted/20 transition-colors"
+                  onClick={() => {
+                    router.push(`/projects/${projectId}/issues/${issue.id}`);
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {issue.displayId ? (
+                        <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9px] font-mono font-semibold text-muted-foreground uppercase">
+                          {issue.displayId}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
+                          #{issue.id.slice(0, 6)}
+                        </span>
+                      )}
+                      <h4 className="font-semibold text-foreground text-[12.5px] truncate">{issue.title}</h4>
+                    </div>
+                    <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[9px] font-medium bg-muted/30 text-muted-foreground shrink-0 select-none">
+                      {issue.tracker?.name || "Task"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-border/50 pt-2.5 mt-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[9px] font-semibold border border-border text-muted-foreground">
                         {issue.status?.name || "New"}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-4.5 w-4.5">
-                          <AvatarFallback className="text-[8px] font-bold">
-                            {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="truncate max-w-[100px] text-[12.5px]">
-                          {issue.assignee?.name || "Unassigned"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
                       <span
-                        className={`text-[11px] font-semibold capitalize ${
+                        className={`text-[10px] font-semibold capitalize ${
                           issue.priority === "urgent"
                             ? "text-red-500 font-bold"
                             : issue.priority === "high"
@@ -1144,21 +1128,129 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                       >
                         {issue.priority}
                       </span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-[12px] pr-4">
-                      {issue.dueDate
-                        ? new Date(issue.dueDate).toLocaleDateString("id-ID", {
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1">
+                        <Avatar className="h-4.5 w-4.5">
+                          <AvatarFallback className="text-[8px] font-bold">
+                            {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="truncate max-w-[80px] text-[11px] text-muted-foreground">
+                          {issue.assignee?.name || "Unassigned"}
+                        </span>
+                      </div>
+                      {issue.dueDate && (
+                        <span className="text-muted-foreground text-[10px] shrink-0">
+                          {new Date(issue.dueDate).toLocaleDateString("id-ID", {
                             day: "numeric",
                             month: "short",
-                          })
-                        : "—"}
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table View (hidden on < sm, visible on >= sm) */}
+          <div className="hidden sm:block rounded-lg border border-border bg-card overflow-hidden shadow-sm">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-20 pl-4">ID</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead className="w-24">Tracker</TableHead>
+                  <TableHead className="w-28">Status</TableHead>
+                  <TableHead className="w-36">Assignee</TableHead>
+                  <TableHead className="w-24">Priority</TableHead>
+                  <TableHead className="w-28 pr-4">Due Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredIssues.length === 0 ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                      Tidak ada tiket ditemukan.
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                ) : (
+                  filteredIssues.map((issue) => (
+                    <TableRow
+                      key={issue.id}
+                      className="cursor-pointer hover:bg-muted/40 transition-colors"
+                      onClick={() => {
+                        router.push(`/projects/${projectId}/issues/${issue.id}`);
+                      }}
+                    >
+                      <TableCell className="font-mono text-[11px] text-muted-foreground pl-4">
+                        #{issue.id.slice(0, 6)}
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        <div className="flex items-center gap-1.5 max-w-[280px]">
+                          {issue.displayId && (
+                            <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
+                              {issue.displayId}
+                            </span>
+                          )}
+                          <span className="truncate">{issue.title}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground select-none">
+                          {issue.tracker?.name || "Task"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold border border-border text-muted-foreground">
+                          {issue.status?.name || "New"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-4.5 w-4.5">
+                            <AvatarFallback className="text-[8px] font-bold">
+                              {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="truncate max-w-[100px] text-[12.5px]">
+                            {issue.assignee?.name || "Unassigned"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`text-[11px] font-semibold capitalize ${
+                            issue.priority === "urgent"
+                              ? "text-red-500 font-bold"
+                              : issue.priority === "high"
+                              ? "text-red-400"
+                              : issue.priority === "medium"
+                              ? "text-amber-400"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {issue.priority}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-[12px] pr-4">
+                        {issue.dueDate
+                          ? new Date(issue.dueDate).toLocaleDateString("id-ID", {
+                              day: "numeric",
+                              month: "short",
+                            })
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       ) : viewMode === "kanban" ? (
         /* Kanban Board */
         <DndContext

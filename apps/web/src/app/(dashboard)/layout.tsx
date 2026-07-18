@@ -102,6 +102,14 @@ export default function DashboardLayout({
     loadData();
   }, [router]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (window.innerWidth < 768) {
+        setSidebarOpen(false);
+      }
+    }
+  }, []);
+
   const handleLogout = async () => {
     try {
       await logout();
