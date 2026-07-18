@@ -55,7 +55,9 @@ jobs:
             libssl-dev
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          pnpm install --frozen-lockfile
+          cd apps/desktop && pnpm install
 
       # ────────────────────────────────────────────────────────────
       # macOS — import Developer ID certificate ke temporary keychain
@@ -111,6 +113,7 @@ jobs:
           # WINDOWS_CERTIFICATE_PATH/WINDOWS_CERTIFICATE_PASSWORD di sini kapan saja setelah
           # sertifikat tersedia — lihat riwayat git file ini untuk konfigurasi sebelumnya.
         with:
+          projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseName: 'TrackFlow Desktop ${{ github.ref_name }}'
           releaseBody: 'Lihat CHANGELOG.md untuk detail perubahan pada rilis ini.'
