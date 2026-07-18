@@ -95,6 +95,8 @@ export class ProjectsService {
         parentProjectId: projects.parentProjectId,
         createdBy: projects.createdBy,
         createdAt: projects.createdAt,
+        archivedAt: projects.archivedAt,
+        archivedBy: projects.archivedBy,
       })
       .from(projects)
       .innerJoin(
