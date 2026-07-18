@@ -67,7 +67,7 @@
   "plugins": {
     "updater": {
       "active": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE0RjE1NTJEODNEMEExMTUKUldRVm9kQ0RMVlh4cEZOdWhweTg0c014RVRPZGJUTEVVUTU1bU9kNXRhRDd5elkrZUZ1V3B2ZUMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJDNzlENEE4RURDNEQ4QkMKUldTODJNVHRxTlI1TEpPNDN6Z0VrVENvTysycVhWVEdIczdjMnY2c0F5ME4xUEg3djJmNXY1SW4K%",
       "endpoints": [
         "https://trackflow.chimney.id/desktop-updater/{{target}}/{{current_version}}"
       ]

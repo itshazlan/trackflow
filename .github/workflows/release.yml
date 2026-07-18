@@ -87,18 +87,6 @@ jobs:
           rm certificate.p12
 
       # ────────────────────────────────────────────────────────────
-      # Windows — decode certificate .pfx dari secret ke file lokal
-      # ────────────────────────────────────────────────────────────
-      - name: Import Windows signing certificate
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-        run: |
-          $certBytes = [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
-          [System.IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\certificate.pfx", $certBytes)
-
-      # ────────────────────────────────────────────────────────────
       # Build + Sign + Notarize (macOS) + Publish ke GitHub Release
       # ────────────────────────────────────────────────────────────
       - name: Build and sign Tauri app
@@ -117,10 +105,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-          # --- Code signing Windows (dipakai otomatis oleh tauri-bundler bila platform Windows) ---
-          WINDOWS_CERTIFICATE_PATH: ${{ github.workspace }}\certificate.pfx
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          # Windows signing sengaja di-skip untuk sekarang (belum ada sertifikat Authenticode).
+          # Build Windows tetap jalan tanpa signing — karyawan akan melihat peringatan
+          # SmartScreen saat instalasi pertama ("More info → Run anyway"). Tambahkan kembali
+          # WINDOWS_CERTIFICATE_PATH/WINDOWS_CERTIFICATE_PASSWORD di sini kapan saja setelah
+          # sertifikat tersedia — lihat riwayat git file ini untuk konfigurasi sebelumnya.
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'TrackFlow Desktop ${{ github.ref_name }}'
