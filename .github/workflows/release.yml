@@ -57,7 +57,7 @@ jobs:
       - name: Install dependencies
         run: |
           pnpm install --frozen-lockfile
-          cd apps/desktop && pnpm install
+          cd apps/desktop && pnpm install --ignore-workspace
 
       # ────────────────────────────────────────────────────────────
       # macOS — import Developer ID certificate ke temporary keychain
