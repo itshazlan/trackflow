@@ -22,6 +22,10 @@ jest.mock('better-auth/adapters/drizzle', () => ({
   drizzleAdapter: jest.fn(),
 }));
 
+jest.mock('better-auth/plugins', () => ({
+  bearer: jest.fn().mockReturnValue(() => ({})),
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   INestApplication,
@@ -34,8 +38,11 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { DRIZZLE } from './../src/db/drizzle.provider';
-import { user } from './../src/db/schema/auth';
+import { user, session, account } from './../src/db/schema/auth';
 import { appSettings } from './../src/db/schema/settings';
+import { projects } from './../src/db/schema/projects';
+import { issues, issueComments, issueTrackers, issueStatuses } from './../src/db/schema/issues';
+import { timeBlocks } from './../src/db/schema/time-tracking';
 import { AuthGuard } from './../src/common/guards/auth.guard';
 import { eq, or } from 'drizzle-orm';
 
@@ -264,6 +271,126 @@ describe('Administration (e2e)', () => {
       expect(res.body.department).toBe('Core Infrastructure');
       expect(res.body.employeeId).toBe('EMP-DEV-007');
       expect(res.body.joinDate).toBeDefined();
+    });
+
+    describe('User Deactivation & Hard Delete (DELETE /admin/users/:id)', () => {
+      let testUserId: string;
+
+      beforeEach(async () => {
+        testUserId = 'test-e2e-del-user';
+        await db.delete(user).where(eq(user.id, testUserId));
+        await db.insert(user).values({
+          id: testUserId,
+          name: 'Test Deletable',
+          email: 'deletable@tf.local',
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          username: 'deletable_user',
+          employmentStatus: 'active',
+          isAdmin: false,
+        });
+
+        // Insert a mock session for the user
+        await db.insert(session).values({
+          id: 'test-session-id',
+          userId: testUserId,
+          token: 'test-session-token',
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      });
+
+      afterEach(async () => {
+        await db.delete(timeBlocks).where(eq(timeBlocks.userId, testUserId));
+        await db.delete(issueComments).where(eq(issueComments.authorId, testUserId));
+        await db.delete(issues).where(or(eq(issues.createdBy, testUserId), eq(issues.assigneeId, testUserId)));
+        await db.delete(session).where(eq(session.userId, testUserId));
+        await db.delete(account).where(eq(account.userId, testUserId));
+        await db.delete(user).where(eq(user.id, testUserId));
+      });
+
+      it('should reject deactivation if caller is not an admin', async () => {
+        await request(app.getHttpServer())
+          .delete(`/admin/users/${testUserId}`)
+          .set('x-mock-user-id', mockUsers.developer.id)
+          .expect(403);
+      });
+
+      it('should deactivate user and delete their sessions by default', async () => {
+        const res = await request(app.getHttpServer())
+          .delete(`/admin/users/${testUserId}`)
+          .set('x-mock-user-id', mockUsers.admin.id)
+          .set('x-mock-is-admin', 'true')
+          .expect(200);
+
+        expect(res.body.employmentStatus).toBe('inactive');
+
+        const sessions = await db.select().from(session).where(eq(session.userId, testUserId));
+        expect(sessions.length).toBe(0);
+      });
+
+      it('should reject hard delete if force is not true', async () => {
+        await request(app.getHttpServer())
+          .delete(`/admin/users/${testUserId}?force=false`)
+          .set('x-mock-user-id', mockUsers.admin.id)
+          .set('x-mock-is-admin', 'true')
+          .expect(400);
+      });
+
+      it('should allow hard delete if force is true and user has no history', async () => {
+        const res = await request(app.getHttpServer())
+          .delete(`/admin/users/${testUserId}?force=true`)
+          .set('x-mock-user-id', mockUsers.admin.id)
+          .set('x-mock-is-admin', 'true')
+          .expect(200);
+
+        expect(res.body.success).toBe(true);
+
+        const users = await db.select().from(user).where(eq(user.id, testUserId));
+        expect(users.length).toBe(0);
+      });
+
+      it('should reject hard delete if user has work history', async () => {
+        const trackerId = '8f3d1c1a-2b3b-4c5c-8d9e-0f1a2b3c4d5e';
+        const projectId = '7f3d1c1a-2b3b-4c5c-8d9e-0f1a2b3c4d5e';
+        const statusId = '6f3d1c1a-2b3b-4c5c-8d9e-0f1a2b3c4d5e';
+        const issueId = '5f3d1c1a-2b3b-4c5c-8d9e-0f1a2b3c4d5e';
+
+        await db.delete(timeBlocks).where(eq(timeBlocks.userId, testUserId));
+        await db.delete(issueComments).where(eq(issueComments.authorId, testUserId));
+        await db.delete(issues).where(eq(issues.id, issueId));
+        await db.delete(issueStatuses).where(eq(issueStatuses.id, statusId));
+        await db.delete(projects).where(eq(projects.id, projectId));
+        await db.delete(issueTrackers).where(eq(issueTrackers.id, trackerId));
+
+        await db.insert(issueTrackers).values({ id: trackerId, name: `Del Tracker ${Date.now()}` });
+        await db.insert(projects).values({ id: projectId, name: 'Del Project', key: 'DEL', createdBy: mockUsers.admin.id });
+        await db.insert(issueStatuses).values({ id: statusId, projectId, name: 'Backlog', orderIndex: 0 });
+        await db.insert(issues).values({
+          id: issueId,
+          projectId,
+          trackerId,
+          statusId,
+          title: 'Del Issue',
+          createdBy: testUserId,
+          number: 1,
+        });
+
+        const res = await request(app.getHttpServer())
+          .delete(`/admin/users/${testUserId}?force=true`)
+          .set('x-mock-user-id', mockUsers.admin.id)
+          .set('x-mock-is-admin', 'true')
+          .expect(400);
+
+        expect(res.body.message).toContain('riwayat data terkait');
+
+        await db.delete(issues).where(eq(issues.id, issueId));
+        await db.delete(issueStatuses).where(eq(issueStatuses.id, statusId));
+        await db.delete(projects).where(eq(projects.id, projectId));
+        await db.delete(issueTrackers).where(eq(issueTrackers.id, trackerId));
+      });
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   getAdminUsers,
   updateAdminUser,
   updateAdminUserEmployment,
+  deleteAdminUser,
   AdminUser,
 } from "@/lib/admin-service";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import {
   Check,
   X,
   UserCheck,
+  Trash2,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
@@ -61,7 +63,18 @@ export default function AdminUsersPage() {
       setLoading(true);
       setError("");
       const data = await getAdminUsers();
-      setUsers(data);
+      
+      // Sort users: active/on_leave on top, inactive on bottom
+      const sorted = [...data].sort((a, b) => {
+        const aStatus = a.employment?.employmentStatus || "active";
+        const bStatus = b.employment?.employmentStatus || "active";
+        
+        if (aStatus === "inactive" && bStatus !== "inactive") return 1;
+        if (aStatus !== "inactive" && bStatus === "inactive") return -1;
+        return 0;
+      });
+
+      setUsers(sorted);
     } catch (err) {
       console.error(err);
       setError("Gagal memuat daftar pengguna.");
@@ -101,6 +114,28 @@ export default function AdminUsersPage() {
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Gagal memperbarui status admin.");
+    }
+  };
+
+  const handleDeactivateUser = async (userObj: AdminUser) => {
+    const ok = await confirm({
+      title: "Hapus Akun Pengguna",
+      description: `Apakah Anda yakin ingin menonaktifkan akun ${userObj.name}? Tindakan ini akan mengakhiri sesi aktif mereka, tetapi akun tetap tersimpan sebagai Tidak Aktif.`,
+      confirmLabel: "Ya, Nonaktifkan",
+      cancelLabel: "Batal",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
+    try {
+      setError("");
+      setSuccess("");
+      await deleteAdminUser(userObj.id);
+      setSuccess(`Akun ${userObj.name} berhasil dinonaktifkan.`);
+      await loadUsers();
+    } catch (err: unknown) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Gagal menonaktifkan akun pengguna.");
     }
   };
 
@@ -261,21 +296,36 @@ export default function AdminUsersPage() {
                         {u.employment.employmentStatus === "active" && <Check className="h-2.5 w-2.5" />}
                         {u.employment.employmentStatus === "on_leave" && <Calendar className="h-2.5 w-2.5" />}
                         {u.employment.employmentStatus === "inactive" && <X className="h-2.5 w-2.5" />}
-                        {u.employment.employmentStatus}
+                        {u.employment.employmentStatus === "active"
+                          ? "Aktif"
+                          : u.employment.employmentStatus === "on_leave"
+                          ? "Cuti"
+                          : "Non-Aktif"}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
                   <TableCell className="text-center pr-4">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-[11px] font-semibold border-border bg-card"
-                      onClick={() => handleOpenEditDialog(u)}
-                    >
-                      <Briefcase className="h-3 w-3 mr-1" /> Kepegawaian
-                    </Button>
+                    <div className="flex items-center justify-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] font-semibold border-border bg-card"
+                        onClick={() => handleOpenEditDialog(u)}
+                      >
+                        <Briefcase className="h-3 w-3 mr-1" /> Kepegawaian
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 text-[11px] font-semibold"
+                        onClick={() => handleDeactivateUser(u)}
+                        disabled={u.employment?.employmentStatus === "inactive"}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" /> Hapus Akun
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

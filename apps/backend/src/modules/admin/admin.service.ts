@@ -4,10 +4,12 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, or, count } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { appSettings } from '../../db/schema/settings';
-import { user } from '../../db/schema/auth';
+import { user, session, account } from '../../db/schema/auth';
+import { issues, issueComments } from '../../db/schema/issues';
+import { timeBlocks } from '../../db/schema/time-tracking';
 import { UpdateSettingsDto } from './dto/admin-settings.dto';
 import {
   AdminCreateUserDto,
@@ -122,5 +124,68 @@ export class AdminService {
 
     const { password, ...safeUser } = updated;
     return safeUser;
+  }
+
+  async deactivate(userId: string) {
+    const [updatedUser] = await this.db
+      .update(user)
+      .set({ employmentStatus: 'inactive' })
+      .where(eq(user.id, userId))
+      .returning();
+
+    if (!updatedUser) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    // Invalidate all active Better Auth sessions (web & desktop)
+    await this.db.delete(session).where(eq(session.userId, userId));
+
+    const { password, ...safeUser } = updatedUser;
+    return safeUser;
+  }
+
+  async hardDelete(userId: string, force: boolean) {
+    if (!force) {
+      throw new BadRequestException('Gunakan deactivate() untuk penghapusan standar');
+    }
+
+    const [issueCount] = await this.db
+      .select({ count: count() })
+      .from(issues)
+      .where(or(eq(issues.assigneeId, userId), eq(issues.createdBy, userId)));
+
+    const [timeBlockCount] = await this.db
+      .select({ count: count() })
+      .from(timeBlocks)
+      .where(eq(timeBlocks.userId, userId));
+
+    const [commentCount] = await this.db
+      .select({ count: count() })
+      .from(issueComments)
+      .where(eq(issueComments.authorId, userId));
+
+    const totalHistory = (issueCount?.count || 0) + (timeBlockCount?.count || 0) + (commentCount?.count || 0);
+
+    if (totalHistory > 0) {
+      throw new BadRequestException(
+        `User ini punya ${totalHistory} riwayat data terkait — nonaktifkan saja, jangan hapus permanen`,
+      );
+    }
+
+    await this.db.transaction(async (tx: any) => {
+      await tx.delete(session).where(eq(session.userId, userId));
+      await tx.delete(account).where(eq(account.userId, userId));
+
+      const [deleted] = await tx
+        .delete(user)
+        .where(eq(user.id, userId))
+        .returning();
+
+      if (!deleted) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+    });
+
+    return { success: true, message: 'User permanently deleted' };
   }
 }

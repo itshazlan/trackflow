@@ -3,8 +3,10 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
@@ -52,5 +54,14 @@ export class AdminController {
   @Patch('users/:id/employment')
   updateEmployment(@Param('id') id: string, @Body() dto: UpdateEmploymentDto) {
     return this.adminService.updateEmployment(id, dto);
+  }
+
+  @Delete('users/:id')
+  deleteUser(@Param('id') id: string, @Query('force') force?: string) {
+    if (force !== undefined) {
+      const isForceTrue = force === 'true';
+      return this.adminService.hardDelete(id, isForceTrue);
+    }
+    return this.adminService.deactivate(id);
   }
 }

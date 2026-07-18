@@ -163,3 +163,23 @@ export async function createSubProject(
 
   return res.json();
 }
+
+export async function updateProject(
+  id: string,
+  data: { name?: string; description?: string }
+): Promise<Project> {
+  const res = await fetch(`/api/projects/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to update project");
+  }
+
+  return res.json();
+}

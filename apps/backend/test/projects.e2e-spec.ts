@@ -27,7 +27,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { DRIZZLE } from './../src/db/drizzle.provider';
-import { projectMemberships } from './../src/db/schema/projects';
+import { projects, projectMemberships } from './../src/db/schema/projects';
 import { user } from './../src/db/schema/auth';
 import { AuthGuard } from './../src/common/guards/auth.guard';
 import { eq, or } from 'drizzle-orm';
@@ -415,6 +415,75 @@ describe('Projects and Memberships (e2e)', () => {
         .set('x-mock-user-id', mockUsers.admin.id)
         .set('x-mock-is-admin', 'true')
         .expect(404);
+    });
+
+    describe('Project Details Update (PATCH /projects/:id)', () => {
+      let tempProjectId: string;
+
+      beforeEach(async () => {
+        tempProjectId = 'd3b07384-d113-4ec5-a555-e7a9e63f538e';
+        await db.delete(projects).where(eq(projects.id, tempProjectId));
+        await db.insert(projects).values({
+          id: tempProjectId,
+          name: 'Original Name',
+          key: 'ORIG',
+          description: 'Original Description',
+          createdBy: mockUsers.admin.id,
+          createdAt: new Date(),
+        });
+      });
+
+      afterEach(async () => {
+        await db.delete(projectMemberships).where(eq(projectMemberships.projectId, tempProjectId));
+        await db.delete(projects).where(eq(projects.id, tempProjectId));
+      });
+
+      it('should reject update if calling user is not a manager or admin', async () => {
+        await request(app.getHttpServer())
+          .patch(`/projects/${tempProjectId}`)
+          .set('x-mock-user-id', mockUsers.developer.id)
+          .send({ name: 'Hack Name' })
+          .expect(403);
+      });
+
+      it('should allow project manager to update name and description', async () => {
+        await db.insert(projectMemberships).values({
+          projectId: tempProjectId,
+          userId: mockUsers.developer.id,
+          role: 'manager',
+        });
+
+        const res = await request(app.getHttpServer())
+          .patch(`/projects/${tempProjectId}`)
+          .set('x-mock-user-id', mockUsers.developer.id)
+          .send({ name: 'Updated Name', description: 'Updated Description' })
+          .expect(200);
+
+        expect(res.body.name).toBe('Updated Name');
+        expect(res.body.description).toBe('Updated Description');
+        expect(res.body.key).toBe('ORIG');
+      });
+
+      it('should allow admin to update name and description', async () => {
+        const res = await request(app.getHttpServer())
+          .patch(`/projects/${tempProjectId}`)
+          .set('x-mock-user-id', mockUsers.admin.id)
+          .set('x-mock-is-admin', 'true')
+          .send({ name: 'Admin Updated Name', description: 'Admin Updated Description' })
+          .expect(200);
+
+        expect(res.body.name).toBe('Admin Updated Name');
+        expect(res.body.description).toBe('Admin Updated Description');
+      });
+
+      it('should reject update if user tries to update the project key', async () => {
+        await request(app.getHttpServer())
+          .patch(`/projects/${tempProjectId}`)
+          .set('x-mock-user-id', mockUsers.admin.id)
+          .set('x-mock-is-admin', 'true')
+          .send({ key: 'NEWKEY' })
+          .expect(400);
+      });
     });
   });
 });

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
 import { ConfirmDeleteDto } from './dto/confirm-delete.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
@@ -67,7 +68,7 @@ export class ProjectsController {
   @Roles('manager')
   update(
     @Param('id') id: string,
-    @Body() updateProjectDto: Partial<CreateProjectDto>,
+    @Body() updateProjectDto: UpdateProjectDto,
   ) {
     return this.projectsService.update(id, updateProjectDto);
   }

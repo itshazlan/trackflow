@@ -7,6 +7,8 @@ import {
   getSubProjects,
   createSubProject,
   restoreProject,
+  updateProject,
+  checkProjectKey,
   Project,
 } from "@/lib/projects-service";
 import { getSession } from "@/lib/auth-service";
@@ -36,6 +38,7 @@ import {
   Clock,
   LineChart,
   Settings,
+  Pencil,
 } from "lucide-react";
 
 export default function ProjectDetailPage() {
@@ -53,12 +56,23 @@ export default function ProjectDetailPage() {
   const [members, setMembers] = useState<any[]>([]);
   const [restoreLoading, setRestoreLoading] = useState(false);
 
+  // Edit Project Dialog state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState("");
+
   // Create Sub-project Dialog state
   const [isSubDialogOpen, setIsSubDialogOpen] = useState(false);
   const [subName, setSubName] = useState("");
+  const [subKey, setSubKey] = useState("");
   const [subDesc, setSubDesc] = useState("");
   const [subLoading, setSubLoading] = useState(false);
   const [subError, setSubError] = useState("");
+  const [subKeyError, setSubKeyError] = useState("");
+  const [isSubKeyManuallyEdited, setIsSubKeyManuallyEdited] = useState(false);
+  const [isCheckingSubKey, setIsCheckingSubKey] = useState(false);
 
   const activeTab = searchParams.get("tab") || "issues";
 
@@ -120,6 +134,36 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleOpenEditModal = () => {
+    if (!project) return;
+    setEditName(project.name);
+    setEditDesc(project.description || "");
+    setEditError("");
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveProjectDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project || !editName.trim()) return;
+
+    setEditLoading(true);
+    setEditError("");
+
+    try {
+      const updated = await updateProject(projectId, {
+        name: editName.trim(),
+        description: editDesc.trim() || undefined,
+      });
+      setProject(updated);
+      setIsEditModalOpen(false);
+    } catch (err: unknown) {
+      console.error(err);
+      setEditError(err instanceof Error ? err.message : "Gagal memperbarui data proyek.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
     Promise.resolve().then(() => {
@@ -132,16 +176,84 @@ export default function ProjectDetailPage() {
     };
   }, [loadProjectData]);
 
+  const generateSubKeyFromName = (name: string): string => {
+    const cleaned = name.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    let base = cleaned;
+    if (base.length > 0 && !/^[A-Z]/.test(base)) {
+      base = "S" + base;
+    }
+    let key = base.substring(0, 5);
+    while (key.length > 0 && key.length < 5) {
+      key += "X";
+    }
+    return key;
+  };
+
+  const handleSubNameChange = (val: string) => {
+    setSubName(val);
+    if (!isSubKeyManuallyEdited) {
+      const suggestedKey = generateSubKeyFromName(val);
+      setSubKey(suggestedKey);
+      
+      if (suggestedKey.length > 0 && !/^[A-Z][A-Z0-9_-]{1,9}$/.test(suggestedKey)) {
+        setSubKeyError("Kode sub-proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+      } else {
+        setSubKeyError("");
+      }
+    }
+  };
+
+  const handleSubKeyChange = (val: string) => {
+    const upperVal = val.toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    setSubKey(upperVal);
+    setIsSubKeyManuallyEdited(true);
+
+    if (upperVal.length > 0 && !/^[A-Z][A-Z0-9_-]{1,9}$/.test(upperVal)) {
+      setSubKeyError("Kode sub-proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+    } else {
+      setSubKeyError("");
+    }
+  };
+
+  const handleSubKeyBlur = () => {
+    if (subKey.trim().length > 0) {
+      void checkSubKeyUniqueness(subKey.trim());
+    }
+  };
+
+  const checkSubKeyUniqueness = async (keyToCheck: string) => {
+    if (!/^[A-Z][A-Z0-9_-]{1,9}$/.test(keyToCheck)) {
+      setSubKeyError("Kode sub-proyek harus alfanumerik (dapat berisi - atau _), 2-10 karakter, dan diawali dengan huruf.");
+      return;
+    }
+    setIsCheckingSubKey(true);
+    try {
+      const res = await checkProjectKey(keyToCheck);
+      if (!res.available) {
+        setSubKeyError("Kode Sub-Proyek sudah digunakan.");
+      } else {
+        setSubKeyError("");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsCheckingSubKey(false);
+    }
+  };
+
   const handleCreateSubProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subName.trim() || !projectId) return;
+    if (!subName.trim() || !subKey.trim() || !projectId) return;
 
     setSubLoading(true);
     setSubError("");
+    setSubKeyError("");
     try {
-      await createSubProject(projectId, subName, subDesc);
+      await createSubProject(projectId, subName.trim(), subKey.trim(), subDesc.trim() || undefined);
       setSubName("");
+      setSubKey("");
       setSubDesc("");
+      setIsSubKeyManuallyEdited(false);
       setIsSubDialogOpen(false);
       // Reload sub-projects list
       const subList = await getSubProjects(projectId);
@@ -200,7 +312,19 @@ export default function ProjectDetailPage() {
             <span className="flex h-6 w-6 items-center justify-center rounded bg-primary/10 border border-primary/20 text-primary font-bold text-[12px] uppercase">
               {project.name[0]}
             </span>
-            <h1 className="text-[17px] font-semibold text-foreground tracking-tight">{project.name}</h1>
+            <h1 className="text-[17px] font-semibold text-foreground tracking-tight flex items-center gap-1.5">
+              {project.name}
+              {(session?.user?.isAdmin || members.find((m) => m.id === session?.user?.id)?.role === "manager") && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground rounded"
+                  onClick={handleOpenEditModal}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </h1>
           </div>
           <p className="text-[12.5px] text-muted-foreground mt-2 max-w-2xl leading-relaxed">
             {project.description || "Tidak ada deskripsi detail untuk proyek ini."}
@@ -332,10 +456,35 @@ export default function ProjectDetailPage() {
                   placeholder="Contoh: Phase 2 - API Development"
                   className="h-8 text-[12.5px]"
                   value={subName}
-                  onChange={(e) => setSubName(e.target.value)}
+                  onChange={(e) => handleSubNameChange(e.target.value)}
                   required
                   disabled={subLoading}
                 />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="sub-key" className="text-[11px] font-medium text-muted-foreground">
+                    Kode Sub-Proyek (Sub-project Key)
+                  </Label>
+                  {isCheckingSubKey && (
+                    <span className="text-[10px] text-muted-foreground animate-pulse">Memeriksa...</span>
+                  )}
+                </div>
+                <Input
+                  id="sub-key"
+                  type="text"
+                  placeholder="Contoh: TRACK, MOB"
+                  className={`h-8 text-[12.5px] uppercase ${subKeyError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                  value={subKey}
+                  onChange={(e) => handleSubKeyChange(e.target.value)}
+                  onBlur={handleSubKeyBlur}
+                  required
+                  disabled={subLoading}
+                />
+                {subKeyError && (
+                  <span className="text-[10px] text-destructive mt-0.5">{subKeyError}</span>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -366,7 +515,7 @@ export default function ProjectDetailPage() {
               <Button
                 type="submit"
                 className="h-8 text-[12px]"
-                disabled={subLoading || !subName.trim()}
+                disabled={subLoading || !subName.trim() || !subKey.trim() || !!subKeyError || isCheckingSubKey}
               >
                 {subLoading ? (
                   <>
@@ -375,6 +524,88 @@ export default function ProjectDetailPage() {
                   </>
                 ) : (
                   "Buat Sub-Proyek"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Project Dialog */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-[360px]">
+          <form onSubmit={handleSaveProjectDetails}>
+            <DialogHeader>
+              <DialogTitle className="text-[14px] font-semibold flex items-center gap-1.5">
+                <Pencil className="h-4 w-4 text-primary" />
+                Edit Proyek
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="flex flex-col gap-3.5 py-4">
+              {editError && (
+                <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive leading-normal">
+                  <AlertCircle className="h-3.5 w-3.5 mt-[1px] shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-key" className="text-[11px] font-medium text-muted-foreground">Kode Proyek (Immutable)</Label>
+                <Input
+                  id="edit-key"
+                  value={project.key}
+                  disabled
+                  className="h-8 bg-muted/50 border-border text-[12px] text-muted-foreground cursor-not-allowed select-none font-semibold font-mono"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-name" className="text-[11px] font-medium text-muted-foreground">Nama Proyek</Label>
+                <Input
+                  id="edit-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Nama proyek"
+                  className="h-8 text-[12.5px]"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-desc" className="text-[11px] font-medium text-muted-foreground">Deskripsi</Label>
+                <textarea
+                  id="edit-desc"
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  placeholder="Deskripsi proyek..."
+                  className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 text-[12px]"
+                onClick={() => setIsEditModalOpen(false)}
+                disabled={editLoading}
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                className="h-8 text-[12px]"
+                disabled={editLoading || !editName.trim()}
+              >
+                {editLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  "Simpan Perubahan"
                 )}
               </Button>
             </DialogFooter>

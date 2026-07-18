@@ -145,3 +145,17 @@ export async function updateAdminUserEmployment(
 
   return res.json();
 }
+
+export async function deleteAdminUser(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/users/${id}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.message || "Failed to delete user");
+  }
+}
