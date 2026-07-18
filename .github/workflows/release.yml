@@ -1,0 +1,139 @@
+name: Release Desktop
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: # opsional: bisa trigger manual dari tab Actions untuk testing
+
+permissions:
+  contents: write # wajib, supaya job bisa membuat GitHub Release & upload artifact
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false # kalau 1 platform gagal, platform lain tetap lanjut build
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+          - platform: windows-latest
+            args: ''
+          - platform: ubuntu-22.04
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # target tambahan hanya relevan untuk universal binary macOS,
+          # diabaikan otomatis oleh toolchain di Windows/Linux
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install system dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ────────────────────────────────────────────────────────────
+      # macOS — import Developer ID certificate ke temporary keychain
+      # ────────────────────────────────────────────────────────────
+      - name: Import Apple signing certificate
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Decode sertifikat .p12 (base64) dari secret menjadi file sementara
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+
+          # Buat keychain baru khusus CI run ini (terisolasi, tidak menumpuk antar run)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          # Import sertifikat ke keychain, izinkan codesign mengaksesnya tanpa prompt
+          security import certificate.p12 -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          # Bersihkan file sertifikat, tidak perlu tersisa di disk runner
+          rm certificate.p12
+
+      # ────────────────────────────────────────────────────────────
+      # Windows — decode certificate .pfx dari secret ke file lokal
+      # ────────────────────────────────────────────────────────────
+      - name: Import Windows signing certificate
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        run: |
+          $certBytes = [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          [System.IO.File]::WriteAllBytes("$env:GITHUB_WORKSPACE\certificate.pfx", $certBytes)
+
+      # ────────────────────────────────────────────────────────────
+      # Build + Sign + Notarize (macOS) + Publish ke GitHub Release
+      # ────────────────────────────────────────────────────────────
+      - name: Build and sign Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # --- Tanda tangan update manifest (dari Slice 24, `tauri signer generate`) ---
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+          # --- Code signing & notarization macOS (dipakai otomatis oleh tauri-bundler bila platform macOS) ---
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+          # --- Code signing Windows (dipakai otomatis oleh tauri-bundler bila platform Windows) ---
+          WINDOWS_CERTIFICATE_PATH: ${{ github.workspace }}\certificate.pfx
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'TrackFlow Desktop ${{ github.ref_name }}'
+          releaseBody: 'Lihat CHANGELOG.md untuk detail perubahan pada rilis ini.'
+          releaseDraft: true # tinjau dulu sebelum publish manual ke semua karyawan
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      # ────────────────────────────────────────────────────────────
+      # Bersihkan keychain/certificate sementara (housekeeping, opsional
+      # karena runner memang dihapus total setelah job selesai, tapi baik
+      # sebagai praktik jika ada step tambahan setelah ini di masa depan)
+      # ────────────────────────────────────────────────────────────
+      - name: Cleanup macOS keychain
+        if: always() && matrix.platform == 'macos-latest'
+        run: security delete-keychain build.keychain || true

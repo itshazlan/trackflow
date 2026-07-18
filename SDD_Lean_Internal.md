@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.5 (Lean Internal) |
+| **Versi Dokumen** | 2.6 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: implementasi Kanban view — dnd-kit, drag antar kolom saja; Calendar view — date-fns, berbasis due_date saja) |
+| **Tanggal** | 14 Juli 2026 (revisi: CI/CD build desktop 3-platform via GitHub Actions — universal binary macOS, code signing, draft release sebagai gerbang review) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -988,6 +988,45 @@ volumes:
 
 Tidak berubah dari revisi sebelumnya — `turbo.json` mengatur pipeline `build`/`dev`/`lint`/`db:migrate` lintas `apps/backend` dan `apps/web`, dengan `packages/shared-types` menjaga konsistensi tipe DTO.
 
+### 15.3 CI/CD Build Desktop Client (3-Platform via GitHub Actions)
+
+Berbeda dari backend/frontend web (deploy manual ke server saat ini), Desktop Client **dibangun sepenuhnya lewat CI** — bukan di-build lokal per platform di laptop developer. Keputusan ini diambil karena cross-compile Rust/Tauri dari satu mesin (mis. macOS Apple Silicon) ke Windows/Linux sangat menyulitkan dan rawan gagal; GitHub Actions menyediakan runner native per-OS (`macos-latest`, `windows-latest`, `ubuntu-22.04`) yang masing-masing adalah mesin sungguhan dengan toolchain aslinya.
+
+```mermaid
+flowchart TB
+    TAG["git push tag v*"] --> GH["GitHub Actions Trigger"]
+    GH --> M["Job: macos-latest"]
+    GH --> W["Job: windows-latest"]
+    GH --> L["Job: ubuntu-22.04"]
+
+    M --> MB["Build universal binary\n(aarch64 + x86_64 via lipo)"]
+    MB --> MS["Code sign + Notarize\n(Apple Developer ID)"]
+    W --> WB["Build native x86_64"]
+    WB --> WS["Code sign (Authenticode)\n— opsional bila sertifikat tersedia"]
+    L --> LB["Build native x86_64\n(.deb + .AppImage)"]
+
+    MS --> DRAFT["GitHub Release (draft)"]
+    WS --> DRAFT
+    LB --> DRAFT
+    DRAFT -->|"tinjau manual\n(smoke test per-OS)"| PUB["Publish Release"]
+    PUB --> UPDATER["Auto-updater manifest\n(latest.json)"]
+```
+
+**Keputusan desain kunci:**
+
+| Keputusan | Detail |
+|---|---|
+| **Build 100% via CI, bukan build lokal per platform** | Developer (Anda) hanya perlu bekerja dari satu mesin (macOS Apple Silicon); push tag Git memicu build native paralel di 3 runner OS berbeda sekaligus |
+| **macOS: Universal Binary, bukan 2 file terpisah** | `--target universal-apple-darwin` menggabungkan `aarch64-apple-darwin` (Apple Silicon) + `x86_64-apple-darwin` (Intel) jadi **satu** `.app` via `lipo` — karyawan Intel maupun Apple Silicon install file yang sama, tidak perlu dipilihkan manual |
+| **Windows & Linux: build native, bukan cross-compile** | Masing-masing dikompilasi di runner OS aslinya (`windows-latest`, `ubuntu-22.04`), menghasilkan `.msi`/`.exe` (NSIS) untuk Windows dan `.deb` + `.AppImage` untuk Linux |
+| **Code signing terintegrasi di pipeline yang sama** | Sertifikat macOS (Developer ID + notarization) dan Windows (Authenticode) diambil dari GitHub Secrets, diproses otomatis oleh `tauri-apps/tauri-action`. Untuk distribusi internal, signing bersifat **opsional** (bisa dilewati bila sertifikat belum tersedia), dengan trade-off peringatan Gatekeeper/SmartScreen saat instalasi pertama |
+| **Release dibuat sebagai `draft`, bukan langsung publish** | `releaseDraft: true` — artifact ter-upload ke GitHub Release tapi **belum terlihat publik / belum memicu auto-updater** sampai seseorang meninjau dan klik "Publish" manual. Ini gerbang review terakhir sebelum rilis sampai ke seluruh karyawan — konsisten dengan prinsip "build sukses ≠ teruji" (§14, kriteria selesai Slice 23) |
+| **Testing tetap butuh device fisik minimal 1x per rilis per OS** | CI menjamin *build berhasil*, bukan *aplikasi berjalan mulus* di OS tersebut (mis. permission dialog macOS Intel, versi WebView2 lama di Windows kantor tertentu, dependency `libwebkit2gtk` di distro Linux tertentu) — smoke test manual tetap wajib sebelum publish, idealnya oleh 1 orang per platform sebelum rollout ke seluruh tim |
+
+**Dua skema signing yang berjalan independen, jangan tertukar:**
+- **Code signing OS** (Apple Developer ID / Windows Authenticode) — memverifikasi ke OS bahwa installer berasal dari sumber tepercaya, mencegah peringatan Gatekeeper/SmartScreen.
+- **Update signing Tauri** (`TAURI_SIGNING_PRIVATE_KEY`, dari `tauri signer generate` — Slice 24) — skema tanda tangan internal Tauri sendiri untuk memverifikasi keaslian file update sebelum auto-updater menginstalnya. **Tetap wajib** ada terlepas dari apakah code signing OS dipakai atau tidak.
+
 ---
 
 ## 16. Batasan Teknis & Risiko
@@ -1005,6 +1044,8 @@ Tidak berubah dari revisi sebelumnya — `turbo.json` mengatur pipeline `build`/
 | Description issue kini teks bebas — konsistensi laporan bug (semua field terisi) bergantung sepenuhnya pada kedisiplinan penulis, bukan validasi sistem | Diterima sebagai trade-off kesederhanaan; dapat dipantau manual oleh Manager/QA, atau ditambah linter/reminder ringan di masa depan jika kualitas laporan menurun |
 | Discard di Floating Widget tidak tercatat di audit log (karena data memang tidak pernah sampai ke server) — Admin tidak bisa melihat riwayat berapa kali/kapan seorang pekerja men-discard screenshot | Diterima sebagai trade-off kesederhanaan sesuai keputusan desain (§6); jika suatu saat dibutuhkan visibilitas ini, opsi lanjutan: kirim event count-only (tanpa gambar) ke server saat discard, tanpa menyimpan screenshot itu sendiri |
 | Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
+| Tanpa code signing (belum ada sertifikat berbayar), karyawan mendapat peringatan Gatekeeper (macOS)/SmartScreen (Windows) saat instalasi pertama | Diterima sebagai trade-off distribusi internal; instruksikan "klik kanan → Buka" (macOS) atau "More info → Run anyway" (Windows) — revisit beli sertifikat kalau tim membesar atau keluhan meningkat |
+| Release dibuat sebagai draft (§15.3) berpotensi lupa di-publish, karyawan tidak menerima update yang sudah dites | Jadikan bagian dari checklist rilis manual: build via CI → smoke test → publish — jangan anggap selesai hanya karena CI hijau |
 
 ---
 
