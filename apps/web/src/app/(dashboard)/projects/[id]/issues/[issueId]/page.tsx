@@ -1498,7 +1498,7 @@ export default function IssueDetailPage() {
 
       {/* Preview Attachment Dialog */}
       <Dialog open={!!previewAttachment} onOpenChange={(open) => !open && setPreviewAttachment(null)}>
-        <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden bg-background border border-border">
+        <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden bg-background border border-border" showCloseButton={false}>
           {previewAttachment && (
             <div className="flex flex-col h-full max-h-[85vh]">
               <DialogHeader className="p-4 border-b border-border/80 flex flex-row items-center justify-between shrink-0">
