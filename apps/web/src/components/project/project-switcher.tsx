@@ -37,6 +37,7 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
 
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // Create project dialog state
@@ -189,8 +190,10 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
 
   // Sort and filter projects recursively
   const filteredAndSortedProjects = useMemo(() => {
+    const activeList = showArchived ? projects : projects.filter((p) => !p.archivedAt);
+
     // 1. Group projects by hierarchy
-    const roots = projects.filter((p) => !p.parentProjectId && !p.parent_project_id);
+    const roots = activeList.filter((p) => !p.parentProjectId && !p.parent_project_id);
     const result: { project: Project; isSub: boolean }[] = [];
 
     roots.forEach((root) => {
@@ -198,7 +201,7 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
       result.push({ project: root, isSub: false });
       
       // Find and add immediate subprojects
-      const subs = projects.filter(
+      const subs = activeList.filter(
         (p) => p.parentProjectId === root.id || p.parent_project_id === root.id
       );
       subs.forEach((sub) => {
@@ -207,7 +210,7 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
     });
 
     // Add orphans
-    projects.forEach((p) => {
+    activeList.forEach((p) => {
       if (!result.some((r) => r.project.id === p.id)) {
         result.push({ project: p, isSub: !!(p.parentProjectId || p.parent_project_id) });
       }
@@ -218,7 +221,7 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
     return result.filter(({ project }) =>
       project.name.toLowerCase().includes(search.toLowerCase())
     );
-  }, [projects, search]);
+  }, [projects, search, showArchived]);
 
   const handleSelectProject = (projectId: string) => {
     setIsOpen(false);
@@ -282,6 +285,7 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
             ) : (
               filteredAndSortedProjects.map(({ project, isSub }) => {
                 const isActive = project.id === activeProjectId;
+                const isArchived = !!project.archivedAt;
                 return (
                   <button
                     key={project.id}
@@ -292,17 +296,35 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
                       isActive
                         ? "bg-primary/10 text-primary"
                         : "hover:bg-accent hover:text-accent-foreground"
-                    }`}
+                    } ${isArchived ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-center gap-1.5 truncate">
                       {isSub && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />}
-                      <span className="truncate">{project.name}</span>
+                      <span className="truncate">
+                        {project.name}
+                        {isArchived && (
+                          <span className="text-[10px] text-amber-500 font-normal ml-1 bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/10">
+                            (Arsip)
+                          </span>
+                        )}
+                      </span>
                     </div>
                     {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                   </button>
                 );
               })
             )}
+          </div>
+
+          {/* Tampilkan Terarsip Filter */}
+          <div className="border-t border-border/60 p-2 flex items-center justify-between text-[11px] text-muted-foreground bg-muted/10">
+            <span className="font-medium">Tampilkan Terarsip</span>
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-input bg-card text-primary focus:ring-primary accent-primary cursor-pointer"
+            />
           </div>
 
           {/* Create Button Footer */}

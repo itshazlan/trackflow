@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.4 (Lean Internal) |
+| **Versi Dokumen** | 2.5 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: scope Kanban view — drag antar kolom saja, tanpa reorder dalam kolom; scope Calendar view — berbasis due_date saja) |
+| **Tanggal** | 14 Juli 2026 (revisi: edit proyek, arsip/hard-delete proyek, tambah member saat create proyek, hapus akun = nonaktifkan bukan hard delete, sistem notifikasi esensial) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -111,6 +111,8 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-007 | Pengguna dapat melengkapi informasi kepegawaian esensial pada profilnya: nomor telepon, **jabatan**, **departemen/divisi** |
 | FR-008 | Admin dapat melengkapi/mengubah data kepegawaian tambahan untuk user manapun: **nomor induk karyawan (employee ID)**, **tanggal bergabung**, dan **status kepegawaian** (Aktif/Tidak Aktif/Cuti). Kecuali username, seluruh informasi kepegawaian ini bersifat **opsional** — tidak menghambat penggunaan sistem bila belum lengkap diisi |
 | FR-009 | Saat karyawan resign, akun diubah menjadi **Tidak Aktif** (bukan dihapus) — histori tiket, timesheet, dan time block miliknya tetap tersimpan utuh |
+| FR-009a | Aksi **"Hapus Akun"** oleh Admin di UI menjalankan hal yang sama seperti FR-009: menonaktifkan login (`employmentStatus = inactive`) dan memaksa logout seluruh sesi aktif pengguna tersebut (web maupun desktop client) — **bukan menghapus baris data** pengguna |
+| FR-009b | Penghapusan data pengguna secara permanen (hard delete) hanya diizinkan untuk akun yang **belum memiliki riwayat kerja sama sekali** (0 tiket, 0 time block, 0 komentar) — mis. akun testing yang tidak pernah dipakai. Untuk akun yang sudah punya riwayat kerja, sistem menolak permintaan hard delete dan mengarahkan ke nonaktifkan (FR-009a) |
 
 ### 7.2 Struktur Proyek & Sub-proyek
 
@@ -121,6 +123,11 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-012 | Setiap proyek independen: anggota tim & modul aktif diatur terpisah per proyek |
 | FR-013 | Saat membuat proyek (termasuk sub-proyek), pengguna mengisi **Kode Proyek** (project key) unik secara global — mis. `TRACK`, `MOB-AND` — dipakai sebagai prefix Issue ID (`{key}-{nomor}`, mis. `TRACK-142`). Kode bersifat **permanen** setelah proyek dibuat |
 | FR-014 | **Setiap sub-proyek memiliki Kode Proyek dan penomoran issue sendiri, independen dari proyek induknya** — bukan berbagi satu urutan nomor dengan induknya (mis. proyek "Aplikasi Mobile" berkode `MOB` dan sub-proyek "Android" berkode `AND` masing-masing mulai dari nomor 1) |
+| FR-015 | Nama dan deskripsi proyek/sub-proyek dapat **diedit** setelah dibuat oleh Manager proyek terkait atau Admin. **Kode Proyek (`key`) tidak dapat diubah** setelah dibuat (tetap immutable, FR-013) |
+| FR-016 | Proyek/sub-proyek dapat **diarsipkan** (soft-delete) oleh Manager/Admin — data (tiket, jam kerja, laporan) tetap tersimpan utuh, proyek disembunyikan dari tampilan default namun tetap bisa dicari lewat filter "Tampilkan Terarsip" |
+| FR-017 | Proyek dengan sub-proyek yang masih aktif **tidak dapat** diarsipkan sebelum seluruh sub-proyeknya diarsipkan terlebih dahulu |
+| FR-018 | **Hanya Admin** yang dapat menghapus proyek secara **permanen** (hard delete, tidak dapat dikembalikan) — memerlukan konfirmasi dengan mengetik ulang Kode Proyek, disertai peringatan eksplisit bahwa seluruh tiket, jam kerja, dan laporan terkait akan hilang |
+| FR-019 | Saat membuat proyek baru, pengguna dapat **langsung menambahkan anggota** beserta role masing-masing dalam satu langkah (tidak perlu membuka halaman "Anggota Proyek" secara terpisah setelahnya). Pembuat proyek otomatis menjadi Manager jika belum disertakan dalam daftar anggota |
 
 ### 7.3 Sistem Tiket & Workflow (Dapat Dikustomisasi)
 
@@ -225,6 +232,18 @@ Field:
 | FR-092 | Saat memilih "Activity", pengguna dapat mengisi **deskripsi singkat (opsional)** mengenai apa yang sedang dikerjakan |
 | FR-093 | Blok waktu berkategori "Activity" ditampilkan dengan label **"Activity"** (bukan Issue ID kosong) di Time Book & Reports, disertai deskripsinya jika diisi |
 
+### 7.10 Notifikasi
+
+| ID | Requirement |
+|---|---|
+| FR-100 | Pengguna menerima notifikasi saat **ditambahkan sebagai anggota proyek baru** |
+| FR-101 | Pengguna menerima notifikasi saat **ditugaskan (assignee) pada tiket baru** |
+| FR-102 | Pengguna menerima notifikasi saat **di-mention** (`@username`) pada komentar Issue Activity |
+| FR-103 | Pemilik timesheet menerima notifikasi saat timesheet-nya **disetujui/ditolak** oleh Manager |
+| FR-104 | Pekerja menerima notifikasi saat blok waktunya **di-override** oleh Admin |
+| FR-105 | Notifikasi tampil di ikon lonceng pada topbar dengan indikator jumlah belum dibaca, diperbarui **real-time** tanpa perlu refresh halaman |
+| FR-106 | Klik notifikasi menandainya sebagai telah dibaca dan mengarahkan pengguna langsung ke halaman/entitas terkait (proyek, tiket, timesheet, atau blok waktu yang dimaksud) |
+
 ---
 
 ## 8. Kebutuhan Non-Fungsional
@@ -291,6 +310,23 @@ Field:
 3. Isi deskripsi singkat opsional (mis. "Riset library upload file") atau biarkan kosong.
 4. Klik Start seperti biasa — waktu tetap tercatat dan tersinkron, muncul di Time Book berlabel "Activity".
 
+### 9.9 Mengelola Siklus Hidup Proyek (Edit, Arsip, Hapus Permanen)
+1. Manager membuka proyek → edit nama/deskripsi lewat modal (Kode Proyek tetap tampil read-only).
+2. Proyek yang sudah tidak aktif → Manager klik "Arsipkan Proyek" — kalau masih ada sub-proyek aktif, sistem menolak dan meminta arsipkan sub-proyek dulu.
+3. Proyek terarsip tidak lagi muncul di daftar utama, tapi tetap bisa ditemukan lewat filter "Tampilkan Terarsip" untuk kebutuhan laporan historis.
+4. Jika benar-benar perlu dihapus permanen (kasus khusus, mis. proyek dibuat keliru): Admin membuka "Danger Zone", mengetik ulang Kode Proyek untuk konfirmasi, lalu menghapus — disertai peringatan bahwa seluruh data terkait akan hilang tanpa bisa dikembalikan.
+
+### 9.10 Admin Menonaktifkan Akun Pengguna
+1. Admin membuka halaman Users & Roles, memilih user yang resign/tidak aktif lagi.
+2. Klik "Hapus Akun" — sistem menonaktifkan login user tersebut (bukan menghapus datanya) dan langsung memaksa logout sesi aktifnya di web maupun desktop client.
+3. Seluruh riwayat tiket, timesheet, dan time block milik user tersebut tetap utuh dan terlihat di laporan.
+
+### 9.11 Menerima & Menindaklanjuti Notifikasi
+1. Developer di-mention (`@developer1`) oleh QA di komentar sebuah tiket.
+2. Ikon lonceng di topbar developer tersebut langsung menampilkan badge angka baru, tanpa perlu refresh.
+3. Developer klik ikon lonceng, melihat notifikasi mention tersebut, klik untuk langsung dibawa ke tiket dan komentar terkait.
+4. Notifikasi otomatis tertandai telah dibaca.
+
 ---
 
 ## 10. Metrik Keberhasilan
@@ -318,9 +354,9 @@ Field:
 
 | Fase | Cakupan |
 |---|---|
-| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen), Sistem tiket + status default (list view), Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV |
+| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view), Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
 | **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual |
-| **Fase 3** | Notifikasi lanjutan, integrasi pihak ketiga, dashboard analitik lanjutan |
+| **Fase 3** | Notifikasi lanjutan (email/push), integrasi pihak ketiga, dashboard analitik lanjutan |
 
 ---
 

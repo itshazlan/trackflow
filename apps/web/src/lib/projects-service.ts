@@ -8,6 +8,8 @@ export interface Project {
   createdAt: string;
   parentProjectId?: string | null;
   parent_project_id?: string | null;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
 }
 
 export async function getProjects(): Promise<Project[]> {
@@ -62,17 +64,51 @@ export async function checkProjectKey(key: string): Promise<{ available: boolean
   return res.json();
 }
 
-export async function deleteProject(id: string): Promise<void> {
+export async function deleteProject(id: string, confirmKey: string): Promise<void> {
   const res = await fetch(`/api/projects/${id}`, {
     method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ confirmKey }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to delete project");
+  }
+}
+
+export async function archiveProject(id: string): Promise<Project> {
+  const res = await fetch(`/api/projects/${id}/archive`, {
+    method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
   });
 
   if (!res.ok) {
-    throw new Error("Failed to delete project");
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to archive project");
   }
+
+  return res.json();
+}
+
+export async function restoreProject(id: string): Promise<Project> {
+  const res = await fetch(`/api/projects/${id}/restore`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to restore project");
+  }
+
+  return res.json();
 }
 
 export async function getProjectDetail(id: string): Promise<Project> {

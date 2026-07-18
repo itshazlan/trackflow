@@ -36,6 +36,7 @@ export default function ProjectsPage() {
   const [isCheckingKey, setIsCheckingKey] = useState(false);
   const [isKeyAvailable, setIsKeyAvailable] = useState<boolean | null>(null);
   const [isKeyManuallyEdited, setIsKeyManuallyEdited] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   // Fetch projects via TanStack Query
   const { data: projects = [], isLoading, error: queryError } = useQuery<Project[]>({
@@ -169,20 +170,34 @@ export default function ProjectsPage() {
         <div>
           <h2 className="text-[16px] font-semibold text-foreground">Proyek Kerja</h2>
           <p className="text-[12px] text-muted-foreground mt-0.5">
-            Daftar semua proyek aktif yang sedang Anda kelola atau ikuti.
+            Daftar semua proyek kerja yang sedang Anda kelola atau ikuti.
           </p>
         </div>
-        <Button
-          size="sm"
-          className="h-8 text-[12px] font-medium"
-          onClick={() => {
-            setCreateError("");
-            setIsDialogOpen(true);
-          }}
-        >
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Buat Proyek Baru
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 border border-border bg-card rounded-md px-2.5 py-1.5 text-xs text-muted-foreground shadow-sm">
+            <input
+              type="checkbox"
+              id="show-archived"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-input bg-card text-primary focus:ring-primary accent-primary cursor-pointer"
+            />
+            <label htmlFor="show-archived" className="cursor-pointer font-medium select-none text-[11px] whitespace-nowrap">
+              Tampilkan Terarsip
+            </label>
+          </div>
+          <Button
+            size="sm"
+            className="h-8 text-[12px] font-medium"
+            onClick={() => {
+              setCreateError("");
+              setIsDialogOpen(true);
+            }}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Buat Proyek Baru
+          </Button>
+        </div>
       </div>
 
       {(queryError || createError) && (
@@ -197,7 +212,7 @@ export default function ProjectsPage() {
         <div className="flex h-36 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : projects.length === 0 ? (
+      ) : projects.filter(p => showArchived || !p.archivedAt).length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12 text-center">
           <Folder className="h-8 w-8 text-muted-foreground/60 mb-2" strokeWidth={1.5} />
           <p className="text-[13px] font-medium text-foreground">Belum ada proyek</p>
@@ -215,37 +230,52 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {projects.map((project) => (
-            <div
-              key={project.id}
-              onClick={() => handleSelectProject(project.id)}
-              className="flex flex-col justify-between rounded-lg border border-border bg-card p-4 hover:border-foreground/30 transition-all cursor-pointer group shadow-sm"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13.5px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                    {project.name}
-                  </span>
-                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+          {projects
+            .filter((project) => showArchived || !project.archivedAt)
+            .map((project) => (
+              <div
+                key={project.id}
+                onClick={() => handleSelectProject(project.id)}
+                className={`flex flex-col justify-between rounded-lg border border-border bg-card p-4 hover:border-foreground/30 transition-all cursor-pointer group shadow-sm ${
+                  project.archivedAt ? "opacity-60" : ""
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13.5px] font-semibold text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
+                      {project.name}
+                      {project.archivedAt && (
+                        <span className="text-[9px] text-amber-500 font-normal bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/10">
+                          Arsip
+                        </span>
+                      )}
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                  <p className="text-[12px] text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
+                    {project.description || "Tidak ada deskripsi proyek."}
+                  </p>
                 </div>
-                <p className="text-[12px] text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
-                  {project.description || "Tidak ada deskripsi proyek."}
-                </p>
+                <div className="border-t border-border mt-3 pt-3 flex items-center justify-between">
+                  <span className="text-[10.5px] text-muted-foreground">
+                    Dibuat {new Date(project.createdAt).toLocaleDateString("id-ID", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric"
+                    })}
+                  </span>
+                  {project.archivedAt ? (
+                    <span className="text-[10px] rounded bg-amber-500/10 px-1.5 py-0.5 font-semibold text-amber-600 border border-amber-500/10 uppercase tracking-wider">
+                      Archived
+                    </span>
+                  ) : (
+                    <span className="text-[10px] rounded bg-emerald-500/10 px-1.5 py-0.5 font-semibold text-emerald-600 border border-emerald-500/10 uppercase tracking-wider">
+                      Active
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="border-t border-border mt-3 pt-3 flex items-center justify-between">
-                <span className="text-[10.5px] text-muted-foreground">
-                  Dibuat {new Date(project.createdAt).toLocaleDateString("id-ID", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric"
-                  })}
-                </span>
-                <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 font-medium text-muted-foreground uppercase tracking-wider">
-                  Active
-                </span>
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 

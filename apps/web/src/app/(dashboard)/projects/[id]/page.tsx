@@ -2,7 +2,16 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { getProjectDetail, getSubProjects, createSubProject, Project } from "@/lib/projects-service";
+import {
+  getProjectDetail,
+  getSubProjects,
+  createSubProject,
+  restoreProject,
+  Project,
+} from "@/lib/projects-service";
+import { getSession } from "@/lib/auth-service";
+import { getProjectMembers } from "@/lib/issues-service";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import IssuesSection from "@/components/project/issues-section";
 import SettingsSection from "@/components/project/settings-section";
 import TimeBookSection from "@/components/project/timebook-section";
@@ -34,11 +43,15 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = params?.id as string;
+  const confirm = useConfirm();
 
   const [project, setProject] = useState<Project | null>(null);
   const [subProjects, setSubProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [session, setSession] = useState<any>(null);
+  const [members, setMembers] = useState<any[]>([]);
+  const [restoreLoading, setRestoreLoading] = useState(false);
 
   // Create Sub-project Dialog state
   const [isSubDialogOpen, setIsSubDialogOpen] = useState(false);
@@ -54,10 +67,16 @@ export default function ProjectDetailPage() {
     try {
       setLoading(true);
       setError("");
-      const pDetail = await getProjectDetail(projectId);
+      const [pDetail, subList, sessionData, membersData] = await Promise.all([
+        getProjectDetail(projectId),
+        getSubProjects(projectId),
+        getSession().catch(() => null),
+        getProjectMembers(projectId).catch(() => []),
+      ]);
       setProject(pDetail);
-      const subList = await getSubProjects(projectId);
       setSubProjects(subList);
+      setSession(sessionData);
+      setMembers(membersData);
     } catch (err) {
       setError("Gagal memuat detail proyek.");
       console.error(err);
@@ -65,6 +84,41 @@ export default function ProjectDetailPage() {
       setLoading(false);
     }
   }, [projectId]);
+
+  const handleRestoreProject = async () => {
+    const ok = await confirm({
+      title: "Restore Proyek",
+      description: "Apakah Anda yakin ingin mengembalikan proyek ini ke status aktif?",
+      confirmLabel: "Ya, Restore",
+      variant: "default",
+    });
+    if (!ok) return;
+
+    try {
+      setRestoreLoading(true);
+      const updated = await restoreProject(projectId);
+      setProject(updated);
+      await confirm({
+        title: "Proyek Dipulihkan",
+        description: "Proyek berhasil dikembalikan ke status aktif.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "default",
+      });
+      window.location.reload();
+    } catch (err: any) {
+      console.error(err);
+      await confirm({
+        title: "Gagal Memulihkan",
+        description: err.message || "Gagal memulihkan proyek.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
+    } finally {
+      setRestoreLoading(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -191,6 +245,35 @@ export default function ProjectDetailPage() {
           )}
         </div>
       </div>
+
+      {project.archivedAt && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-600 leading-normal">
+          <div className="flex items-start md:items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-amber-500 mt-[1px] md:mt-0" />
+            <div>
+              <span className="font-semibold text-amber-700 dark:text-amber-400">Proyek Terarsip:</span> Proyek ini telah diarsipkan dan berada dalam status baca-saja. Anda tidak dapat membuat tiket baru atau mengubah status alur kerja kecuali proyek dipulihkan.
+            </div>
+          </div>
+          {(session?.user?.isAdmin || members.find((m) => m.id === session?.user?.id)?.role === "manager") && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7.5 text-[11px] font-semibold border-amber-500/20 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 dark:text-amber-400 w-fit shrink-0"
+              onClick={handleRestoreProject}
+              disabled={restoreLoading}
+            >
+              {restoreLoading ? (
+                <>
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" stroke="currentColor" />
+                  Memulihkan...
+                </>
+              ) : (
+                "Restore Proyek"
+              )}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Tabs Menu */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full flex flex-col gap-4">

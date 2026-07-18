@@ -54,8 +54,16 @@ import {
   Sliders,
   FileText,
   Users,
+  Settings,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import {
+  Project,
+  getProjectDetail,
+  archiveProject,
+  restoreProject,
+  deleteProject,
+} from "@/lib/projects-service";
 
 interface SettingsSectionProps {
   projectId: string;
@@ -97,17 +105,23 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
   const [memberActionLoading, setMemberActionLoading] = useState(false);
   const [memberError, setMemberError] = useState("");
 
+  const [project, setProject] = useState<Project | null>(null);
+  const [confirmInput, setConfirmInput] = useState("");
+  const [archiveActionLoading, setArchiveActionLoading] = useState(false);
+  const [deleteActionLoading, setDeleteActionLoading] = useState(false);
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
-      const [statusesData, templatesData, trackersData, sessionData, membersData, systemUsersData] = await Promise.all([
+      const [statusesData, templatesData, trackersData, sessionData, membersData, systemUsersData, projectData] = await Promise.all([
         getProjectStatuses(projectId),
         getProjectTemplates(projectId),
         getTrackers(),
         getSession(),
         getProjectMembers(projectId),
         getSystemUsers().catch(() => []),
+        getProjectDetail(projectId),
       ]);
       setStatuses(statusesData);
       setTemplates(templatesData);
@@ -115,6 +129,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
       setSession(sessionData);
       setMembers(membersData);
       setSystemUsers(systemUsersData);
+      setProject(projectData);
     } catch (err) {
       console.error(err);
       setError("Gagal memuat konfigurasi settings.");
@@ -134,6 +149,112 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
       active = false;
     };
   }, [fetchData]);
+
+  const handleArchive = async () => {
+    const ok = await confirm({
+      title: "Arsipkan Proyek",
+      description: "Apakah Anda yakin ingin mengarsipkan proyek ini? Sub-proyek aktif di bawah proyek ini juga harus diarsipkan terlebih dahulu.",
+      confirmLabel: "Ya, Arsipkan",
+      variant: "default",
+    });
+    if (!ok) return;
+
+    try {
+      setArchiveActionLoading(true);
+      const updated = await archiveProject(projectId);
+      setProject(updated);
+      await confirm({
+        title: "Proyek Diarsipkan",
+        description: "Proyek berhasil diarsipkan.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "default",
+      });
+      window.location.reload();
+    } catch (err: any) {
+      console.error(err);
+      await confirm({
+        title: "Gagal Mengarsipkan",
+        description: err.message || "Gagal mengarsipkan proyek. Pastikan seluruh sub-proyek di bawah proyek ini sudah diarsipkan terlebih dahulu.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
+    } finally {
+      setArchiveActionLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    const ok = await confirm({
+      title: "Restore Proyek",
+      description: "Apakah Anda yakin ingin mengembalikan proyek ini?",
+      confirmLabel: "Ya, Restore",
+      variant: "default",
+    });
+    if (!ok) return;
+
+    try {
+      setArchiveActionLoading(true);
+      const updated = await restoreProject(projectId);
+      setProject(updated);
+      await confirm({
+        title: "Proyek Dipulihkan",
+        description: "Proyek berhasil dikembalikan ke status aktif.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "default",
+      });
+      window.location.reload();
+    } catch (err: any) {
+      console.error(err);
+      await confirm({
+        title: "Gagal Memulihkan",
+        description: err.message || "Gagal memulihkan proyek.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
+    } finally {
+      setArchiveActionLoading(false);
+    }
+  };
+
+  const handleHardDelete = async () => {
+    if (!project || confirmInput !== project.key) return;
+
+    const ok = await confirm({
+      title: "HAPUS PROYEK PERMANEN",
+      description: `Apakah Anda benar-benar yakin ingin menghapus proyek "${project.name}" secara permanen? TINDAKAN INI TIDAK DAPAT DIBATALKAN.`,
+      confirmLabel: "Hapus Permanen",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
+    try {
+      setDeleteActionLoading(true);
+      await deleteProject(projectId, confirmInput);
+      await confirm({
+        title: "Proyek Dihapus",
+        description: "Proyek telah dihapus secara permanen.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "default",
+      });
+      window.location.href = "/projects";
+    } catch (err: any) {
+      console.error(err);
+      await confirm({
+        title: "Gagal Menghapus Proyek",
+        description: err.message || "Gagal menghapus proyek secara permanen.",
+        confirmLabel: "Tutup",
+        cancelLabel: "",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteActionLoading(false);
+    }
+  };
 
   // --- Status Actions ---
   const handleReorderStatus = async (index: number, direction: "up" | "down") => {
@@ -391,8 +512,12 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
         </div>
       )}
 
-      <Tabs defaultValue="workflow" className="w-full flex flex-col gap-4">
+      <Tabs defaultValue="general" className="w-full flex flex-col gap-4">
         <TabsList className="w-fit h-8.5 bg-muted/40 border border-border p-0.5 rounded-lg shrink-0">
+          <TabsTrigger value="general" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
+            <Settings className="h-3.5 w-3.5" />
+            Umum
+          </TabsTrigger>
           <TabsTrigger value="workflow" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
             <Sliders className="h-3.5 w-3.5" />
             Workflow Status
@@ -406,6 +531,131 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
             Anggota Proyek
           </TabsTrigger>
         </TabsList>
+
+        {/* General Settings Content */}
+        <TabsContent value="general" className="mt-0 flex flex-col gap-6">
+          <div className="flex flex-col gap-6 rounded-lg border border-border bg-card p-4.5">
+            <div>
+              <h3 className="text-[13.5px] font-semibold text-foreground">Detail Proyek</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Informasi dasar mengenai proyek Anda.
+              </p>
+            </div>
+
+            <div className="grid gap-4.5 text-xs">
+              <div className="grid grid-cols-3 gap-4 border-b border-border/40 pb-3">
+                <span className="font-medium text-muted-foreground">Nama Proyek</span>
+                <span className="col-span-2 text-foreground font-semibold">{project?.name}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-4 border-b border-border/40 pb-3">
+                <span className="font-medium text-muted-foreground">Kode Proyek (Key)</span>
+                <span className="col-span-2 text-foreground font-semibold">{project?.key}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-4 border-b border-border/40 pb-3">
+                <span className="font-medium text-muted-foreground">Deskripsi</span>
+                <span className="col-span-2 text-foreground">{project?.description || "-"}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-4 pb-1">
+                <span className="font-medium text-muted-foreground">Status Arsip</span>
+                <span className="col-span-2">
+                  {project?.archivedAt ? (
+                    <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-500 border border-amber-500/20">
+                      Terarsip
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-500 border border-emerald-500/20">
+                      Aktif
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {isManagerOrAdmin && (
+              <div className="flex justify-start border-t border-border pt-4">
+                {project?.archivedAt ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 text-[12px]"
+                    onClick={handleRestore}
+                    disabled={archiveActionLoading}
+                  >
+                    {archiveActionLoading ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Memulihkan...
+                      </>
+                    ) : (
+                      "Restore Proyek"
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 text-[12px]"
+                    onClick={handleArchive}
+                    disabled={archiveActionLoading}
+                  >
+                    {archiveActionLoading ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Pengarsipan...
+                      </>
+                    ) : (
+                      "Arsipkan Proyek"
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {isAdmin && (
+            <div className="flex flex-col gap-4.5 rounded-lg border border-destructive/20 bg-destructive/5 p-4.5">
+              <div>
+                <h3 className="text-[13.5px] font-semibold text-destructive">Danger Zone</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                  Seluruh tiket, jam kerja, dan laporan terkait proyek ini akan hilang permanen dan tidak bisa dikembalikan.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 max-w-[400px]">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="confirm-key" className="text-[11px] font-semibold text-muted-foreground">
+                    Ketik ulang Kode Proyek <span className="font-bold text-foreground">"{project?.key}"</span> untuk konfirmasi
+                  </Label>
+                  <Input
+                    id="confirm-key"
+                    type="text"
+                    value={confirmInput}
+                    onChange={(e) => setConfirmInput(e.target.value)}
+                    placeholder={project?.key || ""}
+                    className="h-8 text-[12px] uppercase bg-card border-destructive/20 focus-visible:ring-destructive/30"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="h-8 text-[12px] w-fit font-medium"
+                  disabled={confirmInput !== project?.key || deleteActionLoading}
+                  onClick={handleHardDelete}
+                >
+                  {deleteActionLoading ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      Menghapus...
+                    </>
+                  ) : (
+                    "Hapus Permanen"
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
 
         {/* Workflow settings content */}
         <TabsContent value="workflow" className="mt-0 flex flex-col gap-4">

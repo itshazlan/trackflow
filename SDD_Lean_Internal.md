@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.6 (Lean Internal) |
+| **Versi Dokumen** | 2.7 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: CI/CD build desktop 3-platform via GitHub Actions — universal binary macOS, code signing, draft release sebagai gerbang review) |
+| **Tanggal** | 14 Juli 2026 (revisi: edit/arsip/hard-delete proyek, tambah member saat create, deaktivasi akun bukan hard-delete, tabel & alur sistem notifikasi) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -246,6 +246,7 @@ erDiagram
     USERS ||--o{ MANUAL_TIME_ENTRIES : submits
     USERS ||--o{ TIMESHEETS : has
     TIMESHEETS ||--o{ TIMESHEET_APPROVALS : "reviewed via"
+    USERS ||--o{ NOTIFICATIONS : receives
 ```
 
 ### 7.2 Definisi Tabel (PostgreSQL via Drizzle ORM)
@@ -307,11 +308,15 @@ erDiagram
 | parent_project_id | uuid (FK → projects, nullable) | Struktur sub-project |
 | key | varchar(10) (unique, global) | **Kode Proyek** — dipakai sebagai prefix Issue ID (mis. `TRACK-142`). Format: uppercase alfanumerik (`^[A-Z][A-Z0-9]{1,9}$`), **immutable** setelah proyek dibuat |
 | issue_sequence | integer default 0 | Counter nomor issue berjalan untuk proyek ini — di-increment atomik di dalam transaksi yang sama dengan insert `issues` (lihat §10.6) |
-| name | varchar | |
-| description | text | |
+| name | varchar | Dapat diedit kapan saja (FR-015) |
+| description | text | Dapat diedit kapan saja (FR-015) |
+| archived_at | timestamptz (nullable) | Diisi saat proyek diarsipkan (soft-delete, FR-016) — `NULL` berarti masih aktif |
+| archived_by | uuid (FK → users, nullable) | Siapa yang mengarsipkan |
 | created_by | uuid (FK → users) | |
 | created_at | timestamptz | |
 
+> **Soft-delete, bukan hard-delete, sebagai default "Hapus Proyek" (keputusan bisnis dikonfirmasi):** aksi "Hapus" yang terlihat pengguna sehari-hari mengisi `archived_at`/`archived_by` — seluruh data terkait (issues, time_blocks, dokumen, dst) **tetap utuh**, hanya disembunyikan dari tampilan default. Ini melindungi data jam kerja yang mungkin sudah dipakai untuk payroll/laporan historis. Hard-delete permanen tersedia sebagai aksi terpisah, Admin-only, lihat endpoint `DELETE /projects/:id` di §8.
+>
 > **Sub-project punya `key` dan `issue_sequence` sendiri, independen dari proyek induknya** (keputusan bisnis dikonfirmasi) — bukan berbagi satu urutan nomor dengan induknya. Contoh: proyek "Aplikasi Mobile" (`key=MOB`) dan sub-proyek "Android" (`key=AND`) masing-masing mulai penomoran dari 1: `MOB-1`, `AND-1`, dst — **bukan** `MOB-1`, `MOB-2` (Android) menyatu dengan induk. Keunikan `key` bersifat **global** di seluruh instalasi (termasuk lintas hierarki proyek/sub-proyek), karena single-tenant tidak punya scoping organisasi untuk membatasi keunikan hanya per-cabang.
 >
 > Catatan: kolom `organization_id` yang ada di draft sebelumnya **dihapus** — tidak relevan lagi tanpa entitas organisasi.
@@ -516,6 +521,21 @@ erDiagram
 | note | text |
 | reviewed_at | timestamptz |
 
+#### `notifications`
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| user_id | uuid (FK → users) | Penerima notifikasi |
+| type | enum(`project_member_added`,`issue_assigned`,`issue_mentioned`,`timesheet_approved`,`timeblock_overridden`) | Jenis notifikasi (FR-100–104) |
+| title | varchar | |
+| body | text | |
+| entity_type | enum(`project`,`issue`,`timesheet`,`time_block`) | Dipakai bersama `entity_id` untuk navigasi "klik → buka halaman terkait" (FR-106) |
+| entity_id | uuid | |
+| is_read | boolean default false | |
+| created_at | timestamptz | |
+
+> Composite index pada `(user_id, is_read, created_at)` — query paling sering adalah "notifikasi belum dibaca milik user ini, urut terbaru" untuk badge counter & panel notifikasi.
+
 > **Catatan indexing:** skema didefinisikan & di-migrasi via `drizzle-kit generate`/`drizzle-kit migrate`. Tanpa entitas organisasi, tidak ada kolom `organization_id` yang perlu di-index di tabel manapun — menyederhanakan seluruh query dibanding draft v1.1.
 
 ---
@@ -532,7 +552,13 @@ erDiagram
 | Profil | `/admin/users/:id/employment` | PATCH | Update data kepegawaian user lain (jabatan, departemen, employeeId, joinDate, employmentStatus) — **Admin only** |
 | Admin | `/admin/settings` | GET/PATCH | Pengaturan aplikasi (`company_name`, `screenshot_retention_days`) — **Admin only** |
 | Admin | `/admin/users` | GET/POST/PATCH | Kelola user & flag `is_admin` — **Admin only** |
-| Projects | `/projects` | GET/POST | List & buat proyek — body POST wajib sertakan `key` (Kode Proyek unik, immutable) |
+| Admin | `/admin/users/:id` | DELETE | "Hapus Akun" — set `employmentStatus=inactive` + paksa logout seluruh sesi aktif (web & desktop). **Bukan hard delete** (FR-009a) — **Admin only** |
+| Admin | `/admin/users/:id?force=true` | DELETE | Hard delete permanen — **ditolak (400)** jika user punya riwayat kerja apapun (issues/time_blocks/comments > 0), lihat FR-009b — **Admin only** |
+| Projects | `/projects` | GET/POST | List & buat proyek — body POST wajib sertakan `key` (Kode Proyek unik, immutable), opsional `members: [{userId, role}]` untuk langsung menambahkan anggota (FR-019) |
+| Projects | `/projects/:id` | PATCH | Edit `name`/`description` — **`key` tidak dapat diubah lewat endpoint ini** (FR-015) |
+| Projects | `/projects/:id/archive` | PATCH | Arsipkan (soft-delete) — ditolak (400) jika masih ada sub-proyek aktif (FR-017) — Manager/Admin |
+| Projects | `/projects/:id/restore` | PATCH | Kembalikan dari arsip — Manager/Admin |
+| Projects | `/projects/:id` | DELETE | Hard delete permanen + cascade seluruh data terkait. Body wajib `{ confirmKey: string }` harus sama persis dengan `projects.key` — **Admin only** (FR-018) |
 | Projects | `/projects/:id/sub-projects` | GET/POST | Kelola sub-proyek — sub-proyek juga wajib punya `key` sendiri, independen dari induk |
 | Memberships | `/projects/:id/members` | GET/POST/PATCH | Undang & atur role anggota proyek — **Admin dapat mengakses meski belum jadi member proyek ini** (§4.1) |
 | Issue Statuses | `/projects/:id/issue-statuses` | GET/POST/PATCH/DELETE | CRUD status workflow (termasuk reorder & set `restricted_to_role`) — **Manager/Admin** |
@@ -553,6 +579,9 @@ erDiagram
 | Timesheets | `/timesheets` | GET | List timesheet per periode |
 | Timesheets | `/timesheets/:id/approve` | POST | Approve/reject oleh Manager |
 | Reports | `/reports/hours?format=pdf\|csv` | GET | Generate & unduh laporan |
+| Notifications | `/notifications` | GET | List notifikasi milik user sendiri, paginated, filter `?unread=true` |
+| Notifications | `/notifications/:id/read` | PATCH | Tandai satu notifikasi sebagai telah dibaca |
+| Notifications | `/notifications/read-all` | PATCH | Tandai seluruh notifikasi milik user sebagai telah dibaca |
 
 ### 8.1 Contoh Payload — Buat Tiket dari Template Bug (Sebagai Filler Teks)
 
@@ -637,6 +666,9 @@ POST /time-blocks/sync
 | `timesheet.approved` | Server → Web | `{timesheetId, status}` | Notifikasi ke Developer |
 | `timeblock.overridden` | Server → Web | `{timeBlockId, actorId, targetUserId, action, reason}` | Notifikasi ke pekerja terdampak saat Admin override |
 | `issue.comment_created` | Server → Web | `{issueId, commentId, authorId, bodyPreview}` | Update panel Aktivitas/Komentar secara realtime tanpa refresh |
+| `notification.created` | Server → Web | `{id, type, title, body, entityType, entityId}` | Notifikasi baru (FR-100–104) — dikirim **hanya ke room pribadi penerima** (`user:{userId}`), bukan broadcast ke semua |
+
+**Room per-user untuk notifikasi:** setiap koneksi Socket.io otomatis `socket.join('user:' + userId)` saat connect (identitas dari sesi Better Auth). Event `notification.created` di-emit ke room spesifik ini — memastikan notifikasi hanya sampai ke penerima yang dituju, bukan seluruh pengguna yang sedang online.
 
 Desktop Client menggunakan gateway ini untuk heartbeat ringan; screenshot tetap lewat REST + presigned URL.
 
@@ -875,6 +907,105 @@ sequenceDiagram
 
 **Prinsip penting:** validasi di frontend (langkah pertama) murni untuk **UX** (mencegah user drag ke kolom yang jelas-jelas akan ditolak) — validasi otoritatif tetap di backend (langkah kedua), karena frontend tidak pernah bisa dipercaya sepenuhnya untuk keputusan otorisasi.
 
+### 10.11 Alur Arsip Proyek (Soft-Delete) & Hard Delete Permanen
+
+```mermaid
+sequenceDiagram
+    participant M as Manager
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant Adm as Admin
+
+    M->>A: PATCH /projects/:id/archive
+    A->>PG: Cek sub-proyek dengan archived_at IS NULL milik proyek ini
+    alt Ada sub-proyek masih aktif
+        A-->>M: 400 Bad Request ("Arsipkan sub-proyek terlebih dahulu")
+    else Tidak ada sub-proyek aktif
+        A->>PG: UPDATE projects SET archived_at=now(), archived_by=:userId
+        A-->>M: 200 OK
+        Note over PG: Seluruh data (issues, time_blocks, dst) TETAP UTUH — hanya disembunyikan dari tampilan default
+    end
+
+    Note over Adm: Kasus khusus — hard delete permanen
+    Adm->>A: DELETE /projects/:id {confirmKey: "TRACK"}
+    A->>PG: Bandingkan confirmKey dengan projects.key
+    alt confirmKey tidak cocok
+        A-->>Adm: 400 Bad Request ("Kode proyek tidak sesuai")
+    else confirmKey cocok
+        A->>PG: DELETE CASCADE (issues, time_blocks, documents, comments, dst)
+        A-->>Adm: 200 OK
+        Note over PG: Tidak dapat dikembalikan — berbeda dari archive di atas
+    end
+```
+
+### 10.12 Alur Membuat Proyek Sekaligus Menambahkan Anggota
+
+```mermaid
+sequenceDiagram
+    participant U as Pengguna
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    U->>A: POST /projects {name, key, members: [{userId, role}, ...]}
+    A->>PG: BEGIN TRANSACTION
+    A->>PG: Insert projects
+    A->>PG: Seed 6 issue_statuses default (§10.6 area)
+    A->>PG: Insert project_memberships untuk tiap entry di "members"
+    A->>A: Jika pembuat proyek tidak ada di "members" → tambahkan sebagai manager
+    A->>PG: COMMIT
+    A-->>U: 201 Created {project, members}
+```
+
+### 10.13 Alur Deaktivasi Akun ("Hapus Akun") & Notifikasi
+
+```mermaid
+sequenceDiagram
+    participant Adm as Admin
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant AUTH as Better Auth
+
+    Adm->>A: DELETE /admin/users/:id
+    A->>PG: Cek employmentStatus saat ini
+    A->>PG: UPDATE user SET employmentStatus='inactive'
+    A->>AUTH: Invalidasi seluruh session/token aktif user ini
+    Note over AUTH: Berlaku untuk sesi web (cookie) maupun Bearer token desktop client
+    A-->>Adm: 200 OK
+    Note over PG: Data historis (issues, time_blocks, comments) TIDAK dihapus (FR-009a)
+
+    Note over Adm: Kasus khusus — hard delete (hanya akun tanpa riwayat)
+    Adm->>A: DELETE /admin/users/:id?force=true
+    A->>PG: COUNT issues + time_blocks + issue_comments milik user ini
+    alt Total > 0
+        A-->>Adm: 400 Bad Request ("User punya riwayat kerja, nonaktifkan saja")
+    else Total = 0
+        A->>PG: DELETE user permanen
+        A-->>Adm: 200 OK
+    end
+```
+
+### 10.14 Alur Notifikasi (Mention & Realtime Delivery)
+
+```mermaid
+sequenceDiagram
+    participant QA as QA
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant WS as Socket.io Gateway
+    participant Dev as Developer (via WS, room user:{id})
+
+    QA->>A: POST /issues/:id/comments {body: "Cek dulu ya @developer1"}
+    A->>PG: Insert issue_comments
+    A->>A: Parse body dengan regex @(\w+), cocokkan ke username
+    A->>PG: SELECT id FROM user WHERE username='developer1'
+    A->>PG: Insert notifications (type=issue_mentioned, userId=developer1.id, entityType=issue, entityId)
+    A->>WS: emit ke room user:{developer1.id} → notification.created
+    WS->>Dev: Terima event, badge lonceng bertambah realtime
+    Dev->>A: Klik notifikasi → PATCH /notifications/:id/read
+    A->>PG: UPDATE notifications SET is_read=true
+    Dev->>Dev: Navigasi ke issue terkait (entityType=issue, entityId)
+```
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -894,6 +1025,7 @@ sequenceDiagram
 | Retensi data | Screenshot dihapus otomatis setelah 12 bulan (§13) |
 | Model instalasi | Single-tenant tanpa entitas organisasi — permukaan risiko lebih kecil dibanding model SaaS multi-tenant |
 | Moderasi komunikasi | Issue Activity terbuka untuk semua anggota proyek (tanpa batasan role), namun Admin tetap dapat menghapus komentar siapapun untuk moderasi jika terjadi penyalahgunaan |
+| Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
 ---
 
@@ -1043,6 +1175,8 @@ flowchart TB
 | `key` proyek harus unik secara global (termasuk lintas sub-proyek) — makin banyak proyek, makin mudah terjadi konflik kode singkat | Validasi uniqueness real-time saat pengisian form (cek via API saat blur), sarankan konvensi penamaan internal (mis. selalu awali sub-proyek dengan kode induk + suffix) |
 | Description issue kini teks bebas — konsistensi laporan bug (semua field terisi) bergantung sepenuhnya pada kedisiplinan penulis, bukan validasi sistem | Diterima sebagai trade-off kesederhanaan; dapat dipantau manual oleh Manager/QA, atau ditambah linter/reminder ringan di masa depan jika kualitas laporan menurun |
 | Discard di Floating Widget tidak tercatat di audit log (karena data memang tidak pernah sampai ke server) — Admin tidak bisa melihat riwayat berapa kali/kapan seorang pekerja men-discard screenshot | Diterima sebagai trade-off kesederhanaan sesuai keputusan desain (§6); jika suatu saat dibutuhkan visibilitas ini, opsi lanjutan: kirim event count-only (tanpa gambar) ke server saat discard, tanpa menyimpan screenshot itu sendiri |
+| Proyek yang diarsipkan menumpuk seiring waktu tanpa pernah dibersihkan (soft-delete tidak pernah otomatis jadi hard-delete) | Diterima sebagai trade-off keamanan data — pertumbuhan tabel `projects`/`issues` dari proyek terarsip relatif kecil dibanding `time_blocks`/`screenshots`; hard-delete manual tetap tersedia untuk Admin bila memang perlu membersihkan proyek uji coba |
+| Parsing `@username` pada komentar bisa gagal cocok kalau username mengandung karakter di luar `\w` (mis. titik, strip) | Batasi format `username` saat registrasi/edit profil ke alfanumerik + underscore saja (dicek di validasi form), konsisten dengan pola regex mention |
 | Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
 | Tanpa code signing (belum ada sertifikat berbayar), karyawan mendapat peringatan Gatekeeper (macOS)/SmartScreen (Windows) saat instalasi pertama | Diterima sebagai trade-off distribusi internal; instruksikan "klik kanan → Buka" (macOS) atau "More info → Run anyway" (Windows) — revisit beli sertifikat kalau tim membesar atau keluhan meningkat |
 | Release dibuat sebagai draft (§15.3) berpotensi lupa di-publish, karyawan tidak menerima update yang sudah dites | Jadikan bagian dari checklist rilis manual: build via CI → smoke test → publish — jangan anggap selesai hanya karena CI hijau |

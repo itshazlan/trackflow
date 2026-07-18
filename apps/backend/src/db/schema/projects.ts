@@ -31,6 +31,10 @@ export const projects = pgTable('projects', {
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedBy: text('archived_by').references(() => user.id, {
+    onDelete: 'set null',
+  }),
 });
 
 export const projectMemberships = pgTable('project_memberships', {

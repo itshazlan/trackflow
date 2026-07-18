@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, isNull } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { issueStatuses } from '../../db/schema/issues';
@@ -157,15 +157,69 @@ export class ProjectsService {
     return !!project;
   }
 
-  async remove(id: string) {
-    const [deleted] = await this.db
-      .delete(projects)
-      .where(eq(projects.id, id))
+  async archive(projectId: string, userId: string) {
+    const activeSubProjects = await this.db
+      .select()
+      .from(projects)
+      .where(
+        and(
+          eq(projects.parentProjectId, projectId),
+          isNull(projects.archivedAt),
+        ),
+      );
+
+    if (activeSubProjects.length > 0) {
+      throw new BadRequestException(
+        'Arsipkan seluruh sub-proyek terlebih dahulu sebelum mengarsipkan proyek induk',
+      );
+    }
+
+    const [updated] = await this.db
+      .update(projects)
+      .set({ archivedAt: new Date(), archivedBy: userId })
+      .where(eq(projects.id, projectId))
       .returning();
 
-    if (!deleted) {
-      throw new NotFoundException(`Project with ID ${id} not found`);
+    if (!updated) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
     }
+
+    return updated;
+  }
+
+  async restore(projectId: string) {
+    const [updated] = await this.db
+      .update(projects)
+      .set({ archivedAt: null, archivedBy: null })
+      .where(eq(projects.id, projectId))
+      .returning();
+
+    if (!updated) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    return updated;
+  }
+
+  async hardDelete(projectId: string, confirmKey: string) {
+    const [project] = await this.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    if (project.key !== confirmKey) {
+      throw new BadRequestException('Kode proyek tidak sesuai — hapus dibatalkan');
+    }
+
+    const [deleted] = await this.db
+      .delete(projects)
+      .where(eq(projects.id, projectId))
+      .returning();
 
     return { message: 'Project deleted successfully', deleted };
   }

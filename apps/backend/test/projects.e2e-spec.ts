@@ -11,6 +11,10 @@ jest.mock('better-auth/adapters/drizzle', () => ({
   drizzleAdapter: jest.fn(),
 }));
 
+jest.mock('better-auth/plugins', () => ({
+  bearer: jest.fn().mockReturnValue(() => ({})),
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   INestApplication,
@@ -337,6 +341,80 @@ describe('Projects and Memberships (e2e)', () => {
 
       expect(resNoHyphen.body).toHaveLength(1);
       expect(resNoHyphen.body[0].id).toBe(subProjectId);
+    });
+  });
+
+  describe('Project Archiving & Restoring', () => {
+    it('should reject archiving parent project if sub-project is active (400)', async () => {
+      await request(app.getHttpServer())
+        .patch(`/projects/${mainProjectId}/archive`)
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .expect(400);
+    });
+
+    it('should allow manager to archive sub-project first', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/projects/${subProjectId}/archive`)
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .expect(200);
+
+      expect(res.body.archivedAt).not.toBeNull();
+      expect(res.body.archivedBy).toBe(mockUsers.manager.id);
+    });
+
+    it('should allow manager to archive parent project once all sub-projects are archived', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/projects/${mainProjectId}/archive`)
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .expect(200);
+
+      expect(res.body.archivedAt).not.toBeNull();
+      expect(res.body.archivedBy).toBe(mockUsers.manager.id);
+    });
+
+    it('should allow manager to restore a project', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/projects/${mainProjectId}/restore`)
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .expect(200);
+
+      expect(res.body.archivedAt).toBeNull();
+      expect(res.body.archivedBy).toBeNull();
+    });
+  });
+
+  describe('Project Hard Deletion', () => {
+    it('should reject hard delete if not admin (403)', async () => {
+      await request(app.getHttpServer())
+        .delete(`/projects/${mainProjectId}`)
+        .set('x-mock-user-id', mockUsers.manager.id)
+        .send({ confirmKey: 'MAIN' })
+        .expect(403);
+    });
+
+    it('should reject hard delete if confirmKey does not match (400)', async () => {
+      await request(app.getHttpServer())
+        .delete(`/projects/${mainProjectId}`)
+        .set('x-mock-user-id', mockUsers.admin.id)
+        .set('x-mock-is-admin', 'true')
+        .send({ confirmKey: 'WRONGKEY' })
+        .expect(400);
+    });
+
+    it('should allow admin to hard delete project with correct confirmKey (200)', async () => {
+      await request(app.getHttpServer())
+        .delete(`/projects/${mainProjectId}`)
+        .set('x-mock-user-id', mockUsers.admin.id)
+        .set('x-mock-is-admin', 'true')
+        .send({ confirmKey: 'MAIN' })
+        .expect(200);
+
+      // Verify that project is deleted (404 for Admin)
+      await request(app.getHttpServer())
+        .get(`/projects/${mainProjectId}`)
+        .set('x-mock-user-id', mockUsers.admin.id)
+        .set('x-mock-is-admin', 'true')
+        .expect(404);
     });
   });
 });
