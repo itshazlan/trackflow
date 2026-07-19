@@ -13,14 +13,18 @@ import {
   timesheetApprovals,
 } from '../../db/schema/timesheets';
 import { timeBlocks } from '../../db/schema/time-tracking';
-import { projectMemberships } from '../../db/schema/projects';
+import { projectMemberships, projects } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
 import { CreateManualEntryDto } from './dto/create-manual-entry.dto';
 import { CreateTimesheetDto, ApproveTimesheetDto } from './dto/timesheet.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TimesheetsService {
-  constructor(@Inject(DRIZZLE) private db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private db: any,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // ─── Manual Time Entries ───────────────────────────────────────────────────
 
@@ -283,6 +287,23 @@ export class TimesheetsService {
         .set({ status: dto.decision })
         .where(eq(timesheets.id, timesheetId))
         .returning();
+
+      // Fetch project details for the notification
+      const [project] = await tx
+        .select()
+        .from(projects)
+        .where(eq(projects.id, existing.projectId))
+        .limit(1);
+
+      const statusIndo = dto.decision === 'approved' ? 'disetujui' : 'ditolak';
+      await this.notificationsService.createNotification({
+        userId: existing.userId,
+        type: 'timesheet_approved',
+        title: `Timesheet ${statusIndo.toUpperCase()}`,
+        body: `Timesheet Anda untuk proyek "${project?.name || ''}" periode ${existing.periodStart} s/d ${existing.periodEnd} telah ${statusIndo}.`,
+        entityType: 'timesheet',
+        entityId: timesheetId,
+      });
 
       return updated;
     });

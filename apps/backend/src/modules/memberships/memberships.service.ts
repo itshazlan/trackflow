@@ -7,13 +7,17 @@ import {
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
-import { projectMemberships } from '../../db/schema/projects';
+import { projectMemberships, projects } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
 import { ProjectRole } from '@trackflow/shared-types';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class MembershipsService {
-  constructor(@Inject(DRIZZLE) private db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private db: any,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async addMember(projectId: string, userId: string, role: ProjectRole) {
     // 1. Verify user exists
@@ -53,8 +57,27 @@ export class MembershipsService {
       })
       .returning();
 
+    // Fetch project details for the notification
+    const [project] = await this.db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+
+    if (project) {
+      await this.notificationsService.createNotification({
+        userId,
+        type: 'project_member_added',
+        title: 'Ditambahkan ke Proyek',
+        body: `Anda telah ditambahkan sebagai member di proyek "${project.name}" dengan peran "${role}"`,
+        entityType: 'project',
+        entityId: projectId,
+      });
+    }
+
     return newMembership;
   }
+
 
   async getMembers(projectId: string) {
     return this.db

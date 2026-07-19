@@ -20,6 +20,8 @@ import { SyncTimeBlockDto } from './dto/sync-time-block.dto';
 import { R2Service } from './r2.service';
 import { randomUUID } from 'crypto';
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
+import { user } from '../../db/schema/auth';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TimeTrackingService {
@@ -27,6 +29,7 @@ export class TimeTrackingService {
     @Inject(DRIZZLE) private db: any,
     private readonly r2Service: R2Service,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async sync(dto: SyncTimeBlockDto, userObj: { id: string; isAdmin: boolean }) {
@@ -376,6 +379,23 @@ export class TimeTrackingService {
           actorId,
           reason,
           projectId: existing.projectId,
+        });
+
+        // Fetch actor details for the notification
+        const [actor] = await tx
+          .select()
+          .from(user)
+          .where(eq(user.id, actorId))
+          .limit(1);
+
+        const actionText = action === 'delete' ? 'dihapus' : 'ditandai tidak dibayar';
+        await this.notificationsService.createNotification({
+          userId: existing.userId,
+          type: 'timeblock_overridden',
+          title: 'Blok Waktu Di-override Admin',
+          body: `Blok waktu Anda telah ${actionText} oleh Admin ${actor?.name || ''}. Alasan: ${reason}`,
+          entityType: 'time_block',
+          entityId: timeBlockId,
         });
       }
 

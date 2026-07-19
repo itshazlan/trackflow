@@ -12,6 +12,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { UsersModule } from './modules/users/users.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -26,7 +27,9 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
     AdminModule,
     UsersModule,
     RealtimeModule,
+    NotificationsModule,
   ],
+
   controllers: [AppController],
   providers: [AppService],
 })

@@ -18,3 +18,25 @@ export interface UserDto {
   employmentStatus: EmploymentStatus;
   isAdmin: boolean;
 }
+
+export type NotificationType =
+  | 'project_member_added'
+  | 'issue_assigned'
+  | 'issue_mentioned'
+  | 'timesheet_approved'
+  | 'timeblock_overridden';
+
+export type NotificationEntityType = 'project' | 'issue' | 'timesheet' | 'time_block';
+
+export interface NotificationDto {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  entityType: NotificationEntityType;
+  entityId: string;
+  isRead: boolean;
+  createdAt: string;
+}
+

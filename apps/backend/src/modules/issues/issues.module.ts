@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DbModule } from '../../db/db.module';
 import { TimeTrackingModule } from '../time-tracking/time-tracking.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { TrackersService } from './trackers.service';
 import { TrackersController } from './trackers.controller';
 import { StatusesService } from './statuses.service';
@@ -14,7 +15,7 @@ import { IssuesService } from './issues.service';
 import { UserIssuesController, IssuesController } from './issues.controller';
 
 @Module({
-  imports: [DbModule, TimeTrackingModule],
+  imports: [DbModule, TimeTrackingModule, NotificationsModule],
   controllers: [
     TrackersController,
     StatusesController,

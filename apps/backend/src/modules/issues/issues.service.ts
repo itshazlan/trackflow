@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { eq, and, or, asc, sql } from 'drizzle-orm';
+import { eq, and, or, asc, sql, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import {
@@ -19,10 +19,10 @@ import {
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
 import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
-import { CreateAttachmentDto } from './dto/attachment.dto';
 import { CreateCommentDto, UpdateCommentDto } from './dto/comment.dto';
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
 import { R2Service } from '../time-tracking/r2.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class IssuesService {
@@ -30,6 +30,7 @@ export class IssuesService {
     @Inject(DRIZZLE) private db: any,
     private readonly realtimeGateway: RealtimeGateway,
     private readonly r2Service: R2Service,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(
@@ -70,6 +71,7 @@ export class IssuesService {
         .returning({
           issueSequence: projects.issueSequence,
           key: projects.key,
+          name: projects.name,
         });
 
       if (!updatedProject) {
@@ -99,9 +101,21 @@ export class IssuesService {
       return {
         ...insertedIssue,
         projectKey: updatedProject.key,
+        projectName: updatedProject.name,
         displayId: `${updatedProject.key}-${insertedIssue.number}`,
       };
     });
+
+    if (newIssue.assigneeId) {
+      await this.notificationsService.createNotification({
+        userId: newIssue.assigneeId,
+        type: 'issue_assigned',
+        title: 'Issue Ditugaskan ke Anda',
+        body: `Anda telah ditugaskan ke issue "${newIssue.title}" (${newIssue.displayId}) di proyek "${newIssue.projectName || newIssue.projectKey}".`,
+        entityType: 'issue',
+        entityId: newIssue.id,
+      });
+    }
 
     return newIssue;
   }
@@ -661,6 +675,34 @@ export class IssuesService {
       authorId: userId,
       bodyPreview,
     });
+
+    const mentionRegex = /@(\w+)/g;
+    const matches: string[] = [];
+    let match;
+    while ((match = mentionRegex.exec(createCommentDto.body)) !== null) {
+      matches.push(match[1]);
+    }
+    const uniqueUsernames = [...new Set(matches)];
+
+    if (uniqueUsernames.length > 0) {
+      const matchedUsers = await this.db
+        .select()
+        .from(user)
+        .where(inArray(user.username, uniqueUsernames));
+
+      for (const u of matchedUsers) {
+        if (u.id !== userId) {
+          await this.notificationsService.createNotification({
+            userId: u.id,
+            type: 'issue_mentioned',
+            title: 'Anda disebut dalam komentar',
+            body: `${currentUser.name} menyebut Anda di komentar issue "${issue.title}": "${bodyPreview}"`,
+            entityType: 'issue',
+            entityId: issue.id,
+          });
+        }
+      }
+    }
 
     const [commentWithAuthor] = await this.db
       .select({
