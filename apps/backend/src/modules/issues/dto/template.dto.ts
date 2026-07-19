@@ -19,8 +19,8 @@ export class CreateTemplateDto {
   descriptionPattern?: string;
 
   @IsUUID()
-  @IsNotEmpty()
-  trackerId: string;
+  @IsOptional()
+  trackerId?: string;
 
   @IsUUID()
   @IsOptional()

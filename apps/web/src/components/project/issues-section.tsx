@@ -761,7 +761,8 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const bugTemplate = templates.find((t) => t.trackerId === selectedTrackerId);
 
   const handleOpenCreateModal = () => {
-    const defaultTrackerId = selectedTrackerId || (trackers.length > 0 ? trackers[0].id : "");
+    const defaultTrackerId = selectedTrackerId || 
+      (templates.length > 0 ? templates[0].trackerId : (trackers.length > 0 ? trackers[0].id : ""));
     if (defaultTrackerId && !selectedTrackerId) {
       setSelectedTrackerId(defaultTrackerId);
     }
@@ -1478,11 +1479,17 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   className="h-8 w-full rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
                   disabled={createLoading}
                 >
-                  {trackers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
+                  {templates.length > 0
+                    ? templates.map((tpl) => (
+                        <option key={tpl.trackerId} value={tpl.trackerId}>
+                          {tpl.name}
+                        </option>
+                      ))
+                    : trackers.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
                 </select>
               </div>
 
@@ -1715,11 +1722,17 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   className="h-8 w-full rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
                   disabled={editLoading}
                 >
-                  {trackers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
+                  {templates.length > 0
+                    ? templates.map((tpl) => (
+                        <option key={tpl.trackerId} value={tpl.trackerId}>
+                          {tpl.name}
+                        </option>
+                      ))
+                    : trackers.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
                 </select>
               </div>
 

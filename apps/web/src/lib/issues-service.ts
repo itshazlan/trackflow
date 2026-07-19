@@ -404,7 +404,7 @@ export async function getProjectTemplates(projectId: string): Promise<IssueTempl
 
 export async function createProjectTemplate(
   projectId: string,
-  payload: { name: string; trackerId: string; titlePattern?: string; descriptionPattern?: string }
+  payload: { name: string; trackerId?: string; titlePattern?: string; descriptionPattern?: string }
 ): Promise<IssueTemplate> {
   const res = await fetch(`/api/projects/${projectId}/templates`, {
     method: "POST",

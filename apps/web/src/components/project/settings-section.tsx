@@ -399,7 +399,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
 
   const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!templateName.trim() || !templateTrackerId) return;
+    if (!templateName.trim()) return;
 
     setTemplateActionLoading(true);
     setTemplateError("");
@@ -407,9 +407,9 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
     try {
       const payload = {
         name: templateName.trim(),
-        trackerId: templateTrackerId,
         titlePattern: templateTitlePattern.trim() || undefined,
         descriptionPattern: templateDescriptionPattern.trim() || undefined,
+        trackerId: templateEditing ? templateTrackerId : undefined,
       };
 
       if (templateEditing) {
@@ -533,7 +533,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
         </TabsList>
 
         {/* General Settings Content */}
-        <TabsContent value="general" className="mt-0 flex flex-col gap-6">
+        <TabsContent value="general" className="mt-0 flex flex-col gap-6 pb-24">
           <div className="flex flex-col gap-6 rounded-lg border border-border bg-card p-4.5">
             <div>
               <h3 className="text-[13.5px] font-semibold text-foreground">Detail Proyek</h3>
@@ -658,7 +658,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
         </TabsContent>
 
         {/* Workflow settings content */}
-        <TabsContent value="workflow" className="mt-0 flex flex-col gap-4">
+        <TabsContent value="workflow" className="mt-0 flex flex-col gap-4 pb-24">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-[13.5px] font-semibold text-foreground">Alur Kerja Status (Workflow)</h3>
@@ -749,7 +749,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
         </TabsContent>
 
         {/* Templates settings content */}
-        <TabsContent value="templates" className="mt-0 flex flex-col gap-4">
+        <TabsContent value="templates" className="mt-0 flex flex-col gap-4 pb-24">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-[13.5px] font-semibold text-foreground">Template Form Tiket</h3>
@@ -774,16 +774,6 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
                   <div>
                     <div className="flex items-center justify-between">
                       <h4 className="text-[13px] font-semibold text-foreground">{tpl.name}</h4>
-                      <div className="flex items-center gap-1.5">
-                        {tpl.projectId === null && (
-                          <span className="rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary uppercase tracking-wider">
-                            Global
-                          </span>
-                        )}
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
-                          {tpl.tracker?.name || "Tugas"}
-                        </span>
-                      </div>
                     </div>
                     {tpl.titlePattern && (
                       <p className="text-[11.5px] text-muted-foreground mt-2 leading-relaxed">
@@ -818,7 +808,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
         </TabsContent>
 
         {/* Members settings content */}
-        <TabsContent value="members" className="mt-0 flex flex-col gap-4">
+        <TabsContent value="members" className="mt-0 flex flex-col gap-4 pb-24">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-[13.5px] font-semibold text-foreground">Anggota Proyek</h3>
@@ -1022,24 +1012,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="template-tracker" className="text-[11px] font-medium text-muted-foreground">
-                  Tracker yang Dihubungkan
-                </Label>
-                <select
-                  id="template-tracker"
-                  value={templateTrackerId}
-                  onChange={(e) => setTemplateTrackerId(e.target.value)}
-                  className="h-8 rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
-                  disabled={templateActionLoading}
-                >
-                  {trackers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="template-pattern" className="text-[11px] font-medium text-muted-foreground">
