@@ -8,6 +8,7 @@ import { getProjects, Project } from "@/lib/projects-service";
 import { useQuery } from "@tanstack/react-query";
 import ProjectSwitcher from "@/components/project/project-switcher";
 import ProfileModal from "@/components/profile-modal";
+import NotificationBell from "@/components/notification-bell";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -447,6 +448,9 @@ export default function DashboardLayout({
               <span className="rounded bg-primary/15 border border-primary/20 px-1.5 py-0.5 text-[10px] font-semibold text-primary uppercase">
                 Admin
               </span>
+            )}
+            {session?.user?.id && (
+              <NotificationBell userId={session.user.id} />
             )}
             <Avatar className="h-6 w-6 border border-border">
               {session?.user?.image ? (

@@ -35,6 +35,12 @@ export class UserIssuesController {
     return this.issuesService.findAllForUser(req.user.id);
   }
 
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.issuesService.findOne(id);
+  }
+
+
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,

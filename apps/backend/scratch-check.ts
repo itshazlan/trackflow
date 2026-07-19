@@ -11,7 +11,7 @@ async function main() {
 
   console.log('--- USERS ---');
   const allUsers = await db.select().from(user);
-  console.log(allUsers.map(u => ({ id: u.id, name: u.name, email: u.email, isAdmin: u.isAdmin })));
+  console.log(allUsers.map(u => ({ id: u.id, name: u.name, username: u.username, email: u.email, isAdmin: u.isAdmin })));
 
   console.log('--- PROJECTS ---');
   const allProjects = await db.select().from(projects);

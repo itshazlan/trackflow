@@ -195,9 +195,13 @@ function KanbanCard({ issue, onClick }: { issue: Issue; onClick: () => void }) {
 
         <div className="flex items-center gap-1.5">
           <Avatar className="h-4.5 w-4.5">
-            <AvatarFallback className="text-[7.5px] font-bold bg-primary/10 border border-primary/20 text-primary uppercase">
-              {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
-            </AvatarFallback>
+            {issue.assignee?.image ? (
+              <img src={issue.assignee.image} alt={issue.assignee.name} className="h-full w-full object-cover rounded-full" />
+            ) : (
+              <AvatarFallback className="text-[7.5px] font-bold bg-primary/10 border border-primary/20 text-primary uppercase">
+                {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+              </AvatarFallback>
+            )}
           </Avatar>
         </div>
       </div>
@@ -241,9 +245,13 @@ function KanbanCardOverlay({ issue }: { issue: Issue }) {
 
         <div className="flex items-center gap-1.5">
           <Avatar className="h-4.5 w-4.5">
-            <AvatarFallback className="text-[7.5px] font-bold bg-primary/10 border border-primary/20 text-primary uppercase">
-              {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
-            </AvatarFallback>
+            {issue.assignee?.image ? (
+              <img src={issue.assignee.image} alt={issue.assignee.name} className="h-full w-full object-cover rounded-full" />
+            ) : (
+              <AvatarFallback className="text-[7.5px] font-bold bg-primary/10 border border-primary/20 text-primary uppercase">
+                {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+              </AvatarFallback>
+            )}
           </Avatar>
         </div>
       </div>
@@ -1212,9 +1220,13 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-4.5 w-4.5">
-                            <AvatarFallback className="text-[8px] font-bold">
-                              {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
-                            </AvatarFallback>
+                            {issue.assignee?.image ? (
+                              <img src={issue.assignee.image} alt={issue.assignee.name} className="h-full w-full object-cover rounded-full" />
+                            ) : (
+                              <AvatarFallback className="text-[8px] font-bold">
+                                {issue.assignee ? issue.assignee.name.slice(0, 2).toUpperCase() : "-"}
+                              </AvatarFallback>
+                            )}
                           </Avatar>
                           <span className="truncate max-w-[100px] text-[12.5px]">
                             {issue.assignee?.name || "Unassigned"}

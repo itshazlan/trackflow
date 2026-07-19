@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { eq, and, or, asc, sql, inArray } from 'drizzle-orm';
+import { eq, and, or, asc, desc, sql, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import {
@@ -150,6 +150,7 @@ export class IssuesService {
           id: user.id,
           name: user.name,
           email: user.email,
+          image: user.image,
         },
         projectKey: projects.key,
       })
@@ -614,7 +615,7 @@ export class IssuesService {
       .from(issueComments)
       .innerJoin(user, eq(issueComments.authorId, user.id))
       .where(eq(issueComments.issueId, issueId))
-      .orderBy(asc(issueComments.createdAt));
+      .orderBy(desc(issueComments.createdAt));
   }
 
   async createComment(
@@ -685,10 +686,11 @@ export class IssuesService {
     const uniqueUsernames = [...new Set(matches)];
 
     if (uniqueUsernames.length > 0) {
+      const lowerUsernames = uniqueUsernames.map((u) => u.toLowerCase());
       const matchedUsers = await this.db
         .select()
         .from(user)
-        .where(inArray(user.username, uniqueUsernames));
+        .where(inArray(sql`lower(${user.username})`, lowerUsernames));
 
       for (const u of matchedUsers) {
         if (u.id !== userId) {

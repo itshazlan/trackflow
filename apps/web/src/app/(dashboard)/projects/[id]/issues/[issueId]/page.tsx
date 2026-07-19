@@ -44,7 +44,6 @@ import {
   Loader2,
   AlertCircle,
   Trash2,
-  Calendar,
   Paperclip,
   X,
   Send,
@@ -61,7 +60,6 @@ import {
   Check,
   AtSign,
   Smile,
-  Video,
 } from "lucide-react";
 
 const EmojiPicker = dynamic(
@@ -167,12 +165,6 @@ export default function IssueDetailPage() {
   const [emojiActiveTarget, setEmojiActiveTarget] = useState<"description" | "comment" | { type: "comment-edit"; id: string } | null>(null);
   const [emojiTextareaRef, setEmojiTextareaRef] = useState<HTMLTextAreaElement | null>(null);
 
-  const COMMON_EMOJIS = [
-    "😀", "😂", "😍", "👍", "🔥", "🎉", "🚀", "👀", "❤️", "💯",
-    "🤔", "👏", "🙌", "✨", "✅", "❌", "🚧", "💡", "🎨", "⚠️",
-    "💻", "📱", "📅", "💬", "🥳", "💔", "😭", "🙄", "🤩", "😴"
-  ];
-
   const filteredMembers = members.filter(
     (m) =>
       m.name.toLowerCase().includes(mentionSearch.toLowerCase()) ||
@@ -189,7 +181,7 @@ export default function IssueDetailPage() {
 
     const before = value.slice(0, lastAt);
     const after = value.slice(cursor);
-    const insertText = `@${member.name} `;
+    const insertText = `@${member.username} `;
     const newValue = before + insertText + after;
 
     const targetType = typeof mentionTarget === "object" ? mentionTarget?.type : mentionTarget;
@@ -705,9 +697,13 @@ export default function IssueDetailPage() {
         <Label className="text-[12px] font-semibold text-muted-foreground uppercase">Created By</Label>
         <div className="flex items-center gap-2 h-8 w-44 pl-1">
           <Avatar className="h-5 w-5 border border-border shadow-sm">
-            <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
-              {creator ? creator.name.slice(0, 2).toUpperCase() : "-"}
-            </AvatarFallback>
+            {creator?.image ? (
+              <img src={creator.image} alt={creator.name} className="h-full w-full object-cover rounded-full" />
+            ) : (
+              <AvatarFallback className="text-[8px] bg-primary/10 text-primary">
+                {creator ? creator.name.slice(0, 2).toUpperCase() : "-"}
+              </AvatarFallback>
+            )}
           </Avatar>
           <span className="text-[12px] truncate text-foreground font-medium">
             {creator?.name || "System"}
@@ -752,9 +748,13 @@ export default function IssueDetailPage() {
           <div className="flex -space-x-2 overflow-hidden">
             {members.slice(0, 4).map((member) => (
               <Avatar key={member.id} className="h-6 w-6 border-2 border-background ring-1 ring-border shadow-sm">
-                <AvatarFallback className="text-[9px] font-bold bg-muted text-muted-foreground">
-                  {member.name.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
+                {member.image ? (
+                  <img src={member.image} alt={member.name} className="h-full w-full object-cover rounded-full" />
+                ) : (
+                  <AvatarFallback className="text-[9px] font-bold bg-muted text-muted-foreground">
+                    {member.name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                )}
               </Avatar>
             ))}
           </div>
@@ -834,7 +834,7 @@ export default function IssueDetailPage() {
 
           {/* Left / Center Column (75%) */}
           <div
-            className={`lg:col-span-3 flex flex-col gap-5 ${isDetailDragging ? "bg-primary/5 border border-dashed border-primary rounded-lg p-3 transition-colors" : ""
+            className={`lg:col-span-3 flex flex-col gap-5 pb-24 ${isDetailDragging ? "bg-primary/5 border border-dashed border-primary rounded-lg p-3 transition-colors" : ""
               }`}
             onDragOver={(e) => {
               e.preventDefault();
@@ -926,9 +926,13 @@ export default function IssueDetailPage() {
                               }`}
                           >
                             <Avatar className="h-4 w-4 shrink-0">
-                              <AvatarFallback className="text-[7px] font-bold">
-                                {m.name.slice(0, 2).toUpperCase()}
-                              </AvatarFallback>
+                              {m.image ? (
+                                <img src={m.image} alt={m.name} className="h-full w-full object-cover rounded-full" />
+                              ) : (
+                                <AvatarFallback className="text-[7px] font-bold">
+                                  {m.name.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              )}
                             </Avatar>
                             <span className="truncate">{m.name}</span>
                           </button>
@@ -1168,9 +1172,13 @@ export default function IssueDetailPage() {
                           }`}
                       >
                         <Avatar className="h-4 w-4 shrink-0">
-                          <AvatarFallback className="text-[7px] font-bold">
-                            {m.name.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
+                          {m.image ? (
+                            <img src={m.image} alt={m.name} className="h-full w-full object-cover rounded-full" />
+                          ) : (
+                            <AvatarFallback className="text-[7px] font-bold">
+                              {m.name.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          )}
                         </Avatar>
                         <span className="truncate">{m.name}</span>
                       </button>
@@ -1299,9 +1307,13 @@ export default function IssueDetailPage() {
                         className="flex gap-3 items-start text-xs border-b border-border/50 pb-3 last:border-b-0 last:pb-0 group"
                       >
                         <Avatar className="h-7 w-7 mt-0.5 border border-border shadow-sm">
-                          <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">
-                            {comment.author.name.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
+                          {comment.author.image ? (
+                            <img src={comment.author.image} alt={comment.author.name} className="h-full w-full object-cover rounded-full" />
+                          ) : (
+                            <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">
+                              {comment.author.name.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          )}
                         </Avatar>
                         <div className="flex-1 flex flex-col gap-1 min-w-0">
                           <div className="flex items-baseline gap-1.5 flex-wrap">
@@ -1336,9 +1348,13 @@ export default function IssueDetailPage() {
                                         }`}
                                     >
                                       <Avatar className="h-4 w-4 shrink-0">
-                                        <AvatarFallback className="text-[7px] font-bold">
-                                          {m.name.slice(0, 2).toUpperCase()}
-                                        </AvatarFallback>
+                                        {m.image ? (
+                                          <img src={m.image} alt={m.name} className="h-full w-full object-cover rounded-full" />
+                                        ) : (
+                                          <AvatarFallback className="text-[7px] font-bold">
+                                            {m.name.slice(0, 2).toUpperCase()}
+                                          </AvatarFallback>
+                                        )}
                                       </Avatar>
                                       <span className="truncate">{m.name}</span>
                                     </button>

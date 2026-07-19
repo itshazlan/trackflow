@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/api/auth/:path*`,
       },
       {
+        source: "/api/notifications/:path*",
+        destination: `${backendUrl}/notifications/:path*`,
+      },
+      {
         source: "/api/issues/:path*",
         destination: `${backendUrl}/issues/:path*`,
       },

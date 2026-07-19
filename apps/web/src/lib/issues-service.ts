@@ -18,6 +18,7 @@ export interface Issue {
     id: string;
     name: string;
     email: string;
+    image?: string | null;
   } | null;
   status?: {
     id: string;
@@ -49,6 +50,7 @@ export interface ProjectMember {
   username: string;
   role: 'manager' | 'developer' | 'reporter_qa';
   invitedAt: string;
+  image?: string | null;
 }
 
 export interface TemplateField {
