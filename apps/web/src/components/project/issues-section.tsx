@@ -1443,7 +1443,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
 
       {/* Create Issue Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[420px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
           <form onSubmit={handleCreateIssue}>
             <DialogHeader>
               <DialogTitle className="text-[14.5px] font-semibold">Buat Tiket Baru</DialogTitle>
@@ -1697,7 +1697,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
 
       {/* Edit Issue Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[420px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
           <form onSubmit={handleSaveEditIssue}>
             <DialogHeader>
               <DialogTitle className="text-[14.5px] font-semibold">Edit Tiket</DialogTitle>

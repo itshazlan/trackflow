@@ -97,6 +97,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
   const [templateDescriptionPattern, setTemplateDescriptionPattern] = useState("");
   const [templateActionLoading, setTemplateActionLoading] = useState(false);
   const [templateError, setTemplateError] = useState("");
+  const [templateIsPublic, setTemplateIsPublic] = useState(false);
 
   // Modals state for Members
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
@@ -386,12 +387,14 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
       setTemplateTrackerId(template.trackerId);
       setTemplateTitlePattern(template.titlePattern || "");
       setTemplateDescriptionPattern(template.descriptionPattern || "");
+      setTemplateIsPublic(template.projectId === null);
     } else {
       setTemplateEditing(null);
       setTemplateName("");
       setTemplateTrackerId(trackers.length > 0 ? trackers[0].id : "");
       setTemplateTitlePattern("");
       setTemplateDescriptionPattern("");
+      setTemplateIsPublic(false);
     }
     setTemplateError("");
     setIsTemplateModalOpen(true);
@@ -418,10 +421,14 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
           trackerId: payload.trackerId,
           titlePattern: payload.titlePattern || null,
           descriptionPattern: payload.descriptionPattern || null,
+          projectId: templateIsPublic ? null : projectId,
         });
         setTemplates((prev) => prev.map((t) => (t.id === templateEditing.id ? updated : t)));
       } else {
-        const newTemplate = await createProjectTemplate(projectId, payload);
+        const newTemplate = await createProjectTemplate(projectId, {
+          ...payload,
+          projectId: templateIsPublic ? null : projectId,
+        });
         setTemplates((prev) => [...prev, newTemplate]);
       }
       setIsTemplateModalOpen(false);
@@ -773,7 +780,14 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
                 <div key={tpl.id} className="rounded-lg border border-border bg-card p-4 flex flex-col justify-between shadow-sm">
                   <div>
                     <div className="flex items-center justify-between">
-                      <h4 className="text-[13px] font-semibold text-foreground">{tpl.name}</h4>
+                      <h4 className="text-[13px] font-semibold text-foreground flex items-center gap-2">
+                        {tpl.name}
+                        {tpl.projectId === null && (
+                          <span className="inline-flex items-center rounded bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary select-none">
+                            Publik / Global
+                          </span>
+                        )}
+                      </h4>
                     </div>
                     {tpl.titlePattern && (
                       <p className="text-[11.5px] text-muted-foreground mt-2 leading-relaxed">
@@ -791,7 +805,7 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
                       </div>
                     )}
                   </div>
-                  {tpl.projectId !== null && (
+                  {(tpl.projectId !== null || isAdmin) && (
                     <div className="border-t border-border mt-4 pt-3 flex items-center justify-end gap-2">
                       <Button variant="outline" size="sm" className="h-7 text-[11px] font-medium px-2.5" onClick={() => handleOpenTemplateModal(tpl)}>
                         Edit Template
@@ -1046,6 +1060,20 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
                   className="min-h-[160px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   disabled={templateActionLoading}
                 />
+              </div>
+
+              <div className="flex items-center gap-2 mt-1 py-1">
+                <input
+                  type="checkbox"
+                  id="template-is-public"
+                  checked={templateIsPublic}
+                  onChange={(e) => setTemplateIsPublic(e.target.checked)}
+                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary cursor-pointer bg-transparent border"
+                  disabled={templateActionLoading}
+                />
+                <Label htmlFor="template-is-public" className="text-[12px] font-medium text-foreground cursor-pointer select-none">
+                  Jadikan Template Publik (Dapat digunakan di proyek lainnya)
+                </Label>
               </div>
             </div>
 

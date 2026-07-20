@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   ForbiddenException,
+  Req,
 } from '@nestjs/common';
 import { TemplatesService } from './templates.service';
 import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto';
@@ -70,7 +71,10 @@ export class ProjectTemplatesController {
     @Param('projectId') projectId: string,
     @Body() createTemplateDto: CreateTemplateDto,
   ) {
-    createTemplateDto.projectId = projectId; // force project-level
+    // Allow managers to set projectId to null to make it public/global
+    if (createTemplateDto.projectId !== null) {
+      createTemplateDto.projectId = projectId;
+    }
     return this.templatesService.create(createTemplateDto);
   }
 
@@ -80,10 +84,12 @@ export class ProjectTemplatesController {
     @Param('projectId') projectId: string,
     @Param('id') id: string,
     @Body() updateTemplateDto: UpdateTemplateDto,
+    @Req() req: any,
   ) {
-    // Verify template belongs to the project before updating
+    // Verify template belongs to the project before updating, unless user is Admin
     const template = await this.templatesService.findOne(id);
-    if (template.projectId !== projectId) {
+    const isAdmin = req.user?.isAdmin;
+    if (template.projectId !== projectId && !isAdmin) {
       throw new ForbiddenException('Template does not belong to this project');
     }
     return this.templatesService.update(id, updateTemplateDto);
@@ -94,10 +100,12 @@ export class ProjectTemplatesController {
   async removeProjectTemplate(
     @Param('projectId') projectId: string,
     @Param('id') id: string,
+    @Req() req: any,
   ) {
-    // Verify template belongs to the project before deleting
+    // Verify template belongs to the project before deleting, unless user is Admin
     const template = await this.templatesService.findOne(id);
-    if (template.projectId !== projectId) {
+    const isAdmin = req.user?.isAdmin;
+    if (template.projectId !== projectId && !isAdmin) {
       throw new ForbiddenException('Template does not belong to this project');
     }
     return this.templatesService.remove(id);

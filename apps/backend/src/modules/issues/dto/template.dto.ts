@@ -43,4 +43,8 @@ export class UpdateTemplateDto {
   @IsUUID()
   @IsOptional()
   trackerId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  projectId?: string | null;
 }
