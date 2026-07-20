@@ -58,6 +58,22 @@ export class R2Service {
     return getSignedUrl(this.s3Client, command, { expiresIn: 900 });
   }
 
+  async getPresignedDownloadUrl(objectKey: string): Promise<string> {
+    if (!this.s3Client) {
+      // In mock mode, we point directly to local static server
+      return `http://localhost:3000/uploads/${objectKey}`;
+    }
+
+    const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: objectKey,
+    });
+
+    // Link expires in 15 minutes (900 seconds)
+    return getSignedUrl(this.s3Client, command, { expiresIn: 900 });
+  }
+
   async uploadBuffer(
     objectKey: string,
     buffer: Buffer,

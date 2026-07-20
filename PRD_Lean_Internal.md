@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.5 (Lean Internal) |
+| **Versi Dokumen** | 2.6 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: edit proyek, arsip/hard-delete proyek, tambah member saat create proyek, hapus akun = nonaktifkan bukan hard delete, sistem notifikasi esensial) |
+| **Tanggal** | 14 Juli 2026 (revisi: modul Dokumen — tipe dokumen dipilih saat upload, ditampilkan sebagai badge dalam satu daftar tunggal tanpa filter/tab, download & guard hapus) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -181,7 +181,12 @@ Field:
 
 | ID | Requirement |
 |---|---|
-| FR-040 | Setiap proyek memiliki modul Documents & Files untuk mengunggah panduan/berkas penting, disimpan di Cloudflare R2 |
+| FR-040 | Setiap proyek memiliki modul **Dokumen** untuk mengunggah panduan, berkas pendukung aplikasi, maupun dokumen pihak ketiga terkait proyek, disimpan di Cloudflare R2 |
+| FR-041 | Saat mengunggah dokumen baru, pengguna memilih **Tipe Dokumen**: **Dokumen Proyek**, **File Pendukung Aplikasi**, atau **Pihak Ketiga** |
+| FR-042 | Seluruh dokumen ditampilkan dalam **satu daftar** (tanpa tab/filter per tipe) — tipe dokumen ditampilkan sebagai **badge label** pada tiap baris, murni untuk konteks visual |
+| FR-043 | Pengguna dapat mengisi deskripsi singkat opsional saat mengunggah dokumen |
+| FR-044 | Pengguna dapat **mengunduh** dokumen yang sudah diunggah kapan saja |
+| FR-045 | Dokumen dapat dihapus oleh pengunggahnya sendiri, Manager proyek terkait, atau Admin |
 
 ### 7.6 Time Book
 
@@ -326,6 +331,13 @@ Field:
 2. Ikon lonceng di topbar developer tersebut langsung menampilkan badge angka baru, tanpa perlu refresh.
 3. Developer klik ikon lonceng, melihat notifikasi mention tersebut, klik untuk langsung dibawa ke tiket dan komentar terkait.
 4. Notifikasi otomatis tertandai telah dibaca.
+
+### 9.12 Mengelola Dokumen Proyek
+1. Manager membuka menu "Dokumen" pada proyek, klik "Upload Dokumen".
+2. Memilih file, memilih Tipe Dokumen (Dokumen Proyek/File Pendukung Aplikasi/Pihak Ketiga), mengisi deskripsi singkat opsional.
+3. Dokumen tersimpan dan langsung terlihat di daftar tunggal bersama dokumen lain, dibedakan lewat badge tipe.
+4. Anggota tim lain membuka menu yang sama, mengunduh dokumen yang dibutuhkan.
+5. Kalau ada dokumen yang keliru diunggah, pengunggahnya sendiri (atau Manager/Admin) dapat menghapusnya.
 
 ---
 

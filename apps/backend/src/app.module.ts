@@ -13,6 +13,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { UsersModule } from './modules/users/users.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { DocumentsModule } from './modules/documents/documents.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     UsersModule,
     RealtimeModule,
     NotificationsModule,
+    DocumentsModule,
   ],
 
   controllers: [AppController],

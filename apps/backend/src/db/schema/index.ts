@@ -6,3 +6,5 @@ export * from './issues';
 export * from './time-tracking';
 export * from './timesheets';
 export * from './notifications';
+export * from './documents';
+

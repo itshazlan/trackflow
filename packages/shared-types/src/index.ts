@@ -40,3 +40,21 @@ export interface NotificationDto {
   createdAt: string;
 }
 
+export type DocumentCategory = 'project_doc' | 'supporting_file' | 'third_party';
+
+export interface DocumentDto {
+  id: string;
+  projectId: string;
+  fileName: string;
+  category: DocumentCategory;
+  description?: string;
+  fileSizeBytes: number;
+  mimeType: string;
+  r2ObjectKey: string;
+  uploadedBy: string;
+  uploadedByName: string;
+  uploadedAt: string;
+  confirmedAt?: string;
+}
+
+
