@@ -42,6 +42,7 @@ import {
   FileText,
   Sun,
   Moon,
+  FolderOpen,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -148,6 +149,12 @@ export default function DashboardLayout({
       label: "Time Book",
       icon: Clock,
       href: projectId ? `/projects/${projectId}?tab=timebook` : null,
+    },
+    {
+      id: "documents",
+      label: "Documents",
+      icon: FolderOpen,
+      href: projectId ? `/projects/${projectId}/documents` : null,
     },
     {
       id: "reports",

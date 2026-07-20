@@ -53,23 +53,31 @@ async function bootstrap() {
 
   // Mount mock-r2 handler for local file upload testing
   expressInstance.put('/mock-r2/:bucket/*key', (req: any, res: any) => {
-    const key = req.params.key; // e.g. avatars/xxx.png or project/xxx/screenshots/xxx.webp
+    const keyParam = req.params.key || req.params[0];
+    const key = Array.isArray(keyParam) ? keyParam.join('/') : keyParam;
+    console.log(`[Mock R2 PUT] Upload request received. keyParam: ${JSON.stringify(keyParam)}, key: ${key}`);
     const filePath = join(process.cwd(), 'uploads', key);
     
-    // Ensure parent directory exists
-    fs.mkdirSync(join(filePath, '..'), { recursive: true });
-    
-    const writeStream = fs.createWriteStream(filePath);
-    req.pipe(writeStream);
-    
-    writeStream.on('finish', () => {
-      res.status(200).json({ success: true, path: `/uploads/${key}` });
-    });
-    
-    writeStream.on('error', (err) => {
-      console.error('[Mock R2 Upload Error]:', err);
+    try {
+      // Ensure parent directory exists
+      fs.mkdirSync(join(filePath, '..'), { recursive: true });
+      
+      const writeStream = fs.createWriteStream(filePath);
+      req.pipe(writeStream);
+      
+      writeStream.on('finish', () => {
+        console.log(`[Mock R2 PUT] Upload finished successfully: ${filePath}`);
+        res.status(200).json({ success: true, path: `/uploads/${key}` });
+      });
+      
+      writeStream.on('error', (err) => {
+        console.error('[Mock R2 PUT Error] writeStream error:', err);
+        res.status(500).send('Upload failed');
+      });
+    } catch (err) {
+      console.error('[Mock R2 PUT Error] handler crash:', err);
       res.status(500).send('Upload failed');
-    });
+    }
   });
 
   // Serve uploads folder static assets with R2 proxy fallback
