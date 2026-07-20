@@ -42,19 +42,51 @@ export interface NotificationDto {
 
 export type DocumentCategory = 'project_doc' | 'supporting_file' | 'third_party';
 
-export interface DocumentDto {
+export interface DocumentContainerDto {
   id: string;
   projectId: string;
-  fileName: string;
+  title: string;
+  description?: string | null;
   category: DocumentCategory;
-  description?: string;
+  createdBy: {
+    id: string;
+    name: string;
+    username: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  fileCount: number;
+}
+
+export interface DocumentFileDto {
+  id: string;
+  documentId: string;
+  fileName: string;
   fileSizeBytes: number;
   mimeType: string;
-  r2ObjectKey: string;
-  uploadedBy: string;
-  uploadedByName: string;
+  isImage: boolean;
+  uploadedBy: {
+    id: string;
+    name: string;
+    username: string;
+  };
   uploadedAt: string;
-  confirmedAt?: string;
+}
+
+export interface DocumentDetailDto {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string | null;
+  category: DocumentCategory;
+  createdBy: {
+    id: string;
+    name: string;
+    username: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  files: DocumentFileDto[];
 }
 
 
