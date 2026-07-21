@@ -88,7 +88,12 @@ async function bootstrap() {
       try {
         const r2Service = app.get(R2Service);
         if (r2Service && r2Service.isConfigured()) {
-          const key = req.path.replace(/^\//, ''); // e.g. project/.../xxx.webp
+          let key = req.path.replace(/^\//, ''); // e.g. project/.../xxx.webp
+          try {
+            key = decodeURIComponent(key);
+          } catch (err) {
+            // Ignore URIError: URI malformed
+          }
           let stream: any = null;
 
           try {
