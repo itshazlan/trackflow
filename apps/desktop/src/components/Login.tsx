@@ -83,7 +83,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="space-y-1">
             <label
               htmlFor="email"
@@ -146,7 +146,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center rounded bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/95 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            className="mt-2 flex w-full items-center justify-center rounded bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/95 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           >
             {loading ? (
               <>

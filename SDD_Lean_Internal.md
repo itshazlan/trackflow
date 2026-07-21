@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.8 (Lean Internal) |
+| **Versi Dokumen** | 2.9 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: modul Dokumen — kolom category/description/fileSize/mimeType, endpoint confirm & download presigned URL, daftar tunggal tanpa filter kategori) |
+| **Tanggal** | 14 Juli 2026 (revisi: modul Dokumen diubah jadi model kontainer ala Redmine — tabel `documents` + `document_files` terpisah, 9 endpoint baru, file dapat ditambah kapan saja) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -233,6 +233,7 @@ erDiagram
     PROJECTS ||--o{ ISSUES : contains
     PROJECTS ||--o{ ISSUE_TEMPLATES : defines
     PROJECTS ||--o{ DOCUMENTS : stores
+    DOCUMENTS ||--o{ DOCUMENT_FILES : contains
     ISSUE_STATUSES ||--o{ ISSUES : "current status"
     USERS ||--o{ ISSUES : "assigned to"
     ISSUES ||--o{ ISSUE_ATTACHMENTS : has
@@ -405,21 +406,33 @@ erDiagram
 > ```
 > Manager/Admin dapat mengedit array `fields` ini (tambah/hapus/ubah wajib-tidaknya, hanya memengaruhi teks & penanda yang di-generate) melalui UI pengaturan template (FR-033), tanpa perlu migrasi skema — cukup update baris jsonb.
 
-#### `documents`
-> Menu "Dokumen" di UI menampilkan **satu daftar tunggal** (tanpa tab/filter per kategori) — kolom `category` murni ditampilkan sebagai badge label untuk konteks visual, dipilih wajib saat upload (FR-041), tidak dipakai sebagai mekanisme filter di endpoint list.
+#### `documents` (kontainer — mengadopsi pola Redmine, bukan lagi 1 baris = 1 file)
+> Menu "Dokumen" di UI menampilkan **satu daftar tunggal** (tanpa tab/filter per kategori) — kolom `category` murni ditampilkan sebagai badge label untuk konteks visual. Setiap baris di sini adalah **kontainer** yang dapat memuat banyak file (lihat tabel `document_files` di bawah), bukan file itu sendiri.
 
 | Kolom | Tipe | Keterangan |
 |---|---|---|
 | id | uuid (PK) | |
 | project_id | uuid (FK) | |
+| title | varchar(255) | Judul Document (FR-041) |
+| description | text (nullable) | Deskripsi opsional (FR-041) |
+| category | enum(`project_doc`,`supporting_file`,`third_party`) default `project_doc` | Tipe Dokumen — dipilih wajib saat membuat Document, ditampilkan sebagai badge (FR-041, FR-043) |
+| created_by | uuid (FK → users) | |
+| created_at | timestamptz | |
+| updated_at | timestamptz | Diperbarui saat title/description/category diedit (FR-046) |
+
+#### `document_files` (banyak file per Document)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| document_id | uuid (FK → documents, `onDelete: cascade`) | Menghapus Document otomatis menghapus seluruh baris ini (FR-047) |
 | file_name | varchar | |
-| category | enum(`project_doc`,`supporting_file`,`third_party`) default `project_doc` | Tipe Dokumen — Dokumen Proyek/File Pendukung Aplikasi/Pihak Ketiga (FR-041) |
-| description | text (nullable) | Deskripsi singkat opsional (FR-043) |
-| file_size_bytes | bigint | Untuk validasi soft-limit di frontend (rekomendasi maks. 50MB/file) dan ditampilkan di list |
-| mime_type | varchar | Dipakai untuk memilih ikon tipe file di UI |
-| r2_object_key | varchar | `project/{projectId}/documents/{category}/{documentId}-{fileName}` |
-| uploaded_by | uuid (FK → users) | |
+| file_size_bytes | bigint | Untuk validasi soft-limit di frontend (rekomendasi maks. 50MB/file) |
+| mime_type | varchar | Dipakai untuk memilih ikon tipe file di UI, dan menentukan apakah file ditampilkan di galeri thumbnail (FR-045) |
+| r2_object_key | varchar | `project/{projectId}/documents/{documentId}/{fileId}-{fileName}` |
+| uploaded_by | uuid (FK → users) | Per-file, karena file bisa ditambahkan orang berbeda di waktu berbeda ke Document yang sama (FR-042) |
 | uploaded_at | timestamptz | |
+
+> Index disarankan: `documents (project_id, created_at DESC)` dan `document_files (document_id, uploaded_at ASC)`.
 
 #### `issue_attachments`
 | Kolom | Tipe | Keterangan |
@@ -576,11 +589,15 @@ erDiagram
 | Issue Comments | `/issues/:id/comments` | GET/POST | List & tambah komentar — **anggota proyek peran manapun** boleh akses |
 | Issue Comments | `/issues/:id/comments/:commentId` | PATCH/DELETE | Edit (penulis saja) / Hapus (penulis atau Admin untuk moderasi) |
 | Templates | `/projects/:id/issue-templates` | GET/POST/PATCH | Kelola template (termasuk edit array `fields`) — **Manager/Admin** |
-| Documents | `/projects/:id/documents` | GET | List **semua** dokumen dalam satu daftar (tanpa parameter filter kategori — `category` hanya badge tampilan, bukan filter) |
-| Documents | `/projects/:id/documents` | POST | Request presigned **upload** URL. Body wajib: `fileName`, `category`, `mimeType`; opsional: `description` |
-| Documents | `/projects/:id/documents/:docId/confirm` | POST | Konfirmasi upload selesai (pola sama seperti lampiran issue — presigned URL dulu, baru konfirmasi) |
-| Documents | `/projects/:id/documents/:docId/download` | GET | Generate presigned **download** URL — wajib karena bucket R2 bersifat private, tidak bisa diakses via URL publik langsung |
-| Documents | `/projects/:id/documents/:docId` | DELETE | Hapus dokumen — uploader-nya sendiri, Manager proyek terkait, atau Admin |
+| Documents | `/projects/:id/documents` | GET | List seluruh **Document** (kontainer) — tiap baris tampilkan `title`, `category`, `fileCount`, bukan file itu sendiri |
+| Documents | `/projects/:id/documents` | POST | Buat Document baru: `{ title, description?, category }` — **belum ada file** di langkah ini (FR-041) |
+| Documents | `/projects/:id/documents/:documentId` | GET | Detail 1 Document beserta **seluruh file** di dalamnya (array `files[]`, masing-masing dengan `uploadedBy`/`uploadedAt` sendiri) |
+| Documents | `/projects/:id/documents/:documentId` | PATCH | Edit `title`/`description`/`category` — **tidak mengubah file** di dalamnya (FR-046). Guard: pembuat Document, Manager, atau Admin |
+| Documents | `/projects/:id/documents/:documentId` | DELETE | Hapus Document **beserta seluruh file di dalamnya** (cascade, termasuk object R2). Guard: pembuat Document, Manager, atau Admin (FR-047) |
+| Document Files | `/projects/:id/documents/:documentId/files` | POST | Request presigned **upload** URL untuk menambah 1 file baru ke Document yang sudah ada — dipakai baik saat pertama kali isi file maupun "+ Tambah File" belakangan (FR-042). Body: `fileName`, `mimeType`, `fileSizeBytes` (maks. 50MB) |
+| Document Files | `/projects/:id/documents/:documentId/files/:fileId/confirm` | POST | Konfirmasi upload ke R2 selesai — baru setelah ini file dianggap resmi ada |
+| Document Files | `/projects/:id/documents/:documentId/files/:fileId/download` | GET | Generate presigned **download** URL (bucket R2 private, kedaluwarsa singkat mis. 5 menit) (FR-044) |
+| Document Files | `/projects/:id/documents/:documentId/files/:fileId` | DELETE | Hapus **1 file saja** — Document dan file lain di dalamnya tetap ada. Guard: pengunggah file tersebut, Manager, atau Admin (FR-048) |
 | Time Tracking | `/time-blocks/sync` | POST | Endpoint utama sinkronisasi dari Desktop Client tiap 10 menit |
 | Time Tracking | `/time-blocks/:id/screenshot` | POST | Upload screenshot (presigned URL) |
 | Time Tracking | `/time-blocks/:id` | DELETE | Pekerja hapus blok waktu miliknya sendiri |
@@ -1016,7 +1033,7 @@ sequenceDiagram
     Dev->>Dev: Navigasi ke issue terkait (entityType=issue, entityId)
 ```
 
-### 10.15 Alur Upload, Konfirmasi, dan Download Dokumen Proyek
+### 10.15 Alur Buat Document, Tambah File, dan Download (Model Kontainer)
 
 ```mermaid
 sequenceDiagram
@@ -1025,22 +1042,34 @@ sequenceDiagram
     participant PG as PostgreSQL
     participant R2 as Cloudflare R2
 
-    U->>U: Pilih file, pilih Tipe Dokumen (project_doc/supporting_file/third_party), isi deskripsi opsional
-    U->>A: POST /projects/:id/documents {fileName, category, mimeType, description}
-    A->>PG: Insert documents (metadata, belum ada file fisik)
-    A-->>U: presigned upload URL + documentId
+    Note over U: Langkah 1 — Buat Document (kontainer, belum ada file)
+    U->>U: Isi Judul, Deskripsi opsional, pilih Tipe Dokumen
+    U->>A: POST /projects/:id/documents {title, description, category}
+    A->>PG: Insert documents
+    A-->>U: 201 Created {documentId} — Document langsung muncul di daftar dengan fileCount=0
+
+    Note over U: Langkah 2 — Tambah file (bisa langsung, atau kapan saja belakangan)
+    U->>A: POST /projects/:id/documents/:documentId/files {fileName, mimeType, fileSizeBytes}
+    A->>PG: Cek fileSizeBytes <= 50MB
+    A-->>U: presigned upload URL + fileId
     U->>R2: Upload file langsung ke R2
     R2-->>U: Upload sukses
-    U->>A: POST /projects/:id/documents/:docId/confirm
-    A->>PG: Update fileSizeBytes (dari response R2 atau dihitung sebelum upload)
-    A-->>U: 200 OK — dokumen langsung muncul di daftar tunggal dengan badge kategori
+    U->>A: POST /projects/:id/documents/:documentId/files/:fileId/confirm
+    A->>PG: Insert document_files (uploadedBy=user saat ini)
+    A-->>U: 200 OK — file langsung muncul di detail Document, fileCount bertambah
 
-    Note over U: Kapan saja setelahnya
-    U->>A: GET /projects/:id/documents/:docId/download
-    A->>A: Cek dokumen memang milik proyek ini (tidak bisa diakses lintas-proyek)
+    Note over U: Bisa diulang — anggota tim lain menambah file lain ke Document yang sama, kapan saja
+
+    Note over U: Download — kapan saja setelahnya
+    U->>A: GET /projects/:id/documents/:documentId/files/:fileId/download
+    A->>A: Cek file memang milik documentId ini, dan documentId milik proyek ini
     A-->>U: presigned download URL (kedaluwarsa singkat, mis. 5 menit)
     U->>R2: Download langsung dari R2 menggunakan URL tersebut
 ```
+
+**Alur hapus (2 skenario berbeda konsekuensi):**
+- `DELETE /projects/:id/documents/:documentId` → hapus Document **beserta seluruh file di dalamnya** (cascade DB + hapus semua object R2 terkait).
+- `DELETE /projects/:id/documents/:documentId/files/:fileId` → hapus **1 file saja**, Document dan file lain tetap utuh.
 
 ---
 

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.6 (Lean Internal) |
+| **Versi Dokumen** | 2.7 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: modul Dokumen — tipe dokumen dipilih saat upload, ditampilkan sebagai badge dalam satu daftar tunggal tanpa filter/tab, download & guard hapus) |
+| **Tanggal** | 14 Juli 2026 (revisi: modul Dokumen diubah jadi model kontainer ala Redmine — 1 Document dapat memuat banyak file, ditambahkan kapan saja) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -179,14 +179,19 @@ Field:
 
 ### 7.5 Modul Documents & Files
 
+> **Perubahan model (mengadopsi pola Redmine):** "Document" kini adalah **kontainer** (punya Judul, Deskripsi, Tipe Dokumen sendiri) yang dapat memuat **banyak file sekaligus** — bukan lagi satu baris = satu file seperti draft sebelumnya. File dapat ditambahkan ke sebuah Document kapan saja, tidak harus semua sekaligus saat pembuatan.
+
 | ID | Requirement |
 |---|---|
-| FR-040 | Setiap proyek memiliki modul **Dokumen** untuk mengunggah panduan, berkas pendukung aplikasi, maupun dokumen pihak ketiga terkait proyek, disimpan di Cloudflare R2 |
-| FR-041 | Saat mengunggah dokumen baru, pengguna memilih **Tipe Dokumen**: **Dokumen Proyek**, **File Pendukung Aplikasi**, atau **Pihak Ketiga** |
-| FR-042 | Seluruh dokumen ditampilkan dalam **satu daftar** (tanpa tab/filter per tipe) — tipe dokumen ditampilkan sebagai **badge label** pada tiap baris, murni untuk konteks visual |
-| FR-043 | Pengguna dapat mengisi deskripsi singkat opsional saat mengunggah dokumen |
-| FR-044 | Pengguna dapat **mengunduh** dokumen yang sudah diunggah kapan saja |
-| FR-045 | Dokumen dapat dihapus oleh pengunggahnya sendiri, Manager proyek terkait, atau Admin |
+| FR-040 | Modul Dokumen menyediakan **Document** sebagai kontainer berisi Judul, Deskripsi, dan Tipe Dokumen, yang dapat memuat banyak file sekaligus, disimpan di Cloudflare R2 |
+| FR-041 | Saat membuat Document baru, pengguna mengisi Judul, Deskripsi (opsional), dan memilih **Tipe Dokumen**: **Dokumen Proyek**, **File Pendukung Aplikasi**, atau **Pihak Ketiga** — belum perlu mengunggah file di langkah ini |
+| FR-042 | Setelah Document dibuat, pengguna dapat **menambahkan file ke dalamnya kapan saja** (saat pembuatan maupun belakangan), tidak dibatasi jumlah file per Document |
+| FR-043 | Seluruh Document ditampilkan dalam **satu daftar** (tanpa tab/filter per Tipe Dokumen) — Tipe Dokumen ditampilkan sebagai **badge label** pada tiap baris, murni untuk konteks visual |
+| FR-044 | Pengguna dapat **mengunduh** file individual di dalam sebuah Document |
+| FR-045 | File bertipe gambar di dalam Document ditampilkan sebagai **galeri thumbnail** untuk pratinjau cepat |
+| FR-046 | Document (judul/deskripsi/tipe) dapat **diedit** oleh pembuatnya, Manager proyek terkait, atau Admin |
+| FR-047 | Menghapus Document akan menghapus **seluruh file di dalamnya** (cascade) — hanya dapat dilakukan oleh pembuat Document, Manager, atau Admin |
+| FR-048 | **File individual** (bukan seluruh Document) dapat dihapus oleh pengunggah file tersebut, Manager, atau Admin — tanpa menghapus Document maupun file lain di dalamnya |
 
 ### 7.6 Time Book
 
@@ -333,11 +338,13 @@ Field:
 4. Notifikasi otomatis tertandai telah dibaca.
 
 ### 9.12 Mengelola Dokumen Proyek
-1. Manager membuka menu "Dokumen" pada proyek, klik "Upload Dokumen".
-2. Memilih file, memilih Tipe Dokumen (Dokumen Proyek/File Pendukung Aplikasi/Pihak Ketiga), mengisi deskripsi singkat opsional.
-3. Dokumen tersimpan dan langsung terlihat di daftar tunggal bersama dokumen lain, dibedakan lewat badge tipe.
-4. Anggota tim lain membuka menu yang sama, mengunduh dokumen yang dibutuhkan.
-5. Kalau ada dokumen yang keliru diunggah, pengunggahnya sendiri (atau Manager/Admin) dapat menghapusnya.
+1. Manager membuka menu "Dokumen" pada proyek, klik "Document Baru".
+2. Mengisi Judul, Deskripsi opsional, dan memilih Tipe Dokumen (Dokumen Proyek/File Pendukung Aplikasi/Pihak Ketiga) — Document tersimpan meski belum ada file di dalamnya.
+3. Di halaman detail Document yang baru dibuat, klik "Tambah File" untuk mengunggah satu atau beberapa file ke dalamnya.
+4. Document tersebut langsung terlihat di daftar tunggal bersama Document lain, dibedakan lewat badge Tipe Dokumen.
+5. Beberapa hari kemudian, anggota tim lain membuka Document yang sama dan menambahkan file revisi tambahan — tanpa perlu membuat Document baru.
+6. Anggota tim mengunduh file yang dibutuhkan; file bergambar langsung terlihat sebagai thumbnail pratinjau.
+7. Kalau ada file yang keliru diunggah, pengunggahnya sendiri (atau Manager/Admin) dapat menghapus file tersebut tanpa memengaruhi file lain di Document yang sama.
 
 ---
 

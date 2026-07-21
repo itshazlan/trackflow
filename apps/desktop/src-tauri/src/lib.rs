@@ -1340,6 +1340,40 @@ async fn sync_pending_blocks(
     Ok(synced_any)
 }
 
+// Saat window ditampilkan (klik tray "Buka Aplikasi", atau app baru start)
+#[cfg(target_os = "macos")]
+fn show_main_window(app: &tauri::AppHandle) {
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular); // Dock icon muncul
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().ok();
+        window.set_focus().ok();
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().ok();
+        window.set_focus().ok();
+    }
+}
+
+// Saat window di-hide ke tray (klik close, atau Cmd+Q — sesuai keputusan Slice 25 sebelumnya)
+#[cfg(target_os = "macos")]
+fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        window.hide().ok();
+    }
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory); // Dock icon hilang
+}
+
+#[cfg(not(target_os = "macos"))]
+fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        window.hide().ok();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1358,7 +1392,7 @@ pub fn run() {
                     let _ = window.hide();
                 } else if !ALLOW_REAL_EXIT.load(Ordering::SeqCst) {
                     api.prevent_close();
-                    let _ = window.hide();
+                    hide_main_window(window.app_handle());
                 }
             }
         })
@@ -1469,7 +1503,7 @@ pub fn run() {
             // macOS dock icon setup (Accessory mode) and custom menu (excl. Quit to disable Cmd+Q)
             #[cfg(target_os = "macos")]
             {
-                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
                 use tauri::menu::{MenuBuilder, SubmenuBuilder};
                 let app_menu = SubmenuBuilder::new(app, "TrackFlow")
@@ -1538,10 +1572,7 @@ pub fn run() {
                             app.exit(0);
                         }
                         "tray_open" => {
-                            if let Some(win) = app.get_webview_window("main") {
-                                let _ = win.show();
-                                let _ = win.set_focus();
-                            }
+                            show_main_window(app);
                         }
                         "tray_pause_resume" => {
                             let timer_state = app.state::<ActiveTimerState>();
@@ -1689,9 +1720,7 @@ pub fn run() {
             tauri::RunEvent::ExitRequested { api, .. } => {
                 if !ALLOW_REAL_EXIT.load(Ordering::SeqCst) {
                     api.prevent_exit();
-                    if let Some(win) = app_handle.get_webview_window("main") {
-                        let _ = win.hide();
-                    }
+                    hide_main_window(app_handle);
                 }
             }
             _ => {}
