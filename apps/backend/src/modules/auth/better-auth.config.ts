@@ -25,6 +25,7 @@ const trustedOrigins = [
   'http://localhost:1420',
   'tauri://localhost',
   'https://tauri.localhost',
+  'http://tauri.localhost',
 ];
 
 if (process.env.BETTER_AUTH_URL) {
