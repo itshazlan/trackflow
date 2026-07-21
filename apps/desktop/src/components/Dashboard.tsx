@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, BASE_URL } from '../lib/api';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { ChevronDown, LogOut, Play, Shield, User, Wifi } from 'lucide-react';
@@ -24,6 +25,7 @@ interface ScreenshotEventPayload {
 
 export function Dashboard({ user, onLogout }: DashboardProps) {
   const [loggingOut, setLoggingOut] = useState(false);
+  const [appVersion, setAppVersion] = useState('0.1.0');
 
   // Slicing: Project & Task Selection states
   const [projects, setProjects] = useState<any[]>([]);
@@ -145,6 +147,14 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     async function initDashboard() {
       setLoadingProjects(true);
       setError(null);
+
+      // Load dynamic app version from Tauri configuration
+      try {
+        const version = await getVersion();
+        setAppVersion(version);
+      } catch (err) {
+        console.error('Failed to get app version:', err);
+      }
 
       // 1. Fetch projects from backend
       const res = await api.get<any[]>('/projects');
@@ -674,7 +684,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
       {/* Footer bar */}
       <footer className="border-t border-border bg-card px-4 py-2 text-[9px] text-muted-foreground flex justify-between">
-        <span>Desktop Client v0.1.0</span>
+        <span>Desktop Client v{appVersion}</span>
         <span>Secure Storage Enabled</span>
       </footer>
     </div>

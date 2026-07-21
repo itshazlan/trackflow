@@ -91,10 +91,10 @@ pub struct ActiveTimerState {
     pub start_time: Mutex<Option<i64>>, // Unix timestamp of session start
     pub current_block_start: Mutex<Option<i64>>, // Unix timestamp of current 10s block start
     pub accumulated_seconds: Mutex<u64>, // Accumulated seconds from previous periods
-    pub abort_handle: Mutex<Option<tokio::task::AbortHandle>>,
+    pub abort_handle: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     
     // Screenshot random scheduler states
-    pub screenshot_abort_handle: Mutex<Option<tokio::task::AbortHandle>>,
+    pub screenshot_abort_handle: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     pub current_screenshot: std::sync::Arc<Mutex<Option<ScreenshotData>>>,
 }
 
@@ -637,8 +637,8 @@ fn start_background_tick_loop(
     issue_id: Option<String>,
     note: Option<String>,
     db_path: PathBuf,
-) -> tokio::task::AbortHandle {
-    let task = tokio::spawn(async move {
+) -> tauri::async_runtime::JoinHandle<()> {
+    let task = tauri::async_runtime::spawn(async move {
         // Every 10 minutes (600 seconds) for production tracking
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(600));
         // First tick resolves instantly, skip it
@@ -657,7 +657,7 @@ fn start_background_tick_loop(
             let app_handle_clone = app_handle.clone();
             let current_screenshot_clone = std::sync::Arc::clone(&timer_state.current_screenshot);
             
-            let shot_task = tokio::spawn(async move {
+            let shot_task = tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_secs(random_offset_secs)).await;
                 match capture_and_save_screenshot(&app_handle_clone) {
                     Ok(data) => {
@@ -670,7 +670,7 @@ fn start_background_tick_loop(
             });
 
             // Store screenshot abort handle
-            *timer_state.screenshot_abort_handle.lock().unwrap() = Some(shot_task.abort_handle());
+            *timer_state.screenshot_abort_handle.lock().unwrap() = Some(shot_task);
 
             interval.tick().await;
             
@@ -722,7 +722,7 @@ fn start_background_tick_loop(
         }
     });
 
-    task.abort_handle()
+    task
 }
 
 #[derive(serde::Serialize, Clone)]
