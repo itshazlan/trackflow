@@ -110,11 +110,12 @@ export function ScreenshotReview() {
 
   // Continuous background session timer tick
   useEffect(() => {
+    if (!data) return;
     const timer = setInterval(() => {
       setElapsedSeconds((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [data]);
 
   const handleSubmit = async () => {
     if (!data) return;

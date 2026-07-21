@@ -426,6 +426,7 @@ fn do_submit_review(app_handle: &tauri::AppHandle, id: String) -> Result<(), Str
     *review_state.data.lock().unwrap() = None;
     
     if let Some(win) = app_handle.get_webview_window("screenshot-widget") {
+        let _ = win.emit("review-data-changed", ());
         let _ = win.hide();
     }
     
@@ -752,6 +753,12 @@ fn update_tray_state(app_handle: &tauri::AppHandle) {
             let start_time = *timer_state.start_time.lock().unwrap();
             let accumulated_seconds = *timer_state.accumulated_seconds.lock().unwrap();
             let issue_title = tracking_state.issue_title.lock().unwrap().clone().unwrap_or_else(|| "Tidak Ada Task".to_string());
+            let display_title = if issue_title.chars().count() > 35 {
+                let truncated: String = issue_title.chars().take(32).collect();
+                format!("{}...", truncated)
+            } else {
+                issue_title
+            };
 
             let elapsed = if status == "Running" && start_time.is_some() {
                 let now = chrono::Utc::now().timestamp();
@@ -766,14 +773,14 @@ fn update_tray_state(app_handle: &tauri::AppHandle) {
             let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
             if status == "Running" {
-                let _ = menu_state.info_item.set_text(format!("Sedang Melacak: {} — {}", issue_title, time_str));
+                let _ = menu_state.info_item.set_text(format!("Sedang Melacak: {} — {}", display_title, time_str));
                 let _ = menu_state.pause_resume_item.set_text("⏸ Pause");
                 let _ = menu_state.pause_resume_item.set_enabled(true);
                 let _ = tray.set_icon(Some(assets.icon_active.clone()));
                 #[cfg(target_os = "macos")]
                 let _ = tray.set_icon_as_template(true);
             } else if status == "Paused" {
-                let _ = menu_state.info_item.set_text(format!("Melacak Terjeda: {} — {}", issue_title, time_str));
+                let _ = menu_state.info_item.set_text(format!("Melacak Terjeda: {} — {}", display_title, time_str));
                 let _ = menu_state.pause_resume_item.set_text("▶ Resume");
                 let _ = menu_state.pause_resume_item.set_enabled(true);
                 let _ = tray.set_icon(Some(assets.icon_idle.clone()));
@@ -1374,6 +1381,15 @@ fn hide_main_window(app: &tauri::AppHandle) {
     }
 }
 
+fn handle_system_wake(app: &tauri::AppHandle) {
+    if let Some(widget) = app.get_webview_window("screenshot-widget") {
+        if !widget.is_visible().unwrap_or(false) {
+            println!("[Tauri Rust] screenshot-widget is hidden during wake, destroying and letting it recreate next time");
+            let _ = widget.close();
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1390,6 +1406,7 @@ pub fn run() {
                 } else if window.label() == "screenshot-widget" {
                     api.prevent_close();
                     let _ = window.hide();
+                    pause_countdown(window.app_handle());
                 } else if !ALLOW_REAL_EXIT.load(Ordering::SeqCst) {
                     api.prevent_close();
                     hide_main_window(window.app_handle());
@@ -1690,6 +1707,22 @@ pub fn run() {
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     update_tray_state(&app_handle_tray);
+                }
+            });
+
+            // Spawn background system wake detection routine
+            let app_handle_wake = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut last_tick = chrono::Utc::now().timestamp();
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    let now = chrono::Utc::now().timestamp();
+                    let elapsed = now - last_tick;
+                    if elapsed > 10 {
+                        println!("[Tauri Rust] System wake detected! Elapsed seconds: {}", elapsed);
+                        handle_system_wake(&app_handle_wake);
+                    }
+                    last_tick = now;
                 }
             });
 

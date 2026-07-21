@@ -464,9 +464,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
             {user.image ? (
               <img
                 src={
-                  user.image.startsWith('/api/uploads/')
-                    ? `${BASE_URL}${user.image.replace('/api/uploads/', '/uploads/')}`
-                    : user.image.startsWith('/')
+                  user.image.startsWith('/')
                     ? `${BASE_URL}${user.image}`
                     : user.image
                 }

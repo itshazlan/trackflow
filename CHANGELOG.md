@@ -13,6 +13,50 @@ _Belum ada perubahan yang menunggu rilis berikutnya._
 
 ---
 
+## [0.2.1] - 2026-07-21
+
+### Added
+- Pembatasan panjang teks judul issue (truncation) pada menu system tray untuk mencegah layout menu terlalu lebar.
+- Handler deteksi sleep/wake macOS untuk otomatis menutup dan membuat ulang instance widget peninjauan screenshot guna mencegah memori leak / rendering lag.
+
+### Fixed
+- Penyesuaian jarak (spacing) antara input password dan tombol masuk (Sign In) agar proporsional pada halaman login desktop.
+- Sinkronisasi kemunculan ikon Dock macOS (regular vs accessory mode) sesuai dengan status tampil/sembunyi window utama.
+- Perbaikan pemuatan gambar avatar profil pengguna pada halaman tracker desktop dengan mempertahankan prefix routing `/api/uploads`.
+
+---
+
+## [0.2.0] - 2026-07-20
+
+> **Catatan:** entri ini disusun berdasarkan seluruh fitur yang dikerjakan sejak v0.1.0 — sesuaikan/pangkas daftar di bawah kalau ada item yang ternyata belum benar-benar termasuk dalam build v0.2.0 ini.
+
+### Added — Manajemen Proyek
+- Edit nama & deskripsi proyek/sub-proyek (Kode Proyek tetap immutable).
+- Arsip proyek/sub-proyek (soft-delete) — data historis tetap utuh, proyek disembunyikan dari tampilan default.
+- Hapus proyek permanen (hard-delete) khusus Admin, dengan konfirmasi mengetik ulang Kode Proyek.
+- Tambah anggota proyek langsung saat membuat proyek baru (tidak perlu buka halaman terpisah).
+
+### Added — Tampilan Tiket
+- **Kanban view** — drag-and-drop kartu antar kolom status (via dnd-kit), tervalidasi terhadap pembatasan role per status.
+- **Calendar view** — menampilkan tiket berdasarkan due date (via date-fns).
+
+### Added — Administrasi Pengguna
+- Admin dapat "Hapus Akun" pengguna — menonaktifkan login & memaksa logout seluruh sesi aktif (bukan menghapus data historis).
+
+### Added — Notifikasi
+- Sistem notifikasi realtime: anggota baru ditambahkan ke proyek, assignment tiket, mention (`@username`) di komentar, approval timesheet, override blok waktu.
+- Ikon lonceng di topbar dengan badge unread count, update realtime via Socket.io.
+
+### Added — Modul Dokumen
+- Dokumen kini bermodel **kontainer** (judul, deskripsi, tipe dokumen) yang dapat memuat banyak file sekaligus, ditambahkan kapan saja — bukan lagi satu dokumen = satu file.
+- Galeri thumbnail untuk file bergambar.
+- Download presigned URL per file.
+
+### Fixed
+- Perbaikan performa Floating Widget terkait siklus sleep/wake macOS.
+
+---
+
 ## [0.1.0] - 2026-07-18
 
 Rilis pertama TrackFlow — mencakup web dashboard, backend, dan desktop client untuk macOS (Universal), Windows, dan Linux.
@@ -69,5 +113,6 @@ Rilis pertama TrackFlow — mencakup web dashboard, backend, dan desktop client 
 
 ---
 
-[Unreleased]: https://github.com/itshazlan/trackflow/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/itshazlan/trackflow/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/itshazlan/trackflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/itshazlan/trackflow/releases/tag/v0.1.0
