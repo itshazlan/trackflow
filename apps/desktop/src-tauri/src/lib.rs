@@ -1,6 +1,6 @@
 use keyring::{Entry, Error};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicBool, Ordering};
 use std::path::PathBuf;
 use rusqlite::{Connection, params};
 use tauri::Manager;
@@ -11,6 +11,7 @@ static ALLOW_REAL_EXIT: AtomicBool = AtomicBool::new(false);
 // Global Atomic Event Counters for OS Input Hook (Keyboard / Mouse)
 static KEYBOARD_COUNT: AtomicU32 = AtomicU32::new(0);
 static MOUSE_COUNT: AtomicU32 = AtomicU32::new(0);
+static LAST_MOUSE_MOVE: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -263,8 +264,18 @@ fn input_callback(event: rdev::Event) {
         rdev::EventType::KeyPress(_) => {
             KEYBOARD_COUNT.fetch_add(1, Ordering::Relaxed);
         }
-        rdev::EventType::ButtonPress(_) | rdev::EventType::MouseMove { .. } | rdev::EventType::Wheel { .. } => {
+        rdev::EventType::ButtonPress(_) | rdev::EventType::Wheel { .. } => {
             MOUSE_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
+        rdev::EventType::MouseMove { .. } => {
+            if let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                let now = duration.as_millis() as u64;
+                let last = LAST_MOUSE_MOVE.load(Ordering::Relaxed);
+                if now >= last + 500 {
+                    LAST_MOUSE_MOVE.store(now, Ordering::Relaxed);
+                    MOUSE_COUNT.fetch_add(1, Ordering::Relaxed);
+                }
+            }
         }
         _ => {}
     }

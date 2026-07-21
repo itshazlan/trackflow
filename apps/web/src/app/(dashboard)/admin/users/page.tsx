@@ -185,7 +185,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto flex flex-col gap-6">
+    <div className="p-6 pb-20 max-w-6xl mx-auto flex flex-col gap-6">
       {/* Header */}
       <div className="border-b border-border pb-4 flex justify-between items-center">
         <div>

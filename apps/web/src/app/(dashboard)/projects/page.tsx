@@ -218,7 +218,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto flex flex-col gap-6">
+    <div className="p-6 pb-20 max-w-5xl mx-auto flex flex-col gap-6">
       {/* Premium CTA Banner */}
       <div className="rounded-lg border border-border bg-gradient-to-r from-accent/40 via-accent/15 to-transparent p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>

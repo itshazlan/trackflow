@@ -334,6 +334,24 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<"list" | "kanban" | "calendar">("list");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedMode = localStorage.getItem("trackflow:issues-view-mode");
+      if (savedMode === "list" || savedMode === "kanban" || savedMode === "calendar") {
+        if (window.innerWidth >= 640) {
+          setViewMode(savedMode);
+        }
+      }
+    }
+  }, []);
+
+  const changeViewMode = (mode: "list" | "kanban" | "calendar") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("trackflow:issues-view-mode", mode);
+    }
+  };
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -1035,7 +1053,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   ? "bg-background text-foreground shadow-xs border border-border/50"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-              onClick={() => setViewMode("list")}
+              onClick={() => changeViewMode("list")}
             >
               List
             </Button>
@@ -1047,7 +1065,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   ? "bg-background text-foreground shadow-xs border border-border/50"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-              onClick={() => setViewMode("kanban")}
+              onClick={() => changeViewMode("kanban")}
             >
               Kanban
             </Button>
@@ -1059,7 +1077,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   ? "bg-background text-foreground shadow-xs border border-border/50"
                   : "text-muted-foreground hover:text-foreground"
               }`}
-              onClick={() => setViewMode("calendar")}
+              onClick={() => changeViewMode("calendar")}
             >
               Kalender
             </Button>

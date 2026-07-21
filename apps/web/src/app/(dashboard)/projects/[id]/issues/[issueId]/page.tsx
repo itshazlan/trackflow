@@ -294,30 +294,121 @@ export default function IssueDetailPage() {
 
   const renderFormattedText = (text: string | null) => {
     if (!text) return null;
-    const parts = text.split(/(\s+)/);
-    return parts.map((part, idx) => {
-      if (part.startsWith("@")) {
-        const nameToFind = part.slice(1);
-        const match = members.find(
-          (m) =>
-            m.name.toLowerCase() === nameToFind.toLowerCase() ||
-            m.username.toLowerCase() === nameToFind.toLowerCase() ||
-            m.name.toLowerCase().replace(/\s+/g, "") === nameToFind.toLowerCase()
+
+    const codeBlockRegex = /```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g;
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+
+    const parseInline = (segment: string, baseKey: string) => {
+      const inlineCodeRegex = /`([^`]+)`/g;
+      const inlineParts = [];
+      let inlineLastIndex = 0;
+      let inlineMatch;
+      let keyCounter = 0;
+
+      while ((inlineMatch = inlineCodeRegex.exec(segment)) !== null) {
+        const textBefore = segment.slice(inlineLastIndex, inlineMatch.index);
+        if (textBefore) {
+          inlineParts.push(...parseLinksAndMentions(textBefore, `${baseKey}-before-${keyCounter}`));
+        }
+        const codeText = inlineMatch[1];
+        inlineParts.push(
+          <code key={`${baseKey}-code-${keyCounter}`} className="bg-muted px-1.5 py-0.5 rounded font-mono text-[12px] border border-border/40 text-foreground font-semibold">
+            {codeText}
+          </code>
         );
-        if (match) {
+        inlineLastIndex = inlineCodeRegex.lastIndex;
+        keyCounter++;
+      }
+
+      const remainingText = segment.slice(inlineLastIndex);
+      if (remainingText) {
+        inlineParts.push(...parseLinksAndMentions(remainingText, `${baseKey}-remain`));
+      }
+
+      return inlineParts;
+    };
+
+    const parseLinksAndMentions = (text: string, baseKey: string) => {
+      const parts = text.split(/(\s+)/);
+      return parts.map((part, idx) => {
+        const partKey = `${baseKey}-part-${idx}`;
+
+        if (/^https?:\/\/[^\s]+$/i.test(part)) {
+          let url = part;
+          let suffix = "";
+          const trailingPunctuation = /[.,:;!?)]+$/;
+          const matchPunct = part.match(trailingPunctuation);
+          if (matchPunct) {
+            url = part.slice(0, matchPunct.index);
+            suffix = matchPunct[0];
+          }
           return (
-            <span
-              key={idx}
-              className="inline-flex items-center font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-1 py-0.5 rounded transition-colors select-all cursor-pointer mr-0.5"
-              title={`${match.name} (${match.email})`}
-            >
-              @{match.name}
-            </span>
+            <React.Fragment key={partKey}>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-medium break-all select-all inline-flex items-center gap-0.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {url}
+              </a>
+              {suffix}
+            </React.Fragment>
           );
         }
+
+        if (part.startsWith("@")) {
+          const nameToFind = part.slice(1);
+          const match = members.find(
+            (m) =>
+              m.name.toLowerCase() === nameToFind.toLowerCase() ||
+              m.username.toLowerCase() === nameToFind.toLowerCase() ||
+              m.name.toLowerCase().replace(/\s+/g, "") === nameToFind.toLowerCase()
+          );
+          if (match) {
+            return (
+              <span
+                key={partKey}
+                className="inline-flex items-center font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-1 py-0.5 rounded transition-colors select-all cursor-pointer mr-0.5"
+                title={`${match.name} (${match.email})`}
+              >
+                @{match.name}
+              </span>
+            );
+          }
+        }
+
+        return part;
+      });
+    };
+
+    let blockKeyCounter = 0;
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      const textBefore = text.slice(lastIndex, match.index);
+      if (textBefore) {
+        elements.push(...parseInline(textBefore, `block-text-${blockKeyCounter}`));
       }
-      return part;
-    });
+
+      const codeContent = match[1];
+      elements.push(
+        <pre key={`block-code-${blockKeyCounter}`} className="bg-muted/80 p-3 rounded-lg font-mono text-[11.5px] overflow-x-auto my-2 border border-border/50 text-foreground whitespace-pre leading-relaxed select-text">
+          {codeContent}
+        </pre>
+      );
+
+      lastIndex = codeBlockRegex.lastIndex;
+      blockKeyCounter++;
+    }
+
+    const remainingText = text.slice(lastIndex);
+    if (remainingText) {
+      elements.push(...parseInline(remainingText, `block-remain`));
+    }
+
+    return elements;
   };
 
   const isImageFile = (fileName: string) => {
@@ -875,13 +966,24 @@ export default function IssueDetailPage() {
                 <div
                   className={`flex items-center justify-between group rounded p-1 -m-1 ${canEdit ? "hover:bg-muted/40 cursor-text" : ""
                     }`}
-                  onClick={() => canEdit && setIsEditingTitle(true)}
+                  onDoubleClick={() => canEdit && setIsEditingTitle(true)}
+                  title={canEdit ? "Klik dua kali untuk mengedit" : undefined}
                 >
                   <h1 className="text-[20px] font-bold tracking-tight text-foreground leading-normal select-text">
                     {issue.title}
                   </h1>
                   {canEdit && (
-                    <Edit2 className="h-3.5 w-3.5 text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity ml-2 shrink-0" />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsEditingTitle(true);
+                      }}
+                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-muted-foreground/15 text-muted-foreground/60 hover:text-foreground opacity-0 group-hover:opacity-100 transition-all ml-2 shrink-0 cursor-pointer"
+                      title="Edit Judul"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               )}
@@ -910,7 +1012,7 @@ export default function IssueDetailPage() {
                       value={editedDesc}
                       onChange={(e) => handleTextareaChange(e, "description")}
                       onKeyDown={(e) => handleTextareaKeyDown(e, "description")}
-                      className="w-full min-h-[140px] rounded-lg border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary text-foreground"
+                      className="w-full min-h-[280px] rounded-lg border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary text-foreground"
                       placeholder="Masukkan deskripsi rinci untuk tiket ini... Gunakan @ untuk mention member."
                     />
 
@@ -1046,7 +1148,17 @@ export default function IssueDetailPage() {
                 <div
                   className={`text-[13px] leading-relaxed text-foreground whitespace-pre-wrap select-text mt-1.5 ${canEdit ? "hover:bg-muted/20 cursor-text rounded p-1 -m-1" : ""
                     }`}
-                  onClick={() => canEdit && setIsEditingDesc(true)}
+                  onClick={() => {
+                    if (canEdit && !issue.description) {
+                      setIsEditingDesc(true);
+                    }
+                  }}
+                  onDoubleClick={() => {
+                    if (canEdit && issue.description) {
+                      setIsEditingDesc(true);
+                    }
+                  }}
+                  title={canEdit && issue.description ? "Klik dua kali untuk mengedit" : undefined}
                 >
                   {issue.description ? (
                     renderFormattedText(issue.description)

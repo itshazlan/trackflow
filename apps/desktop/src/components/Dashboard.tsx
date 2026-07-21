@@ -160,18 +160,20 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       // 2. Check if there's an active tracking task stored in Rust core
       try {
         const [activeProjId, activeIssueId, _activeIssueTitle, _activeNote] = await invoke<[string | null, string | null, string | null, string | null]>('get_active_task');
-        
+
         if (activeProjId && projectList.some((p) => p.id === activeProjId)) {
           setSelectedProjectId(activeProjId);
 
           // Fetch issues for this project
           setLoadingIssues(true);
           const issuesRes = await api.get<any[]>(`/projects/${activeProjId}/issues`);
-          
+
           if (!issuesRes.error && issuesRes.data) {
-            // Filter issues assigned to this user
+            // Filter issues assigned to this user and exclude Done issues
             const assignedIssues = issuesRes.data.filter(
-              (issue: any) => issue.assignee?.id === user.id
+              (issue: any) =>
+                issue.assignee?.id === user.id &&
+                issue.status?.name?.toLowerCase() !== 'done'
             );
             setIssues(assignedIssues);
 
@@ -224,7 +226,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
           setTimerStatus(state.status);
           setStartTime(state.start_time);
           setAccumulatedSeconds(state.accumulated_seconds);
-          
+
           if (state.status === 'Running' && state.start_time) {
             const now = Math.floor(Date.now() / 1000);
             setElapsedSeconds(state.accumulated_seconds + (now - state.start_time));
@@ -289,7 +291,9 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
       setError('Failed to load tasks: ' + res.error);
     } else if (res.data) {
       const assignedIssues = res.data.filter(
-        (issue: any) => issue.assignee?.id === user.id
+        (issue: any) =>
+          issue.assignee?.id === user.id &&
+          issue.status?.name?.toLowerCase() !== 'done'
       );
       setIssues(assignedIssues);
     }
@@ -299,7 +303,7 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
   const handleIssueChange = async (issueId: string) => {
     setSelectedIssueId(issueId);
     setError(null);
-    
+
     let resolvedIssueId: string | null = null;
     let resolvedIssueTitle: string | null = null;
     let resolvedNote: string | null = null;
@@ -605,10 +609,9 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
               Time Tracker
             </h3>
             <div className="flex items-center space-x-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${
-                timerStatus === 'Running' ? 'bg-emerald-500 animate-pulse' :
-                timerStatus === 'Paused' ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground'
-              }`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${timerStatus === 'Running' ? 'bg-emerald-500 animate-pulse' :
+                  timerStatus === 'Paused' ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground'
+                }`} />
               <span className="text-[10px] font-medium text-muted-foreground">
                 {timerStatus} {timerStatus !== 'Idle' && `(${formatTime(elapsedSeconds)})`}
               </span>
