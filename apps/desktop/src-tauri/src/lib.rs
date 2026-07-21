@@ -261,10 +261,10 @@ fn commit_block_to_db(
 fn input_callback(event: rdev::Event) {
     match event.event_type {
         rdev::EventType::KeyPress(_) => {
-            KEYBOARD_COUNT.fetch_add(1, Ordering::SeqCst);
+            KEYBOARD_COUNT.fetch_add(1, Ordering::Relaxed);
         }
         rdev::EventType::ButtonPress(_) | rdev::EventType::MouseMove { .. } | rdev::EventType::Wheel { .. } => {
-            MOUSE_COUNT.fetch_add(1, Ordering::SeqCst);
+            MOUSE_COUNT.fetch_add(1, Ordering::Relaxed);
         }
         _ => {}
     }
@@ -677,8 +677,8 @@ fn start_background_tick_loop(
             };
 
             // Atomically swap event counters
-            let k_count = KEYBOARD_COUNT.swap(0, Ordering::SeqCst);
-            let m_count = MOUSE_COUNT.swap(0, Ordering::SeqCst);
+            let k_count = KEYBOARD_COUNT.swap(0, Ordering::Relaxed);
+            let m_count = MOUSE_COUNT.swap(0, Ordering::Relaxed);
             let activity = classify_activity(k_count, m_count);
 
             // Read the captured screenshot data (if any)
@@ -816,8 +816,8 @@ fn do_start_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     let now = chrono::Utc::now().timestamp();
 
     // Reset counters on fresh start/resume
-    KEYBOARD_COUNT.store(0, Ordering::SeqCst);
-    MOUSE_COUNT.store(0, Ordering::SeqCst);
+    KEYBOARD_COUNT.store(0, Ordering::Relaxed);
+    MOUSE_COUNT.store(0, Ordering::Relaxed);
 
     // Clear any previous screenshots in state
     *timer_state.current_screenshot.lock().unwrap() = None;
@@ -880,8 +880,8 @@ fn do_pause_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     let issue_id = tracking_state.issue_id.lock().unwrap().clone();
     let note = tracking_state.note.lock().unwrap().clone();
 
-    let k_count = KEYBOARD_COUNT.swap(0, Ordering::SeqCst);
-    let m_count = MOUSE_COUNT.swap(0, Ordering::SeqCst);
+    let k_count = KEYBOARD_COUNT.swap(0, Ordering::Relaxed);
+    let m_count = MOUSE_COUNT.swap(0, Ordering::Relaxed);
     let activity = classify_activity(k_count, m_count);
 
     // Read screenshot data (if already taken)
@@ -959,8 +959,8 @@ fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
         let issue_id = tracking_state.issue_id.lock().unwrap().clone();
         let note = tracking_state.note.lock().unwrap().clone();
 
-        let k_count = KEYBOARD_COUNT.swap(0, Ordering::SeqCst);
-        let m_count = MOUSE_COUNT.swap(0, Ordering::SeqCst);
+        let k_count = KEYBOARD_COUNT.swap(0, Ordering::Relaxed);
+        let m_count = MOUSE_COUNT.swap(0, Ordering::Relaxed);
         let activity = classify_activity(k_count, m_count);
 
         let screenshot_data = timer_state.current_screenshot.lock().unwrap().take();
@@ -995,8 +995,8 @@ fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
             }
         }
     } else {
-        KEYBOARD_COUNT.store(0, Ordering::SeqCst);
-        MOUSE_COUNT.store(0, Ordering::SeqCst);
+        KEYBOARD_COUNT.store(0, Ordering::Relaxed);
+        MOUSE_COUNT.store(0, Ordering::Relaxed);
         *timer_state.current_screenshot.lock().unwrap() = None;
         let mut current_block_start = timer_state.current_block_start.lock().unwrap();
         *current_block_start = None;
