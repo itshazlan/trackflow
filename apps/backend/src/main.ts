@@ -26,6 +26,7 @@ async function bootstrap() {
       'http://localhost:1420',
       'tauri://localhost',
       'https://tauri.localhost',
+      'http://tauri.localhost',
     ];
     if (allowedOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
