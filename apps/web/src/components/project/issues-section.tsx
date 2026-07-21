@@ -777,6 +777,9 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     }
     setSelectedFiles([]);
     setCreateError("");
+    if (statuses.length > 0) {
+      setStatusId(statuses[0].id);
+    }
     setIsCreateOpen(true);
   };
 
@@ -814,6 +817,9 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       setAssigneeId("");
       setDueDate("");
       setSelectedFiles([]);
+      if (statuses.length > 0) {
+        setStatusId(statuses[0].id);
+      }
       queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : "Gagal membuat issue.");
@@ -1199,7 +1205,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                         #{issue.id.slice(0, 6)}
                       </TableCell>
                       <TableCell className="font-medium text-foreground">
-                        <div className="flex items-center gap-1.5 max-w-[280px]">
+                        <div className="flex items-center gap-1.5 max-w-[600px]">
                           {issue.displayId && (
                             <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
                               {issue.displayId}
@@ -1524,7 +1530,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   placeholder="Detail deskripsi tugas atau tiket..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="min-h-[180px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   disabled={createLoading}
                 />
               </div>
@@ -1655,18 +1661,45 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="issue-duedate" className="text-[11px] font-medium text-muted-foreground">
-                  Due Date (Batas Waktu)
-                </Label>
-                <Input
-                  id="issue-duedate"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="h-8 text-[12.5px]"
-                  disabled={createLoading}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="issue-duedate" className="text-[11px] font-medium text-muted-foreground">
+                    Due Date (Batas Waktu)
+                  </Label>
+                  <Input
+                    id="issue-duedate"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="h-8 text-[12.5px]"
+                    disabled={createLoading}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="issue-status-select" className="text-[11px] font-medium text-muted-foreground">
+                    Status Tiket
+                  </Label>
+                  <select
+                    id="issue-status-select"
+                    value={statusId}
+                    onChange={(e) => setStatusId(e.target.value)}
+                    className="h-8 rounded-md border border-input bg-card px-2 text-[12.5px] outline-none"
+                    disabled={createLoading}
+                  >
+                    {statuses.map((st) => {
+                      const isRestricted = st.restrictedToRole !== null;
+                      const isRoleMatched = st.restrictedToRole === userRole;
+                      const disabled = isRestricted && !isRoleMatched && !isAdmin;
+
+                      return (
+                        <option key={st.id} value={st.id} disabled={disabled}>
+                          {st.name} {disabled ? "🔒" : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -1761,7 +1794,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   placeholder="Detail deskripsi tugas atau tiket..."
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
-                  className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="min-h-[180px] w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   disabled={editLoading}
                 />
               </div>
