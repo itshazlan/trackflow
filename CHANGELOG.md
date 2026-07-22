@@ -9,7 +9,15 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Belum ada perubahan yang menunggu rilis berikutnya._
+### Fixed
+- **Desktop (macOS)** — scroll/kursor sistem terasa stutter halus setelah desktop client berjalan lama (1 jam+), makin parah kalau sistem sedang berat (mis. Docker/IDE jalan bersamaan), dan hilang instan begitu Trackflow di-quit. Root cause: global input hook `rdev` memasang live `CGEventTap` yang, meski mode `ListenOnly`, tetap butuh round-trip sinkron OS ke proses Trackflow untuk setiap event mouse/scroll — kalau proses telat merespons, delay itu terasa system-wide, paling kentara saat scroll (event rate tinggi). Diganti dengan polling pasif `CGEventSourceCounterForEventType` khusus macOS yang tidak lagi berada di jalur pengiriman event sama sekali. `rdev` tetap dipakai di Windows/Linux (belum ada indikasi masalah serupa di platform tersebut).
+- **Desktop (macOS)** — kontribusi tambahan terhadap gejala di atas: dependency `xcap` (screenshot capture) yang sangat usang (`0.0.12`) di-upgrade ke versi terbaru (`0.9.x`), dan pemanggilan capture dibungkus `autoreleasepool` eksplisit — sebelumnya resource Objective-C hasil capture bisa menumpuk tanpa pernah di-drain karena berjalan di tokio worker thread yang reusable dan tidak pernah kembali ke Cocoa run loop.
+- **Desktop (macOS)** — update ikon system tray sekarang hanya menulis ulang ikon native saat status tracking benar-benar berubah (Idle/Running/Paused), bukan tiap detik — mengurangi churn ke WindowServer selama sesi panjang.
+- **Desktop — Auto-updater tidak pernah benar-benar berfungsi** (ditemukan setelah user melaporkan v0.1.0 tidak pernah menawarkan update ke v0.2.0). Tiga penyebab independen, semuanya sudah diperbaiki:
+  - Endpoint updater backend (`GET /desktop-updater/:target/:version`) ternyata cuma kode scaffolding untuk testing lokal (commit 6822cfc) — cek versi di-hardcode persis ke `'0.1.0'` saja, URL download hardcode ke `localhost:3000`, dan path file hardcode ke laptop pribadi developer. Dihapus total dari `app.controller.ts`.
+  - `bundle.createUpdaterArtifacts` di `tauri.conf.json` bernilai `false`, sehingga build CI tidak pernah menghasilkan artifact updater (`.tar.gz` + `.sig`) sama sekali di rilis manapun. Diaktifkan (`true`).
+  - `plugins.updater.pubkey` di `tauri.conf.json` mengandung karakter `%` nyasar di ujung string (kemungkinan artifact copy-paste dari terminal), membuat base64-nya gagal di-parse secara ketat. Dibersihkan.
+  - `plugins.updater.endpoints` diganti dari domain custom (`trackflow.chimney.id/desktop-updater/...`) ke `latest.json` yang otomatis di-generate & di-upload GitHub Actions ke tiap GitHub Release — pola standar Tauri, tidak perlu backend custom untuk dipelihara.
 
 ---
 

@@ -91,6 +91,7 @@ Download & install artifact di device fisik (atau minta bantuan rekan untuk OS y
 - [ ] Ambil screenshot baru → klik **Discard** → pastikan blok waktu ini **tidak muncul** di Time Book web (bukan muncul lalu hilang)
 - [ ] Pilih task **"Activity (Tanpa Tiket)"** → isi deskripsi opsional → data tersinkron dengan label "Activity" di Time Book
 - [ ] Matikan koneksi internet di tengah tracking → nyalakan lagi → data tetap ter-upload (tidak hilang)
+- [ ] **(macOS, regresi)** Biarkan app jalan 1-2 jam sambil dipakai normal (boleh sambil app berat lain terbuka) → scroll/kursor **di seluruh sistem, bukan cuma di Trackflow**, tetap mulus tanpa delay yang makin terasa seiring waktu
 
 ---
 
@@ -144,6 +145,8 @@ Lakukan prosedur detail ini terutama kalau: rilis pertama kali menguji updater, 
 | Assets/build sudah ada untuk versi X, tapi `CHANGELOG.md` masih di versi lama | Langkah 1 (update changelog) terlewat sebelum tag di-push | Tambahkan entri retroaktif untuk versi X sebelum publish; jadikan kebiasaan: **selalu** commit changelog di commit yang sama dengan bump versi, sebelum `git tag` |
 | Auto-updater gagal dengan galat terkait signature/verifikasi, padahal build sukses & artifact ada | `TAURI_SIGNING_PRIVATE_KEY` berbeda antara build versi lama (baseline) dan versi baru (target) — versi lama tidak punya public key yang cocok untuk verifikasi | Pastikan secret signing key **tidak pernah diganti** setelah rilis pertama; kalau terpaksa ganti, seluruh user harus reinstall manual sekali (update dari key lama ke key baru tidak bisa lewat auto-updater) |
 | Dock icon macOS tidak muncul sama sekali walau window aktif | `activationPolicy: "accessory"` (atau `set_activation_policy` di Rust) membuat app jadi "menu bar only" secara permanen — bukan soal window aktif/tidak | Kalau memang mau Dock icon muncul saat window aktif (pola Slack/Discord), switch `ActivationPolicy::Regular`/`Accessory` secara dinamis mengikuti show/hide window, bukan di-set statis sekali di awal |
+| Scroll/kursor **seluruh sistem** (bukan cuma di Trackflow) terasa stutter halus setelah app jalan lama (1 jam+), makin parah kalau sistem sedang berat, hilang instan begitu Trackflow di-quit | Global input hook `rdev` bikin live `CGEventTap` macOS — walau mode `ListenOnly`, OS tetap perlu round-trip sinkron ke proses Trackflow tiap event scroll/mouse; kalau proses telat merespons, delay ini kerasa system-wide | Diganti polling pasif `CGEventSourceCounterForEventType` (lihat `spawn_activity_poller` di `lib.rs`, khusus macOS) — sudah tidak berada di jalur pengiriman event sama sekali. Kalau gejala serupa muncul lagi, cek dulu apakah ada hook/tap baru yang ditambahkan ke jalur ini sebelum curiga ke tempat lain |
+| `WindowServer` (Activity Monitor) makin berat CPU/port count-nya selama app jalan lama | Dependency `xcap` versi sangat lama (`0.0.12`) + capture screenshot jalan di tokio worker thread reusable tanpa `autoreleasepool`, jadi resource Objective-C-nya numpuk terus | Upgrade `xcap` ke versi terbaru + bungkus capture dengan `objc2::rc::autoreleasepool`. Kalau curiga leak serupa di kode macOS lain yang jalan di background task (bukan main thread), cek apakah sudah dibungkus autorelease pool |
 
 ---
 

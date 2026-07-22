@@ -52,7 +52,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -64,9 +64,9 @@
   "plugins": {
     "updater": {
       "active": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJDNzlENEE4RURDNEQ4QkMKUldTODJNVHRxTlI1TEpPNDN6Z0VrVENvTysycVhWVEdIczdjMnY2c0F5ME4xUEg3djJmNXY1SW4K%",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJDNzlENEE4RURDNEQ4QkMKUldTODJNVHRxTlI1TEpPNDN6Z0VrVENvTysycVhWVEdIczdjMnY2c0F5ME4xUEg3djJmNXY1SW4K",
       "endpoints": [
-        "https://trackflow.chimney.id/desktop-updater/{{target}}/{{current_version}}"
+        "https://github.com/itshazlan/trackflow/releases/latest/download/latest.json"
       ]
     }
   }
