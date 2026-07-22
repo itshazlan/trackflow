@@ -186,7 +186,7 @@ export default function AuthPage() {
       router.push("/");
     } catch (err: unknown) {
       setLoginError(
-        err instanceof Error ? err.message : "Email atau password salah."
+        err instanceof Error ? err.message : "Username/email atau password salah."
       );
       setLoginLoading(false);
     }
@@ -292,15 +292,15 @@ export default function AuthPage() {
                       htmlFor="login-email"
                       className="text-[12px] text-muted-foreground"
                     >
-                      Email
+                      Username atau Email
                     </Label>
                     <IconInput
                       id="login-email"
                       icon={Mail}
-                      type="email"
-                      placeholder="karyawan@perusahaan.com"
+                      type="text"
+                      placeholder="Username atau nama@perusahaan.com"
                       required
-                      autoComplete="email"
+                      autoComplete="username"
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
                     />

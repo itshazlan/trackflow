@@ -25,7 +25,39 @@ export interface UserSession {
   };
 }
 
-export async function login(email: string, password: string): Promise<UserSession> {
+export async function resolveIdentifier(identifier: string): Promise<string> {
+  const trimmed = identifier.trim();
+  if (trimmed.includes("@")) {
+    return trimmed;
+  }
+
+  const res = await fetch("/api/auth/resolve-identifier", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ identifier: trimmed }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Username tidak ditemukan");
+  }
+
+  const data = await res.json();
+  return data.email;
+}
+
+export async function login(identifier: string, password: string): Promise<UserSession> {
+  const GENERIC_ERROR_MSG = "Username/email atau password salah";
+
+  let email: string;
+  try {
+    email = await resolveIdentifier(identifier);
+  } catch (err) {
+    throw new Error(GENERIC_ERROR_MSG);
+  }
+
   const res = await fetch("/api/auth/sign-in/email", {
     method: "POST",
     headers: {
@@ -35,8 +67,7 @@ export async function login(email: string, password: string): Promise<UserSessio
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || "Failed to sign in. Please check your credentials.");
+    throw new Error(GENERIC_ERROR_MSG);
   }
 
   return res.json();

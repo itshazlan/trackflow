@@ -76,7 +76,7 @@ export default function LoginPage() {
       router.push("/");
     } catch (err: unknown) {
       setError(
-        err instanceof Error ? err.message : "Email atau password salah."
+        err instanceof Error ? err.message : "Username/email atau password salah."
       );
       setLoading(false);
     }
@@ -110,12 +110,12 @@ export default function LoginPage() {
 
           <FieldGroup>
             <Label htmlFor="email" className="text-[12px] font-medium text-muted-foreground">
-              Alamat Email
+              Username atau Email
             </Label>
             <IconInput
               id="email"
-              type="email"
-              placeholder="nama@perusahaan.com"
+              type="text"
+              placeholder="Username atau nama@perusahaan.com"
               icon={Mail}
               value={email}
               onChange={(e) => setEmail(e.target.value)}

@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
     const backendUrl = process.env.NODE_ENV === "production" ? "http://backend:3000" : "http://localhost:3000";
     return [
       {
+        source: "/api/auth/resolve-identifier",
+        destination: `${backendUrl}/auth/resolve-identifier`,
+      },
+      {
         source: "/api/auth/:path*",
         destination: `${backendUrl}/api/auth/:path*`,
       },
