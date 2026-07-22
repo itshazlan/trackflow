@@ -71,6 +71,8 @@ export class RealtimeGateway
       commentId: string;
       authorId: string;
       bodyPreview: string;
+      parentCommentId: string | null;
+      hasImages: boolean;
     },
   ) {
     this.server

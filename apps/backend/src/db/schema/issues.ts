@@ -3,6 +3,7 @@ import {
   uuid,
   varchar,
   integer,
+  bigint,
   timestamp,
   jsonb,
   pgEnum,
@@ -107,8 +108,26 @@ export const issueComments = pgTable('issue_comments', {
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
   body: text('body').notNull(),
+  parentCommentId: uuid('parent_comment_id').references(
+    (): any => issueComments.id,
+    { onDelete: 'cascade' },
+  ),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
+});
+
+export const commentAttachments = pgTable('comment_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  commentId: uuid('comment_id')
+    .notNull()
+    .references(() => issueComments.id, { onDelete: 'cascade' }),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  r2ObjectKey: varchar('r2_object_key', { length: 512 }).notNull(),
+  mimeType: varchar('mime_type', { length: 128 }).notNull(),
+  fileSizeBytes: bigint('file_size_bytes', { mode: 'number' }).notNull(),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });

@@ -15,11 +15,17 @@ import {
   issueTrackers,
   issueAttachments,
   issueComments,
+  commentAttachments,
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
 import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
-import { CreateCommentDto, UpdateCommentDto } from './dto/comment.dto';
+import {
+  CreateCommentDto,
+  UpdateCommentDto,
+  CreateCommentImageDto,
+  ConfirmCommentImageDto,
+} from './dto/comment.dto';
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
 import { R2Service } from '../time-tracking/r2.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -564,7 +570,7 @@ export class IssuesService {
     return { success: true };
   }
 
-  async findCommentsForIssue(issueId: string, userId: string) {
+  private async getIssueWithMemberAccess(issueId: string, userId: string) {
     const [issue] = await this.db
       .select()
       .from(issues)
@@ -598,11 +604,18 @@ export class IssuesService {
       }
     }
 
-    return this.db
+    return { issue, currentUser };
+  }
+
+  async findCommentsForIssue(issueId: string, userId: string) {
+    await this.getIssueWithMemberAccess(issueId, userId);
+
+    const allComments = await this.db
       .select({
         id: issueComments.id,
         issueId: issueComments.issueId,
         body: issueComments.body,
+        parentCommentId: issueComments.parentCommentId,
         createdAt: issueComments.createdAt,
         updatedAt: issueComments.updatedAt,
         author: {
@@ -616,6 +629,28 @@ export class IssuesService {
       .innerJoin(user, eq(issueComments.authorId, user.id))
       .where(eq(issueComments.issueId, issueId))
       .orderBy(desc(issueComments.createdAt));
+
+    const commentIds = allComments.map((c: any) => c.id);
+    let attachmentsMap: Record<string, any[]> = {};
+
+    if (commentIds.length > 0) {
+      const attachmentsList = await this.db
+        .select()
+        .from(commentAttachments)
+        .where(inArray(commentAttachments.commentId, commentIds));
+
+      for (const att of attachmentsList) {
+        if (!attachmentsMap[att.commentId]) {
+          attachmentsMap[att.commentId] = [];
+        }
+        attachmentsMap[att.commentId].push(att);
+      }
+    }
+
+    return allComments.map((c: any) => ({
+      ...c,
+      commentAttachments: attachmentsMap[c.id] || [],
+    }));
   }
 
   async createComment(
@@ -623,36 +658,34 @@ export class IssuesService {
     createCommentDto: CreateCommentDto,
     userId: string,
   ) {
-    const [issue] = await this.db
-      .select()
-      .from(issues)
-      .where(eq(issues.id, issueId))
-      .limit(1);
+    const { issue, currentUser } = await this.getIssueWithMemberAccess(issueId, userId);
 
-    if (!issue) {
-      throw new NotFoundException(`Issue with ID ${issueId} not found`);
-    }
-
-    const [currentUser] = await this.db
-      .select()
-      .from(user)
-      .where(eq(user.id, userId))
-      .limit(1);
-
-    if (!currentUser?.isAdmin) {
-      const [membership] = await this.db
+    // Validate parentCommentId guards if provided
+    if (createCommentDto.parentCommentId) {
+      const [parentComment] = await this.db
         .select()
-        .from(projectMemberships)
-        .where(
-          and(
-            eq(projectMemberships.projectId, issue.projectId),
-            eq(projectMemberships.userId, userId),
-          ),
-        )
+        .from(issueComments)
+        .where(eq(issueComments.id, createCommentDto.parentCommentId))
         .limit(1);
 
-      if (!membership) {
-        throw new ForbiddenException('Not a member of this project');
+      if (!parentComment) {
+        throw new NotFoundException(
+          `Parent comment with ID ${createCommentDto.parentCommentId} not found`,
+        );
+      }
+
+      // Guard 1: parentCommentId harus milik issue_id yang sama dengan komentar yang sedang dibuat
+      if (parentComment.issueId !== issueId) {
+        throw new BadRequestException(
+          'Cannot reply to a comment from a different issue',
+        );
+      }
+
+      // Guard 2: parentCommentId yang direferensikan wajib punya parentCommentId = NULL sendiri (mencegah reply-ke-reply)
+      if (parentComment.parentCommentId !== null) {
+        throw new BadRequestException(
+          'Cannot reply to a reply comment (nested replies are not allowed)',
+        );
       }
     }
 
@@ -662,6 +695,7 @@ export class IssuesService {
         issueId,
         authorId: userId,
         body: createCommentDto.body,
+        parentCommentId: createCommentDto.parentCommentId || null,
       })
       .returning();
 
@@ -675,6 +709,8 @@ export class IssuesService {
       commentId: comment.id,
       authorId: userId,
       bodyPreview,
+      parentCommentId: comment.parentCommentId || null,
+      hasImages: false,
     });
 
     const mentionRegex = /@(\w+)/g;
@@ -711,6 +747,7 @@ export class IssuesService {
         id: issueComments.id,
         issueId: issueComments.issueId,
         body: issueComments.body,
+        parentCommentId: issueComments.parentCommentId,
         createdAt: issueComments.createdAt,
         updatedAt: issueComments.updatedAt,
         author: {
@@ -725,7 +762,100 @@ export class IssuesService {
       .where(eq(issueComments.id, comment.id))
       .limit(1);
 
-    return commentWithAuthor;
+    return {
+      ...commentWithAuthor,
+      commentAttachments: [],
+    };
+  }
+
+  async createCommentImagePresignedUrl(
+    issueId: string,
+    commentId: string,
+    createImageDto: CreateCommentImageDto,
+    userId: string,
+  ) {
+    const { issue } = await this.getIssueWithMemberAccess(issueId, userId);
+
+    const [comment] = await this.db
+      .select()
+      .from(issueComments)
+      .where(and(eq(issueComments.id, commentId), eq(issueComments.issueId, issueId)))
+      .limit(1);
+
+    if (!comment) {
+      throw new NotFoundException(
+        `Comment with ID ${commentId} not found on issue ${issueId}`,
+      );
+    }
+
+    if (
+      !createImageDto.mimeType ||
+      !createImageDto.mimeType.toLowerCase().startsWith('image/')
+    ) {
+      throw new BadRequestException(
+        'Invalid mimeType. Only image/* files are allowed',
+      );
+    }
+
+    const imageId = randomUUID();
+    const objectKey = `project/${issue.projectId}/issues/${issueId}/comments/${commentId}/${imageId}-${createImageDto.fileName}`;
+    const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+      objectKey,
+      createImageDto.mimeType,
+    );
+
+    return {
+      imageId,
+      commentId,
+      uploadUrl,
+      r2ObjectKey: objectKey,
+      fileName: createImageDto.fileName,
+      mimeType: createImageDto.mimeType,
+      fileSizeBytes: createImageDto.fileSizeBytes,
+    };
+  }
+
+  async confirmCommentImageUpload(
+    issueId: string,
+    commentId: string,
+    imageId: string,
+    confirmDto: ConfirmCommentImageDto,
+    userId: string,
+  ) {
+    const { issue } = await this.getIssueWithMemberAccess(issueId, userId);
+
+    const [comment] = await this.db
+      .select()
+      .from(issueComments)
+      .where(and(eq(issueComments.id, commentId), eq(issueComments.issueId, issueId)))
+      .limit(1);
+
+    if (!comment) {
+      throw new NotFoundException(
+        `Comment with ID ${commentId} not found on issue ${issueId}`,
+      );
+    }
+
+    const fileName = confirmDto?.fileName || 'image.png';
+    const mimeType = confirmDto?.mimeType || 'image/png';
+    const fileSizeBytes = confirmDto?.fileSizeBytes || 0;
+    const r2ObjectKey =
+      confirmDto?.r2ObjectKey ||
+      `project/${issue.projectId}/issues/${issueId}/comments/${commentId}/${imageId}-${fileName}`;
+
+    const [attachment] = await this.db
+      .insert(commentAttachments)
+      .values({
+        id: imageId,
+        commentId,
+        fileName,
+        r2ObjectKey,
+        mimeType,
+        fileSizeBytes,
+      })
+      .returning();
+
+    return attachment;
   }
 
   async updateComment(

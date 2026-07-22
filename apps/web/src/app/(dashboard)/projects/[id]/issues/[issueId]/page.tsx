@@ -41,6 +41,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Loader2,
   AlertCircle,
   Trash2,
@@ -60,6 +66,7 @@ import {
   Check,
   AtSign,
   Smile,
+  Link as LinkIcon,
 } from "lucide-react";
 
 const EmojiPicker = dynamic(
@@ -153,7 +160,7 @@ export default function IssueDetailPage() {
   const [newCommentText, setNewCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copiedState, setCopiedState] = useState<"link" | "name" | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<IssueAttachment | null>(null);
 
   const [mentionActive, setMentionActive] = useState<boolean>(false);
@@ -682,8 +689,17 @@ export default function IssueDetailPage() {
   const handleCopyLink = () => {
     if (typeof window === "undefined") return;
     navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedState("link");
+    setTimeout(() => setCopiedState(null), 2000);
+  };
+
+  const handleCopyName = () => {
+    if (!issue) return;
+    const issueKey = issue.displayId || `#${issue.id.slice(0, 6)}`;
+    const textToCopy = `${issueKey} - ${issue.title}`;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedState("name");
+    setTimeout(() => setCopiedState(null), 2000);
   };
 
   if (loading) {
@@ -895,15 +911,46 @@ export default function IssueDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={handleCopyLink}
-            title="Salin Link Tiket"
-          >
-            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
+                  title="Salin Issue"
+                >
+                  {copiedState ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onClick={handleCopyLink}
+                className="cursor-pointer text-[12.5px] flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <LinkIcon className="h-3.5 w-3.5" />
+                  <span>Salin Link Issue</span>
+                </div>
+                {copiedState === "link" && <Check className="h-3.5 w-3.5 text-green-500" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleCopyName}
+                className="cursor-pointer text-[12.5px] flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>Salin Nama Issue</span>
+                </div>
+                {copiedState === "name" && <Check className="h-3.5 w-3.5 text-green-500" />}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {isAdmin && (
             <Button

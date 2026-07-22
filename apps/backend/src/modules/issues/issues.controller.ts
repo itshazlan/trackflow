@@ -19,7 +19,12 @@ import {
   UpdateIssueDto,
   UpdateIssueStatusDto,
 } from './dto/issue.dto';
-import { CreateCommentDto, UpdateCommentDto } from './dto/comment.dto';
+import {
+  CreateCommentDto,
+  UpdateCommentDto,
+  CreateCommentImageDto,
+  ConfirmCommentImageDto,
+} from './dto/comment.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { ProjectRoleGuard } from '../../common/guards/project-role.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -148,6 +153,38 @@ export class UserIssuesController {
       commentId,
       req.user.id,
       req.user.isAdmin,
+    );
+  }
+
+  @Post(':id/comments/:commentId/images')
+  createCommentImagePresignedUrl(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Body() createImageDto: CreateCommentImageDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.createCommentImagePresignedUrl(
+      id,
+      commentId,
+      createImageDto,
+      req.user.id,
+    );
+  }
+
+  @Post(':id/comments/:commentId/images/:imageId/confirm')
+  confirmCommentImageUpload(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Param('imageId') imageId: string,
+    @Body() confirmDto: ConfirmCommentImageDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.confirmCommentImageUpload(
+      id,
+      commentId,
+      imageId,
+      confirmDto,
+      req.user.id,
     );
   }
 }

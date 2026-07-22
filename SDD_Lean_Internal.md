@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.9 (Lean Internal) |
+| **Versi Dokumen** | 3.0 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: modul Dokumen diubah jadi model kontainer ala Redmine — tabel `documents` + `document_files` terpisah, 9 endpoint baru, file dapat ditambah kapan saja) |
+| **Tanggal** | 14 Juli 2026 (revisi: lampiran gambar pada komentar — tabel `comment_attachments`; reply komentar 1 tingkat via `parent_comment_id`, divalidasi di backend) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -239,6 +239,8 @@ erDiagram
     ISSUES ||--o{ ISSUE_ATTACHMENTS : has
     ISSUES ||--o{ ISSUE_COMMENTS : has
     USERS ||--o{ ISSUE_COMMENTS : authors
+    ISSUE_COMMENTS ||--o{ ISSUE_COMMENTS : "replies to"
+    ISSUE_COMMENTS ||--o{ COMMENT_ATTACHMENTS : has
     USERS ||--o{ TIME_BLOCKS : logs
     ISSUES ||--o{ TIME_BLOCKS : "tracked against"
     TIME_BLOCKS ||--o| SCREENSHOTS : has
@@ -450,11 +452,23 @@ erDiagram
 | id | uuid (PK) | |
 | issue_id | uuid (FK → issues) | |
 | author_id | uuid (FK → users) | |
+| parent_comment_id | uuid (FK → issue_comments, nullable) | `NULL` = komentar utama; terisi = reply (FR-029b). **Dibatasi 1 tingkat** — divalidasi di backend (bukan cuma UI): komentar yang direferensikan sebagai parent wajib punya `parent_comment_id = NULL` sendiri, dan wajib milik `issue_id` yang sama |
 | body | text | |
 | created_at | timestamptz | |
 | updated_at | timestamptz nullable | Diisi saat komentar diedit — dipakai untuk menampilkan penanda "(diedit)" di UI |
 
 > Guard: **siapapun member proyek** (peran manapun) atau Admin boleh baca & tulis komentar — sengaja tidak dibatasi role tertentu, berbeda dari transisi status tiket (FR-028). Edit hanya oleh penulis; hapus oleh penulis atau Admin (moderasi, FR-029).
+
+#### `comment_attachments` (lampiran gambar pada komentar)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| comment_id | uuid (FK → issue_comments, `onDelete: cascade`) | Menghapus komentar otomatis menghapus gambar lampirannya |
+| file_name | varchar | |
+| r2_object_key | varchar | `project/{projectId}/issues/{issueId}/comments/{commentId}/{imageId}-{fileName}` |
+| mime_type | varchar | **Wajib divalidasi `image/*`** di endpoint upload (FR-029a) — tolak (400) kalau bukan tipe gambar |
+| file_size_bytes | bigint | |
+| uploaded_at | timestamptz | |
 
 #### `time_blocks`
 > Tabel PostgreSQL biasa dengan composite index `(user_id, block_start)` dan `(project_id, block_start)`.
@@ -586,8 +600,10 @@ erDiagram
 | Issues | `/issues/:id/status` | PATCH | Ubah status (dicek terhadap `restricted_to_role`) |
 | Issue Attachments | `/issues/:id/attachments` | GET/POST | List & upload lampiran (presigned URL R2) |
 | Issue Attachments | `/issues/:id/attachments/:attachmentId` | DELETE | Hapus lampiran (uploader atau Admin) |
-| Issue Comments | `/issues/:id/comments` | GET/POST | List & tambah komentar — **anggota proyek peran manapun** boleh akses |
+| Issue Comments | `/issues/:id/comments` | GET/POST | List & tambah komentar — **anggota proyek peran manapun** boleh akses. Body POST: `{ body, parentCommentId? }` — kalau `parentCommentId` diisi, backend validasi comment tersebut milik issue yang sama **dan** `parent_comment_id`-nya sendiri `NULL` (cegah reply-ke-reply, FR-029b) |
 | Issue Comments | `/issues/:id/comments/:commentId` | PATCH/DELETE | Edit (penulis saja) / Hapus (penulis atau Admin untuk moderasi) |
+| Comment Images | `/issues/:id/comments/:commentId/images` | POST | Presigned upload URL untuk gambar. Body: `{ fileName, mimeType, fileSizeBytes }` — **ditolak (400)** kalau `mimeType` bukan `image/*` (FR-029a) |
+| Comment Images | `/issues/:id/comments/:commentId/images/:imageId/confirm` | POST | Konfirmasi upload gambar selesai |
 | Templates | `/projects/:id/issue-templates` | GET/POST/PATCH | Kelola template (termasuk edit array `fields`) — **Manager/Admin** |
 | Documents | `/projects/:id/documents` | GET | List seluruh **Document** (kontainer) — tiap baris tampilkan `title`, `category`, `fileCount`, bukan file itu sendiri |
 | Documents | `/projects/:id/documents` | POST | Buat Document baru: `{ title, description?, category }` — **belum ada file** di langkah ini (FR-041) |
@@ -692,7 +708,7 @@ POST /time-blocks/sync
 | `timeblock.synced` | Server → Web | `{userId, projectId, blockStart}` | Indikator "aktif bekerja" |
 | `timesheet.approved` | Server → Web | `{timesheetId, status}` | Notifikasi ke Developer |
 | `timeblock.overridden` | Server → Web | `{timeBlockId, actorId, targetUserId, action, reason}` | Notifikasi ke pekerja terdampak saat Admin override |
-| `issue.comment_created` | Server → Web | `{issueId, commentId, authorId, bodyPreview}` | Update panel Aktivitas/Komentar secara realtime tanpa refresh |
+| `issue.comment_created` | Server → Web | `{issueId, commentId, authorId, bodyPreview, parentCommentId, hasImages}` | Update panel Aktivitas/Komentar secara realtime tanpa refresh — `parentCommentId` dipakai frontend untuk menyisipkan reply ke bawah komentar induk yang tepat, bukan di akhir list |
 | `notification.created` | Server → Web | `{id, type, title, body, entityType, entityId}` | Notifikasi baru (FR-100–104) — dikirim **hanya ke room pribadi penerima** (`user:{userId}`), bukan broadcast ke semua |
 
 **Room per-user untuk notifikasi:** setiap koneksi Socket.io otomatis `socket.join('user:' + userId)` saat connect (identitas dari sesi Better Auth). Event `notification.created` di-emit ke room spesifik ini — memastikan notifikasi hanya sampai ke penerima yang dituju, bukan seluruh pengguna yang sedang online.
@@ -822,21 +838,41 @@ sequenceDiagram
     Note over A: Sub-proyek punya project_id & issue_sequence sendiri — nomor TIDAK bersambung dengan proyek induk
 ```
 
-### 10.7 Alur Komentar Issue Activity (Realtime)
+### 10.7 Alur Komentar Issue Activity — Termasuk Reply & Lampiran Gambar (Realtime)
 
 ```mermaid
 sequenceDiagram
     participant Dev as Developer
     participant A as Backend API
     participant PG as PostgreSQL
+    participant R2 as Cloudflare R2
     participant QA as QA (via WS)
 
+    Note over Dev: Komentar utama, dengan lampiran gambar
     Dev->>A: POST /issues/:id/comments {body}
     A->>A: Cek: pengirim member proyek manapun (role apapun) atau Admin?
-    A->>PG: Insert issue_comments (author_id, body)
-    A-->>Dev: 201 Created
-    A->>QA: emit issue.comment_created {issueId, commentId, authorId, bodyPreview}
-    Note over QA: Panel Aktivitas QA ter-update tanpa refresh jika issue yang sama sedang terbuka
+    A->>PG: Insert issue_comments (parent_comment_id=NULL)
+    A-->>Dev: 201 Created {commentId}
+    Dev->>A: POST /issues/:id/comments/:commentId/images {fileName, mimeType, fileSizeBytes}
+    A->>A: Validasi mimeType = image/*
+    A-->>Dev: presigned upload URL + imageId
+    Dev->>R2: Upload gambar langsung ke R2
+    Dev->>A: POST .../images/:imageId/confirm
+    A->>PG: Insert comment_attachments
+    A->>QA: emit issue.comment_created {commentId, parentCommentId=null, hasImages=true}
+    Note over QA: Panel Aktivitas QA ter-update dengan komentar + thumbnail gambar
+
+    Note over QA: QA membalas komentar tersebut
+    QA->>A: POST /issues/:id/comments {body, parentCommentId: commentId}
+    A->>PG: Cek parentCommentId — milik issue yang sama? parent_comment_id-nya sendiri NULL?
+    alt Parent adalah reply (sudah punya parent_comment_id)
+        A-->>QA: 400 Bad Request ("Tidak bisa membalas balasan — reply dibatasi 1 tingkat")
+    else Parent adalah komentar utama
+        A->>PG: Insert issue_comments (parent_comment_id=commentId)
+        A-->>QA: 201 Created
+        A->>Dev: emit issue.comment_created {parentCommentId=commentId, hasImages=false}
+        Note over Dev: Reply tersisip terindentasi di bawah komentar induk, bukan di akhir list
+    end
 ```
 
 ### 10.8 Alur Tray Icon — Hide, Bukan Quit
@@ -1242,6 +1278,8 @@ flowchart TB
 | Discard di Floating Widget tidak tercatat di audit log (karena data memang tidak pernah sampai ke server) — Admin tidak bisa melihat riwayat berapa kali/kapan seorang pekerja men-discard screenshot | Diterima sebagai trade-off kesederhanaan sesuai keputusan desain (§6); jika suatu saat dibutuhkan visibilitas ini, opsi lanjutan: kirim event count-only (tanpa gambar) ke server saat discard, tanpa menyimpan screenshot itu sendiri |
 | Proyek yang diarsipkan menumpuk seiring waktu tanpa pernah dibersihkan (soft-delete tidak pernah otomatis jadi hard-delete) | Diterima sebagai trade-off keamanan data — pertumbuhan tabel `projects`/`issues` dari proyek terarsip relatif kecil dibanding `time_blocks`/`screenshots`; hard-delete manual tetap tersedia untuk Admin bila memang perlu membersihkan proyek uji coba |
 | Parsing `@username` pada komentar bisa gagal cocok kalau username mengandung karakter di luar `\w` (mis. titik, strip) | Batasi format `username` saat registrasi/edit profil ke alfanumerik + underscore saja (dicek di validasi form), konsisten dengan pola regex mention |
+| Gambar komentar tanpa batas ukuran bisa membengkakkan storage R2 tanpa terkontrol | Terapkan soft-limit yang sama seperti lampiran issue/dokumen (mis. maks. 50MB/gambar), divalidasi di frontend sebelum upload |
+| Validasi "reply dibatasi 1 tingkat" hanya berarti kalau ditegakkan di backend, bukan cuma disembunyikan di UI | Endpoint POST comments **wajib** cek `parent_comment_id` milik parent yang direferensikan — tolak (400) kalau parent tersebut sendiri sudah punya parent (lihat §10.7) |
 | Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
 | Tanpa code signing (belum ada sertifikat berbayar), karyawan mendapat peringatan Gatekeeper (macOS)/SmartScreen (Windows) saat instalasi pertama | Diterima sebagai trade-off distribusi internal; instruksikan "klik kanan → Buka" (macOS) atau "More info → Run anyway" (Windows) — revisit beli sertifikat kalau tim membesar atau keluhan meningkat |
 | Release dibuat sebagai draft (§15.3) berpotensi lupa di-publish, karyawan tidak menerima update yang sudah dites | Jadikan bagian dari checklist rilis manual: build via CI → smoke test → publish — jangan anggap selesai hanya karena CI hijau |
