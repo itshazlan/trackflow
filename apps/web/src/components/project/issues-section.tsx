@@ -999,7 +999,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-8">
       {/* Toolbar / Filters */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2 text-xs">

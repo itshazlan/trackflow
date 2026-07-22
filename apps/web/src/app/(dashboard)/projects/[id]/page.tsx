@@ -304,7 +304,7 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto flex flex-col gap-6">
+    <div className="p-6 pb-20 max-w-6xl mx-auto flex flex-col gap-6">
       {/* Project Banner Info */}
       <div className="flex flex-col md:flex-row md:items-start md:justify-between border-b border-border pb-5 gap-4">
         <div>
