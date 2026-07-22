@@ -40,6 +40,16 @@
       "key": "userId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "documentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fileId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -52,8 +62,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -61,8 +77,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/sign-up/email",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "sign-up", "email"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "sign-up",
+                "email"
+              ]
             },
             "description": "Register a new employee account via Better Auth. `isAdmin` and `employeeId` are optional and handled as additionalFields."
           }
@@ -86,8 +109,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -95,8 +124,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/sign-in/email",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "sign-in", "email"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "sign-in",
+                "email"
+              ]
             },
             "description": "Sign in and automatically saves the session cookie to `sessionCookie` collection variable."
           }
@@ -106,13 +142,25 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/auth/session",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "session"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "session"
+              ]
             },
             "description": "Returns the currently active session including the authenticated user object."
           }
@@ -122,13 +170,25 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/auth/sign-out",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "sign-out"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "sign-out"
+              ]
             }
           }
         }
@@ -143,13 +203,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
             },
             "description": "Returns the profile data of the currently authenticated user. Password field is stripped from the response."
           }
@@ -159,9 +230,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -169,10 +249,79 @@
             },
             "url": {
               "raw": "{{baseUrl}}/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
             },
             "description": "Updates the name, phone number, and profile image URL for the authenticated user."
+          }
+        },
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Returns all registered user profiles for selection in dropdowns/assignees."
+          }
+        },
+        {
+          "name": "Upload My Avatar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/avatar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "avatar"
+              ]
+            },
+            "description": "Uploads profile avatar directly to Cloudflare R2 server-side."
           }
         }
       ]
@@ -198,9 +347,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -208,8 +366,12 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ]
             },
             "description": "Creates a new project. The creator is automatically added as a `manager`. Automatically seeds 6 default workflow statuses (New, In Progress, Testing, Ready to Deploy, Blocker, Done). Pass `parentId` for a sub-project."
           }
@@ -219,13 +381,23 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ]
             },
             "description": "Lists all projects the authenticated user is a member of. Admins see all projects."
           }
@@ -235,13 +407,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}"
+              ]
             }
           }
         },
@@ -250,13 +433,25 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/subprojects",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "subprojects"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "subprojects"
+              ]
             }
           }
         },
@@ -265,9 +460,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -275,8 +479,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}"
+              ]
             }
           }
         },
@@ -285,15 +494,116 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}"
+              ]
             },
             "description": "Cascades deletes all project memberships, statuses, templates, issues, and time blocks."
+          }
+        },
+        {
+          "name": "Check Key Availability",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/check-key/:key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "check-key",
+                ":key"
+              ],
+              "variable": [
+                {
+                  "key": "key",
+                  "value": "PRJ"
+                }
+              ]
+            },
+            "description": "Checks if a project key is available."
+          }
+        },
+        {
+          "name": "Archive Project",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/archive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "archive"
+              ]
+            },
+            "description": "Archives a project (Manager only)."
+          }
+        },
+        {
+          "name": "Restore Project",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "restore"
+              ]
+            },
+            "description": "Restores an archived project (Manager only)."
           }
         }
       ]
@@ -307,9 +617,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -317,8 +636,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/members",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "members"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "members"
+              ]
             },
             "description": "Adds a user as a project member. Valid roles: `manager`, `developer`, `reporter_qa`."
           }
@@ -328,13 +653,25 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/members",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "members"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "members"
+              ]
             }
           }
         },
@@ -343,9 +680,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -353,8 +699,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/members/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "members", "{{userId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "members",
+                "{{userId}}"
+              ]
             }
           }
         },
@@ -363,13 +716,26 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/members/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "members", "{{userId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "members",
+                "{{userId}}"
+              ]
             }
           }
         }
@@ -384,13 +750,23 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/trackers",
-              "host": ["{{baseUrl}}"],
-              "path": ["trackers"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trackers"
+              ]
             }
           }
         },
@@ -399,14 +775,30 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/trackers/:trackerId",
-              "host": ["{{baseUrl}}"],
-              "path": ["trackers", ":trackerId"],
-              "variable": [{ "key": "trackerId", "value": "" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trackers",
+                ":trackerId"
+              ],
+              "variable": [
+                {
+                  "key": "trackerId",
+                  "value": ""
+                }
+              ]
             }
           }
         },
@@ -415,9 +807,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -425,8 +826,12 @@
             },
             "url": {
               "raw": "{{baseUrl}}/trackers",
-              "host": ["{{baseUrl}}"],
-              "path": ["trackers"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trackers"
+              ]
             }
           }
         }
@@ -441,13 +846,25 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/statuses",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "statuses"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "statuses"
+              ]
             }
           }
         },
@@ -456,9 +873,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -466,8 +892,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/statuses",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "statuses"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "statuses"
+              ]
             },
             "description": "Creates a new workflow status (Kanban column). `restrictedToRole` limits who can transition issues TO this status. Valid values: `manager`, `developer`, `reporter_qa`, or `null` (unrestricted)."
           }
@@ -477,9 +909,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -487,8 +928,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/statuses/reorder",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "statuses", "reorder"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "statuses",
+                "reorder"
+              ]
             },
             "description": "Reorders Kanban columns by passing an array of status IDs in the desired display order. Executed as a single transaction."
           }
@@ -498,9 +946,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -508,9 +965,21 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/statuses/:statusId",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "statuses", ":statusId"],
-              "variable": [{ "key": "statusId", "value": "" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "statuses",
+                ":statusId"
+              ],
+              "variable": [
+                {
+                  "key": "statusId",
+                  "value": ""
+                }
+              ]
             }
           }
         },
@@ -519,14 +988,32 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/statuses/:statusId",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "statuses", ":statusId"],
-              "variable": [{ "key": "statusId", "value": "" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "statuses",
+                ":statusId"
+              ],
+              "variable": [
+                {
+                  "key": "statusId",
+                  "value": ""
+                }
+              ]
             }
           }
         }
@@ -541,13 +1028,23 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "templates"
+              ]
             }
           }
         },
@@ -556,9 +1053,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -566,8 +1072,12 @@
             },
             "url": {
               "raw": "{{baseUrl}}/templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "templates"
+              ]
             }
           }
         },
@@ -576,13 +1086,25 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "templates"
+              ]
             },
             "description": "Returns both project-specific templates AND global templates (where projectId IS NULL)."
           }
@@ -592,9 +1114,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -602,8 +1133,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/templates",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "templates"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "templates"
+              ]
             }
           }
         },
@@ -612,9 +1149,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -622,9 +1168,21 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/templates/:templateId",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "templates", ":templateId"],
-              "variable": [{ "key": "templateId", "value": "" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "templates",
+                ":templateId"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": ""
+                }
+              ]
             }
           }
         },
@@ -633,14 +1191,32 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/templates/:templateId",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "templates", ":templateId"],
-              "variable": [{ "key": "templateId", "value": "" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "templates",
+                ":templateId"
+              ],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": ""
+                }
+              ]
             }
           }
         }
@@ -655,13 +1231,23 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/issues",
-              "host": ["{{baseUrl}}"],
-              "path": ["issues"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues"
+              ]
             },
             "description": "Returns all issues assigned to or created by the authenticated user across all projects."
           }
@@ -683,9 +1269,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -693,8 +1288,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/issues",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "issues"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "issues"
+              ]
             },
             "description": "Creates an issue with direct title/description. If `statusId` is omitted, defaults to the project's first status (orderIndex=0). Priority: `low`, `medium`, `high`, `urgent`."
           }
@@ -704,9 +1305,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -714,8 +1324,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/issues",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "issues"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "issues"
+              ]
             },
             "description": "Creates an issue using a template. Backend compiles `title` from `titlePattern` + `titleValues` and compiles `description` as Markdown from `fields` + `fieldValues`. Required template fields are validated."
           }
@@ -725,13 +1341,25 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/issues",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "issues"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "issues"
+              ]
             }
           }
         },
@@ -740,13 +1368,26 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/issues/{{issueId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "issues", "{{issueId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "issues",
+                "{{issueId}}"
+              ]
             }
           }
         },
@@ -755,9 +1396,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -765,8 +1415,15 @@
             },
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/issues/{{issueId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "issues", "{{issueId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "issues",
+                "{{issueId}}"
+              ]
             },
             "description": "Updates issue fields. If `statusId` changes, validates `restrictedToRole` on the target status. Returns `403 Forbidden` if the current user lacks the required project role."
           }
@@ -776,13 +1433,298 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/projects/{{projectId}}/issues/{{issueId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["projects", "{{projectId}}", "issues", "{{issueId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "issues",
+                "{{issueId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Issue Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"statusId\": \"<target-status-uuid>\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/issues/{{issueId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues",
+                "{{issueId}}",
+                "status"
+              ]
+            },
+            "description": "Updates issue status directly by issue ID."
+          }
+        },
+        {
+          "name": "List Issue Attachments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/issues/{{issueId}}/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues",
+                "{{issueId}}",
+                "attachments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Issue Attachment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/issues/{{issueId}}/attachments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues",
+                "{{issueId}}",
+                "attachments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Issue Attachment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/issues/{{issueId}}/attachments/:attachmentId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues",
+                "{{issueId}}",
+                "attachments",
+                ":attachmentId"
+              ],
+              "variable": [
+                {
+                  "key": "attachmentId",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Issue Comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/issues/{{issueId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues",
+                "{{issueId}}",
+                "comments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Issue Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"This is a comment with @username mention.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/issues/{{issueId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues",
+                "{{issueId}}",
+                "comments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Issue Comment",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Updated comment text\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/issues/{{issueId}}/comments/:commentId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues",
+                "{{issueId}}",
+                "comments",
+                ":commentId"
+              ],
+              "variable": [
+                {
+                  "key": "commentId",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Issue Comment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/issues/{{issueId}}/comments/:commentId",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "issues",
+                "{{issueId}}",
+                "comments",
+                ":commentId"
+              ],
+              "variable": [
+                {
+                  "key": "commentId",
+                  "value": ""
+                }
+              ]
             }
           }
         }
@@ -809,9 +1751,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -819,8 +1770,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/time-blocks/sync",
-              "host": ["{{baseUrl}}"],
-              "path": ["time-blocks", "sync"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "time-blocks",
+                "sync"
+              ]
             },
             "description": "Primary sync endpoint called by the desktop client every 10 minutes. Validates project membership. Computes `activityLevel` from total inputs (none/low/medium/high). Calculates `purgeAfter` from `app_settings.screenshotRetentionDays`. Returns the created `timeBlock` and `activityLog`."
           }
@@ -830,8 +1786,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "formdata",
@@ -845,8 +1807,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/time-blocks/{{timeBlockId}}/screenshot",
-              "host": ["{{baseUrl}}"],
-              "path": ["time-blocks", "{{timeBlockId}}", "screenshot"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "time-blocks",
+                "{{timeBlockId}}",
+                "screenshot"
+              ]
             },
             "description": "Uploads a screenshot file (multipart/form-data) associated with a time block. Stores on disk at `uploads/screenshots/` with a random hash filename. Returns the created screenshot record."
           }
@@ -856,17 +1824,39 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/time-blocks?projectId={{projectId}}&startDate=2026-07-01&endDate=2026-07-31",
-              "host": ["{{baseUrl}}"],
-              "path": ["time-blocks"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "time-blocks"
+              ],
               "query": [
-                { "key": "projectId", "value": "{{projectId}}", "description": "Filter by project (optional)" },
-                { "key": "startDate", "value": "2026-07-01", "description": "ISO date (optional)" },
-                { "key": "endDate", "value": "2026-07-31", "description": "ISO date (optional)" }
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "Filter by project (optional)"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2026-07-01",
+                  "description": "ISO date (optional)"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-07-31",
+                  "description": "ISO date (optional)"
+                }
               ]
             },
             "description": "Returns all non-deleted time blocks for the authenticated user. Joins with activity logs and screenshots."
@@ -877,9 +1867,18 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -887,8 +1886,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/time-blocks/{{timeBlockId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["time-blocks", "{{timeBlockId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "time-blocks",
+                "{{timeBlockId}}"
+              ]
             },
             "description": "Soft-deletes a worker's own time block. Sets `isDeleted=true`, `deletionType='self'`, and creates an audit log entry."
           }
@@ -898,9 +1902,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -908,8 +1921,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/time-blocks/{{timeBlockId}}/override",
-              "host": ["{{baseUrl}}"],
-              "path": ["time-blocks", "{{timeBlockId}}", "override"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "time-blocks",
+                "{{timeBlockId}}",
+                "override"
+              ]
             },
             "description": "**Admin only.** `action`: `delete` (soft-delete) or `mark_unpaid` (sets `isPaid=false`). A mandatory `reason` is always recorded in the audit log."
           }
@@ -925,9 +1944,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -935,8 +1963,12 @@
             },
             "url": {
               "raw": "{{baseUrl}}/manual-time-entries",
-              "host": ["{{baseUrl}}"],
-              "path": ["manual-time-entries"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manual-time-entries"
+              ]
             },
             "description": "Logs a manual time entry. `durationMinutes` must be ≥ 1. Defaults to `approvalStatus: pending`."
           }
@@ -946,15 +1978,29 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/manual-time-entries?projectId={{projectId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["manual-time-entries"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manual-time-entries"
+              ],
               "query": [
-                { "key": "projectId", "value": "{{projectId}}", "description": "Optional project filter" }
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "Optional project filter"
+                }
               ]
             }
           }
@@ -982,9 +2028,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -992,8 +2047,12 @@
             },
             "url": {
               "raw": "{{baseUrl}}/timesheets",
-              "host": ["{{baseUrl}}"],
-              "path": ["timesheets"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timesheets"
+              ]
             },
             "description": "Creates a timesheet aggregating all non-deleted time blocks and approved manual entries in the given date range. `totalMinutes` is auto-computed."
           }
@@ -1003,15 +2062,29 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/timesheets?projectId={{projectId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["timesheets"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timesheets"
+              ],
               "query": [
-                { "key": "projectId", "value": "{{projectId}}", "description": "Optional project filter" }
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "Optional project filter"
+                }
               ]
             }
           }
@@ -1021,13 +2094,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/timesheets/{{timesheetId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["timesheets", "{{timesheetId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timesheets",
+                "{{timesheetId}}"
+              ]
             },
             "description": "Returns timesheet detail including the full `approvals` array. Managers can view timesheets of their project members."
           }
@@ -1037,13 +2121,25 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/timesheets/{{timesheetId}}/submit",
-              "host": ["{{baseUrl}}"],
-              "path": ["timesheets", "{{timesheetId}}", "submit"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timesheets",
+                "{{timesheetId}}",
+                "submit"
+              ]
             },
             "description": "Transitions a `draft` timesheet to `submitted` status. Only the timesheet owner can submit."
           }
@@ -1053,9 +2149,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1063,8 +2168,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/timesheets/{{timesheetId}}/approve",
-              "host": ["{{baseUrl}}"],
-              "path": ["timesheets", "{{timesheetId}}", "approve"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timesheets",
+                "{{timesheetId}}",
+                "approve"
+              ]
             },
             "description": "Manager or Admin reviews a `submitted` timesheet. `decision`: `approved` or `rejected`. The `note` is optional but recommended. Creates an entry in `timesheet_approvals` and updates the timesheet status."
           }
@@ -1080,19 +2191,51 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/reports/hours?format=csv&projectId={{projectId}}&startDate=2026-07-01&endDate=2026-07-31",
-              "host": ["{{baseUrl}}"],
-              "path": ["reports", "hours"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "hours"
+              ],
               "query": [
-                { "key": "format", "value": "csv", "description": "Required: `pdf` or `csv`" },
-                { "key": "projectId", "value": "{{projectId}}", "description": "Optional project filter" },
-                { "key": "userId", "value": "", "description": "Optional user filter (for admin cross-team reports)", "disabled": true },
-                { "key": "startDate", "value": "2026-07-01", "description": "ISO date filter start (optional)" },
-                { "key": "endDate", "value": "2026-07-31", "description": "ISO date filter end (optional)" }
+                {
+                  "key": "format",
+                  "value": "csv",
+                  "description": "Required: `pdf` or `csv`"
+                },
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "Optional project filter"
+                },
+                {
+                  "key": "userId",
+                  "value": "",
+                  "description": "Optional user filter (for admin cross-team reports)",
+                  "disabled": true
+                },
+                {
+                  "key": "startDate",
+                  "value": "2026-07-01",
+                  "description": "ISO date filter start (optional)"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-07-31",
+                  "description": "ISO date filter end (optional)"
+                }
               ]
             },
             "description": "Returns a CSV file with all work hours (time blocks + manual entries). Totals are appended at the footer. Response has `Content-Disposition: attachment; filename=\"report-hours.csv\"`."
@@ -1103,19 +2246,51 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/reports/hours?format=pdf&projectId={{projectId}}&startDate=2026-07-01&endDate=2026-07-31",
-              "host": ["{{baseUrl}}"],
-              "path": ["reports", "hours"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "hours"
+              ],
               "query": [
-                { "key": "format", "value": "pdf", "description": "Required: `pdf` or `csv`" },
-                { "key": "projectId", "value": "{{projectId}}", "description": "Optional project filter" },
-                { "key": "userId", "value": "", "description": "Optional user filter", "disabled": true },
-                { "key": "startDate", "value": "2026-07-01", "description": "ISO date filter start" },
-                { "key": "endDate", "value": "2026-07-31", "description": "ISO date filter end" }
+                {
+                  "key": "format",
+                  "value": "pdf",
+                  "description": "Required: `pdf` or `csv`"
+                },
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "Optional project filter"
+                },
+                {
+                  "key": "userId",
+                  "value": "",
+                  "description": "Optional user filter",
+                  "disabled": true
+                },
+                {
+                  "key": "startDate",
+                  "value": "2026-07-01",
+                  "description": "ISO date filter start"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-07-31",
+                  "description": "ISO date filter end"
+                }
               ]
             },
             "description": "Returns a styled A4 PDF file with a summary section and paginated work log table. Response has `Content-Disposition: attachment; filename=\"report-hours.pdf\"`."
@@ -1132,13 +2307,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/settings",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "settings"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "settings"
+              ]
             },
             "description": "Returns the global singleton `app_settings` row (`companyName`, `screenshotRetentionDays`)."
           }
@@ -1148,9 +2334,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1158,8 +2353,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/admin/settings",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "settings"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "settings"
+              ]
             }
           }
         },
@@ -1168,13 +2368,24 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/admin/users",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "users"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
             },
             "description": "Returns all registered user profiles. Password fields are stripped from the response."
           }
@@ -1184,9 +2395,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1194,8 +2414,13 @@
             },
             "url": {
               "raw": "{{baseUrl}}/admin/users",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "users"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
             },
             "description": "Creates a new employee account via Better Auth's programmatic API (password is properly hashed)."
           }
@@ -1205,9 +2430,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1215,8 +2449,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/admin/users/{{userId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "users", "{{userId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{userId}}"
+              ]
             },
             "description": "Updates any user field including the `isAdmin` flag. Use for promotions and general profile corrections."
           }
@@ -1226,9 +2466,18 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Cookie", "value": "{{sessionCookie}}" },
-              { "key": "Origin", "value": "{{baseUrl}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1236,10 +2485,460 @@
             },
             "url": {
               "raw": "{{baseUrl}}/admin/users/{{userId}}/employment",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "users", "{{userId}}", "employment"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{userId}}",
+                "employment"
+              ]
             },
             "description": "Updates employment-specific fields for HR-type changes. `employmentStatus` values: `active`, `inactive`, `on_leave`. Setting `inactive` preserves all task and time-block history."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "description": "Project document containers and file upload management using Cloudflare R2 direct pre-signed URLs.",
+      "item": [
+        {
+          "name": "List Project Documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page (default: 20)"
+                }
+              ]
+            },
+            "description": "Returns paginated document containers for a project."
+          }
+        },
+        {
+          "name": "Create Document Container",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.id) { pm.collectionVariables.set('documentId', json.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"System Architecture & API Spec\",\n  \"category\": \"Spesifikasi Teknis\",\n  \"description\": \"Dokumentasi arsitektur dan spesifikasi API project.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents"
+              ]
+            },
+            "description": "Creates a new document container. Categories: `Dokumen Legal`, `Spesifikasi Teknis`, `Laporan / Analytics`, `Media & Design`, `Lainnya`."
+          }
+        },
+        {
+          "name": "Get Document Container Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents/{{documentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents",
+                "{{documentId}}"
+              ]
+            },
+            "description": "Returns document container details along with all associated uploaded files."
+          }
+        },
+        {
+          "name": "Update Document Container",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Document Title\",\n  \"category\": \"Spesifikasi Teknis\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents/{{documentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents",
+                "{{documentId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Document Container",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents/{{documentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents",
+                "{{documentId}}"
+              ]
+            },
+            "description": "Deletes a document container and cascades deleting all associated files in Cloudflare R2."
+          }
+        },
+        {
+          "name": "Request File Upload (Pre-signed URL)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.fileId) { pm.collectionVariables.set('fileId', json.fileId); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"api-spec-v1.pdf\",\n  \"fileSizeBytes\": 1048576,\n  \"mimeType\": \"application/pdf\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents/{{documentId}}/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents",
+                "{{documentId}}",
+                "files"
+              ]
+            },
+            "description": "Generates a pre-signed PUT URL for direct client-to-R2 upload."
+          }
+        },
+        {
+          "name": "Confirm File Upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents/{{documentId}}/files/{{fileId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents",
+                "{{documentId}}",
+                "files",
+                "{{fileId}}",
+                "confirm"
+              ]
+            },
+            "description": "Confirms that file upload to R2 completed successfully."
+          }
+        },
+        {
+          "name": "Get File Download URL",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents/{{documentId}}/files/{{fileId}}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents",
+                "{{documentId}}",
+                "files",
+                "{{fileId}}",
+                "download"
+              ]
+            },
+            "description": "Returns a pre-signed GET URL for downloading or viewing the file."
+          }
+        },
+        {
+          "name": "Delete Single File",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/documents/{{documentId}}/files/{{fileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "documents",
+                "{{documentId}}",
+                "files",
+                "{{fileId}}"
+              ]
+            },
+            "description": "Deletes a single file record and removes the file object from Cloudflare R2."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "description": "User notification management including list, pagination, unread filter, and mark as read.",
+      "item": [
+        {
+          "name": "List My Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?unread=true&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "unread",
+                  "value": "true",
+                  "description": "Filter unread notifications only (optional)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page (default: 20)"
+                }
+              ]
+            },
+            "description": "Returns list of in-app notifications for the logged in user."
+          }
+        },
+        {
+          "name": "Mark All Notifications as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "read-all"
+              ]
+            },
+            "description": "Marks all notifications of the authenticated user as read."
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{sessionCookie}}"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/:id/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                ":id",
+                "read"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Marks a single notification as read."
           }
         }
       ]

@@ -293,17 +293,62 @@ fn play_shutter_sound() {}
 
 fn get_current_active_window() -> (String, String) {
     use active_win_pos_rs::get_active_window;
-    match get_active_window() {
+
+    let query = || match get_active_window() {
         Ok(win) => {
             let title = if win.title.trim().is_empty() { "Unknown".to_string() } else { win.title };
             let app = if win.app_name.trim().is_empty() { "Unknown".to_string() } else { win.app_name };
             (title, app)
         }
         Err(_) => ("Unknown".to_string(), "Unknown".to_string()),
+    };
+
+    // Same autorelease concern as capture_and_save_screenshot: this runs on a
+    // reused tokio worker thread with no Cocoa run loop to drain the pool.
+    #[cfg(target_os = "macos")]
+    {
+        objc2::rc::autoreleasepool(|_| query())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        query()
     }
 }
 
+// capture_and_save_screenshot runs on a long-lived tokio worker thread that never
+// returns to a Cocoa run loop. The AppKit/Core Graphics objects xcap's capture path
+// autoreleases (NSImage/CGImage/IOSurface wrappers, etc.) would otherwise never be
+// drained on that thread, permanently leaking WindowServer resources on every
+// ~10-minute capture cycle. Wrap the capture in an explicit autorelease pool so
+// those objects are freed as soon as the capture is done.
+#[cfg(target_os = "macos")]
+fn with_autoreleasepool<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    objc2::rc::autoreleasepool(|_| f())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn with_autoreleasepool<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    f()
+}
+
+// TEMPORARY DIAGNOSTIC FLAG — bisection test for the WindowServer port/CPU leak
+// reported after long uptime. When true, xcap's Monitor::all()/capture_image()
+// is skipped entirely (no screenshot taken, no review widget shown) so we can
+// confirm whether xcap itself is still the source after the autoreleasepool fix.
+// Revert to false and remove this flag once the test is done.
+const DEBUG_DISABLE_SCREENSHOT_CAPTURE: bool = true;
+
 fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<ScreenshotData, String> {
+    if DEBUG_DISABLE_SCREENSHOT_CAPTURE {
+        println!("[Tauri Rust] DEBUG_DISABLE_SCREENSHOT_CAPTURE=true — skipping xcap capture for leak bisection test");
+        let (window_title, app_name) = get_current_active_window();
+        return Ok(ScreenshotData {
+            screenshot_path: String::new(),
+            active_window_title: window_title,
+            active_app_name: app_name,
+        });
+    }
+
     use xcap::Monitor;
 
     let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -311,20 +356,23 @@ fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<Screensh
     std::fs::create_dir_all(&screenshots_dir).map_err(|e| e.to_string())?;
 
     let now = chrono::Utc::now().timestamp();
-    let monitors = Monitor::all().map_err(|e| e.to_string())?;
-    
-    let mut saved_paths = Vec::new();
-    for (index, monitor) in monitors.iter().enumerate() {
-        let image = monitor.capture_image().map_err(|e| e.to_string())?;
-        let filename = format!("screenshot_{}_{}.webp", now, index);
-        let filepath = screenshots_dir.join(&filename);
-        
-        image.save_with_format(&filepath, image::ImageFormat::WebP)
-            .map_err(|e| e.to_string())?;
-            
-        saved_paths.push(filepath.to_string_lossy().to_string());
-    }
-    
+
+    let saved_paths = with_autoreleasepool(|| {
+        let monitors = Monitor::all().map_err(|e| e.to_string())?;
+        let mut saved_paths = Vec::new();
+        for (index, monitor) in monitors.iter().enumerate() {
+            let image = monitor.capture_image().map_err(|e| e.to_string())?;
+            let filename = format!("screenshot_{}_{}.webp", now, index);
+            let filepath = screenshots_dir.join(&filename);
+
+            image.save_with_format(&filepath, image::ImageFormat::WebP)
+                .map_err(|e| e.to_string())?;
+
+            saved_paths.push(filepath.to_string_lossy().to_string());
+        }
+        Ok(saved_paths)
+    })?;
+
     let paths_str = saved_paths.join(",");
 
     // Get active window title and application name
@@ -332,7 +380,7 @@ fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<Screensh
 
     println!(
         "[Tauri Rust] Screenshot captured! Monitors: {}, Paths: {}, Window: {} ({})",
-        monitors.len(),
+        saved_paths.len(),
         paths_str,
         window_title,
         app_name
@@ -740,6 +788,7 @@ pub struct TrayAssets {
 pub struct TrayMenuState {
     pub info_item: tauri::menu::MenuItem<tauri::Wry>,
     pub pause_resume_item: tauri::menu::MenuItem<tauri::Wry>,
+    pub last_icon_status: Mutex<String>,
 }
 
 fn emit_timer_state(app_handle: &tauri::AppHandle) {
@@ -783,21 +832,37 @@ fn update_tray_state(app_handle: &tauri::AppHandle) {
             let seconds = elapsed % 60;
             let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
+            // Only touch the native tray icon/menu-item-enabled state on an actual
+            // status transition, not on every 1s tick — reassigning the tray icon
+            // continuously is expensive OS-level churn (status bar redraw) that adds
+            // up over a long-running session. The elapsed-time text still updates
+            // every tick since it changes every second while running.
+            let mut last_status = menu_state.last_icon_status.lock().unwrap();
+            let icon_changed = *last_status != status;
+            if icon_changed {
+                *last_status = status.clone();
+            }
+            drop(last_status);
+
             if status == "Running" {
                 let _ = menu_state.info_item.set_text(format!("Sedang Melacak: {} — {}", display_title, time_str));
-                let _ = menu_state.pause_resume_item.set_text("⏸ Pause");
-                let _ = menu_state.pause_resume_item.set_enabled(true);
-                let _ = tray.set_icon(Some(assets.icon_active.clone()));
-                #[cfg(target_os = "macos")]
-                let _ = tray.set_icon_as_template(true);
+                if icon_changed {
+                    let _ = menu_state.pause_resume_item.set_text("⏸ Pause");
+                    let _ = menu_state.pause_resume_item.set_enabled(true);
+                    let _ = tray.set_icon(Some(assets.icon_active.clone()));
+                    #[cfg(target_os = "macos")]
+                    let _ = tray.set_icon_as_template(true);
+                }
             } else if status == "Paused" {
                 let _ = menu_state.info_item.set_text(format!("Melacak Terjeda: {} — {}", display_title, time_str));
-                let _ = menu_state.pause_resume_item.set_text("▶ Resume");
-                let _ = menu_state.pause_resume_item.set_enabled(true);
-                let _ = tray.set_icon(Some(assets.icon_idle.clone()));
-                #[cfg(target_os = "macos")]
-                let _ = tray.set_icon_as_template(true);
-            } else {
+                if icon_changed {
+                    let _ = menu_state.pause_resume_item.set_text("▶ Resume");
+                    let _ = menu_state.pause_resume_item.set_enabled(true);
+                    let _ = tray.set_icon(Some(assets.icon_idle.clone()));
+                    #[cfg(target_os = "macos")]
+                    let _ = tray.set_icon_as_template(true);
+                }
+            } else if icon_changed {
                 let _ = menu_state.info_item.set_text("Tidak Melacak Task");
                 let _ = menu_state.pause_resume_item.set_text("⏸ Pause / ▶ Resume");
                 let _ = menu_state.pause_resume_item.set_enabled(false);
@@ -1585,6 +1650,7 @@ pub fn run() {
             app.manage(TrayMenuState {
                 info_item: info_item.clone(),
                 pause_resume_item: pause_resume_item.clone(),
+                last_icon_status: Mutex::new(String::new()),
             });
 
             let _tray = tauri::tray::TrayIconBuilder::with_id("main")
