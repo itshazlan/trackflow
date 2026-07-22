@@ -48,6 +48,15 @@ export default function ProjectsPage() {
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  // Load active session user on mount to ensure project list matches logged-in user
+  useEffect(() => {
+    void getSession().then((sess) => {
+      if (sess?.user) {
+        setCurrentUser(sess.user);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     if (isDialogOpen) {
       setCurrentStep(1);
@@ -56,13 +65,6 @@ export default function ProjectsPage() {
       setKeyError("");
       setIsKeyAvailable(null);
       setIsKeyManuallyEdited(false);
-      
-      // Load current session
-      void getSession().then((sess) => {
-        if (sess?.user) {
-          setCurrentUser(sess.user);
-        }
-      });
 
       // Load system users
       void getSystemUsers().then((data) => {
@@ -84,10 +86,12 @@ export default function ProjectsPage() {
     return u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query);
   });
 
-  // Fetch projects via TanStack Query
+  // Fetch projects via TanStack Query (invalidates & refetches when user switches)
   const { data: projects = [], isLoading, error: queryError } = useQuery<Project[]>({
-    queryKey: ["projects"],
+    queryKey: ["projects", currentUser?.id],
     queryFn: getProjects,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Create project mutation

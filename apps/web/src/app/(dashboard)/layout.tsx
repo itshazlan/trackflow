@@ -5,7 +5,7 @@ import { useRouter, useParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { getSession, logout, UserSession } from "@/lib/auth-service";
 import { getProjects, Project } from "@/lib/projects-service";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import ProjectSwitcher from "@/components/project/project-switcher";
 import ProfileModal from "@/components/profile-modal";
 import NotificationBell from "@/components/notification-bell";
@@ -54,6 +54,7 @@ export default function DashboardLayout({
   const params = useParams();
   const pathname = usePathname();
   const { setTheme } = useTheme();
+  const queryClient = useQueryClient();
   const projectId = params?.id as string | undefined;
 
   const [session, setSession] = useState<UserSession | null>(null);
@@ -71,8 +72,10 @@ export default function DashboardLayout({
   };
 
   const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ["projects"],
+    queryKey: ["projects", session?.user?.id],
     queryFn: getProjects,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   useEffect(() => {
@@ -91,6 +94,7 @@ export default function DashboardLayout({
             console.error("Gagal memanggil API logout pada sesi tidak valid:", logoutErr);
           }
           
+          queryClient.clear();
           router.push("/login");
           return;
         }
@@ -102,7 +106,7 @@ export default function DashboardLayout({
       }
     }
     loadData();
-  }, [router]);
+  }, [router, queryClient]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -115,6 +119,7 @@ export default function DashboardLayout({
   const handleLogout = async () => {
     try {
       await logout();
+      queryClient.clear();
       router.push("/login");
     } catch (err) {
       console.error("Logout failed", err);

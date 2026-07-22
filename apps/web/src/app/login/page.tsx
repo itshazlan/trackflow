@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +53,7 @@ function IconInput({
 
 export default function LoginPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,6 +72,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
+      queryClient.clear();
       router.push("/");
     } catch (err: unknown) {
       setError(

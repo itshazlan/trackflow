@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProjects, createProject, checkProjectKey, Project } from "@/lib/projects-service";
+import { getSession } from "@/lib/auth-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,10 +53,18 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
   const [isKeyAvailable, setIsKeyAvailable] = useState<boolean | null>(null);
   const [isKeyManuallyEdited, setIsKeyManuallyEdited] = useState(false);
 
-  // Fetch projects via TanStack Query
+  // Fetch active session
+  const { data: session } = useQuery({
+    queryKey: ["session"],
+    queryFn: getSession,
+  });
+
+  // Fetch projects via TanStack Query (scoped to user session)
   const { data: projects = [], isLoading } = useQuery<Project[]>({
-    queryKey: ["projects"],
+    queryKey: ["projects", session?.user?.id],
     queryFn: getProjects,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Create project mutation
