@@ -948,6 +948,26 @@ export default function IssueDetailPage() {
       (att) => !att.mimeType?.toLowerCase().startsWith("image/") && !isImageFile(att.fileName)
     );
 
+    const handleDownloadFile = async (att: CommentAttachment) => {
+      let downloadUrl = `/api/uploads/${att.r2ObjectKey}`;
+      try {
+        const res = await getCommentAttachmentDownloadUrl(issue!.id, commentId, att.id);
+        if (res.downloadUrl) {
+          downloadUrl = res.downloadUrl;
+        }
+      } catch (err) {
+        console.warn("Failed to get presigned download url, fallback to uploads path:", err);
+      }
+
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = att.fileName;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
     return (
       <div className="flex flex-col gap-2 mt-2">
         {/* Image Thumbnail Grid */}
@@ -1008,16 +1028,7 @@ export default function IssueDetailPage() {
 
                 <button
                   type="button"
-                  onClick={async () => {
-                    try {
-                      const res = await getCommentAttachmentDownloadUrl(issue!.id, commentId, att.id);
-                      if (res.downloadUrl) {
-                        window.open(res.downloadUrl, "_blank");
-                      }
-                    } catch {
-                      window.open(`/api/uploads/${att.r2ObjectKey}`, "_blank");
-                    }
-                  }}
+                  onClick={() => handleDownloadFile(att)}
                   className="flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline shrink-0 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
                   title="Unduh File"
                 >
