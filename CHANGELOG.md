@@ -9,6 +9,12 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Belum ada perubahan yang menunggu rilis berikutnya._
+
+---
+
+## [0.2.2] - 2026-07-22
+
 ### Fixed
 - **Desktop (macOS)** — scroll/kursor sistem terasa stutter halus setelah desktop client berjalan lama (1 jam+), makin parah kalau sistem sedang berat (mis. Docker/IDE jalan bersamaan), dan hilang instan begitu Trackflow di-quit. Root cause: global input hook `rdev` memasang live `CGEventTap` yang, meski mode `ListenOnly`, tetap butuh round-trip sinkron OS ke proses Trackflow untuk setiap event mouse/scroll — kalau proses telat merespons, delay itu terasa system-wide, paling kentara saat scroll (event rate tinggi). Diganti dengan polling pasif `CGEventSourceCounterForEventType` khusus macOS yang tidak lagi berada di jalur pengiriman event sama sekali. `rdev` tetap dipakai di Windows/Linux (belum ada indikasi masalah serupa di platform tersebut).
 - **Desktop (macOS)** — kontribusi tambahan terhadap gejala di atas: dependency `xcap` (screenshot capture) yang sangat usang (`0.0.12`) di-upgrade ke versi terbaru (`0.9.x`), dan pemanggilan capture dibungkus `autoreleasepool` eksplisit — sebelumnya resource Objective-C hasil capture bisa menumpuk tanpa pernah di-drain karena berjalan di tokio worker thread yang reusable dan tidak pernah kembali ke Cocoa run loop.
@@ -18,6 +24,7 @@ dan proyek ini mengikuti [Semantic Versioning](https://semver.org/).
   - `bundle.createUpdaterArtifacts` di `tauri.conf.json` bernilai `false`, sehingga build CI tidak pernah menghasilkan artifact updater (`.tar.gz` + `.sig`) sama sekali di rilis manapun. Diaktifkan (`true`).
   - `plugins.updater.pubkey` di `tauri.conf.json` mengandung karakter `%` nyasar di ujung string (kemungkinan artifact copy-paste dari terminal), membuat base64-nya gagal di-parse secara ketat. Dibersihkan.
   - `plugins.updater.endpoints` diganti dari domain custom (`trackflow.chimney.id/desktop-updater/...`) ke `latest.json` yang otomatis di-generate & di-upload GitHub Actions ke tiap GitHub Release — pola standar Tauri, tidak perlu backend custom untuk dipelihara.
+- **CI (Linux)** — build GitHub Actions untuk Ubuntu gagal (`libspa-sys` tidak menemukan `libpipewire-0.3` lewat pkg-config) setelah upgrade `xcap`, karena versi baru menambah dependency wajib ke PipeWire/Wayland di Linux. Tambah `libpipewire-0.3-dev`, `libwayland-dev`, `libclang-dev`, `libxcb1-dev`, `libxrandr-dev`, `libdbus-1-dev`, `libegl-dev`, `pkg-config` ke step install dependency Linux di `release.yml` (mengikuti daftar CI resmi `xcap`).
 
 ---
 
@@ -121,6 +128,8 @@ Rilis pertama TrackFlow — mencakup web dashboard, backend, dan desktop client 
 
 ---
 
-[Unreleased]: https://github.com/itshazlan/trackflow/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/itshazlan/trackflow/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/itshazlan/trackflow/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/itshazlan/trackflow/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/itshazlan/trackflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/itshazlan/trackflow/releases/tag/v0.1.0
