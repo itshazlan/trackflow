@@ -48,7 +48,7 @@ Kalau sudah terbiasa dan tidak ada perubahan workflow, langkah ini boleh dilewat
   git tag v0.x.x
   git push origin v0.x.x
   ```
-- [ ] Buka tab **Actions**, pastikan job `macos-latest`, `windows-latest`, `ubuntu-22.04` semuanya jalan
+- [ ] Buka tab **Actions**, pastikan job `macos-latest`, `windows-latest`, `ubuntu-24.04` semuanya jalan
 - [ ] Tunggu semua selesai (macOS paling lama karena ada notarization — bisa 3-10 menit tambahan menunggu Apple)
 
 ---

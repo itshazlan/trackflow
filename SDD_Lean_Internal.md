@@ -1231,14 +1231,14 @@ Tidak berubah dari revisi sebelumnya — `turbo.json` mengatur pipeline `build`/
 
 ### 15.3 CI/CD Build Desktop Client (3-Platform via GitHub Actions)
 
-Berbeda dari backend/frontend web (deploy manual ke server saat ini), Desktop Client **dibangun sepenuhnya lewat CI** — bukan di-build lokal per platform di laptop developer. Keputusan ini diambil karena cross-compile Rust/Tauri dari satu mesin (mis. macOS Apple Silicon) ke Windows/Linux sangat menyulitkan dan rawan gagal; GitHub Actions menyediakan runner native per-OS (`macos-latest`, `windows-latest`, `ubuntu-22.04`) yang masing-masing adalah mesin sungguhan dengan toolchain aslinya.
+Berbeda dari backend/frontend web (deploy manual ke server saat ini), Desktop Client **dibangun sepenuhnya lewat CI** — bukan di-build lokal per platform di laptop developer. Keputusan ini diambil karena cross-compile Rust/Tauri dari satu mesin (mis. macOS Apple Silicon) ke Windows/Linux sangat menyulitkan dan rawan gagal; GitHub Actions menyediakan runner native per-OS (`macos-latest`, `windows-latest`, `ubuntu-24.04`) yang masing-masing adalah mesin sungguhan dengan toolchain aslinya.
 
 ```mermaid
 flowchart TB
     TAG["git push tag v*"] --> GH["GitHub Actions Trigger"]
     GH --> M["Job: macos-latest"]
     GH --> W["Job: windows-latest"]
-    GH --> L["Job: ubuntu-22.04"]
+    GH --> L["Job: ubuntu-24.04"]
 
     M --> MB["Build universal binary\n(aarch64 + x86_64 via lipo)"]
     MB --> MS["Code sign + Notarize\n(Apple Developer ID)"]
@@ -1259,7 +1259,7 @@ flowchart TB
 |---|---|
 | **Build 100% via CI, bukan build lokal per platform** | Developer (Anda) hanya perlu bekerja dari satu mesin (macOS Apple Silicon); push tag Git memicu build native paralel di 3 runner OS berbeda sekaligus |
 | **macOS: Universal Binary, bukan 2 file terpisah** | `--target universal-apple-darwin` menggabungkan `aarch64-apple-darwin` (Apple Silicon) + `x86_64-apple-darwin` (Intel) jadi **satu** `.app` via `lipo` — karyawan Intel maupun Apple Silicon install file yang sama, tidak perlu dipilihkan manual |
-| **Windows & Linux: build native, bukan cross-compile** | Masing-masing dikompilasi di runner OS aslinya (`windows-latest`, `ubuntu-22.04`), menghasilkan `.msi`/`.exe` (NSIS) untuk Windows dan `.deb` + `.AppImage` untuk Linux |
+| **Windows & Linux: build native, bukan cross-compile** | Masing-masing dikompilasi di runner OS aslinya (`windows-latest`, `ubuntu-24.04`), menghasilkan `.msi`/`.exe` (NSIS) untuk Windows dan `.deb` + `.AppImage` untuk Linux |
 | **Code signing terintegrasi di pipeline yang sama** | Sertifikat macOS (Developer ID + notarization) dan Windows (Authenticode) diambil dari GitHub Secrets, diproses otomatis oleh `tauri-apps/tauri-action`. Untuk distribusi internal, signing bersifat **opsional** (bisa dilewati bila sertifikat belum tersedia), dengan trade-off peringatan Gatekeeper/SmartScreen saat instalasi pertama |
 | **Release dibuat sebagai `draft`, bukan langsung publish** | `releaseDraft: true` — artifact ter-upload ke GitHub Release tapi **belum terlihat publik / belum memicu auto-updater** sampai seseorang meninjau dan klik "Publish" manual. Ini gerbang review terakhir sebelum rilis sampai ke seluruh karyawan — konsisten dengan prinsip "build sukses ≠ teruji" (§14, kriteria selesai Slice 23) |
 | **Testing tetap butuh device fisik minimal 1x per rilis per OS** | CI menjamin *build berhasil*, bukan *aplikasi berjalan mulus* di OS tersebut (mis. permission dialog macOS Intel, versi WebView2 lama di Windows kantor tertentu, dependency `libwebkit2gtk` di distro Linux tertentu) — smoke test manual tetap wajib sebelum publish, idealnya oleh 1 orang per platform sebelum rollout ke seluruh tim |
