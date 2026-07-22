@@ -40,6 +40,16 @@ import {
   Trash2,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+
+const getInitials = (name?: string) => {
+  if (!name) return "U";
+  const parts = name.trim().split(" ");
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
 
 export default function AdminUsersPage() {
   const confirm = useConfirm();
@@ -237,10 +247,20 @@ export default function AdminUsersPage() {
             ) : (
               users.map((u) => (
                 <TableRow key={u.id} className="hover:bg-muted/40 transition-colors">
-                  <TableCell className="pl-4">
-                    <div className="font-semibold text-foreground text-[12.5px]">{u.name}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                      @{u.username} &bull; {u.email}
+                  <TableCell className="pl-4 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar className="h-7.5 w-7.5 shrink-0 border border-border/60 shadow-2xs">
+                        {u.image && <AvatarImage src={u.image} alt={u.name} className="object-cover" />}
+                        <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">
+                          {getInitials(u.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col min-w-0">
+                        <div className="font-semibold text-foreground text-[12.5px] truncate">{u.name}</div>
+                        <div className="text-[10px] text-muted-foreground truncate mt-0.5">
+                          @{u.username} &bull; {u.email}
+                        </div>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
@@ -339,9 +359,14 @@ export default function AdminUsersPage() {
         <DialogContent className="sm:max-w-[360px]">
           <form onSubmit={handleSaveEmployment}>
             <DialogHeader>
-              <DialogTitle className="text-[14px] font-semibold flex items-center gap-1.5">
-                <UserCheck className="h-4 w-4 text-primary" />
-                Edit Kepegawaian: {editingUser?.name}
+              <DialogTitle className="text-[14px] font-semibold flex items-center gap-2">
+                <Avatar className="h-5.5 w-5.5 shrink-0 border border-border/60">
+                  {editingUser?.image && <AvatarImage src={editingUser.image} alt={editingUser.name} className="object-cover" />}
+                  <AvatarFallback className="text-[9px] font-bold bg-primary/10 text-primary">
+                    {getInitials(editingUser?.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <span>Edit Kepegawaian: {editingUser?.name}</span>
               </DialogTitle>
             </DialogHeader>
 
