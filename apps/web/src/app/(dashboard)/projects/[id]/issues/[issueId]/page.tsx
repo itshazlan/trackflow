@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
@@ -17,6 +17,7 @@ import {
   deleteIssueAttachment,
   getIssueComments,
   createIssueComment,
+  uploadCommentImage,
   updateIssueComment,
   deleteIssueComment,
   updateIssueStatus,
@@ -26,6 +27,7 @@ import {
   ProjectMember,
   IssueAttachment,
   IssueComment,
+  CommentAttachment,
 } from "@/lib/issues-service";
 import { getProjectDetail, Project } from "@/lib/projects-service";
 import { getSession, UserSession } from "@/lib/auth-service";
@@ -66,6 +68,7 @@ import {
   Check,
   AtSign,
   Smile,
+  Reply,
   Link as LinkIcon,
 } from "lucide-react";
 
@@ -158,6 +161,10 @@ export default function IssueDetailPage() {
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [editedDesc, setEditedDesc] = useState("");
   const [newCommentText, setNewCommentText] = useState("");
+  const [pendingCommentImages, setPendingCommentImages] = useState<File[]>([]);
+  const [replyParentComment, setReplyParentComment] = useState<IssueComment | null>(null);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const commentImageInputRef = useRef<HTMLInputElement | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
   const [copiedState, setCopiedState] = useState<"link" | "name" | null>(null);
@@ -614,17 +621,56 @@ export default function IssueDetailPage() {
     }
   };
 
+  const handleCommentImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const filesArray = Array.from(e.target.files).filter((file) =>
+        file.type.startsWith("image/")
+      );
+      setPendingCommentImages((prev) => [...prev, ...filesArray]);
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  const handleRemovePendingCommentImage = (index: number) => {
+    setPendingCommentImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!issue || !newCommentText.trim()) return;
+    if (!issue || (!newCommentText.trim() && pendingCommentImages.length === 0)) return;
 
     setCommentsError("");
+    setIsSubmittingComment(true);
     try {
-      const comment = await createIssueComment(issue.id, newCommentText);
-      setComments((prev) => [...prev, comment]);
+      const newComment = await createIssueComment(
+        issue.id,
+        newCommentText.trim(),
+        replyParentComment?.id,
+      );
+
+      if (pendingCommentImages.length > 0) {
+        const uploadedAttachments: CommentAttachment[] = [];
+        for (const imageFile of pendingCommentImages) {
+          try {
+            const att = await uploadCommentImage(issue.id, newComment.id, imageFile);
+            uploadedAttachments.push(att);
+          } catch (err) {
+            console.error("Gagal mengunggah gambar komentar:", err);
+          }
+        }
+        newComment.commentAttachments = uploadedAttachments;
+      }
+
+      const updatedComments = await getIssueComments(issue.id);
+      setComments(updatedComments);
+
       setNewCommentText("");
+      setPendingCommentImages([]);
+      setReplyParentComment(null);
     } catch (err: unknown) {
       setCommentsError(err instanceof Error ? err.message : "Gagal menambahkan komentar.");
+    } finally {
+      setIsSubmittingComment(false);
     }
   };
 
@@ -1310,14 +1356,69 @@ export default function IssueDetailPage() {
 
               {/* Huly style comment composer */}
               <form onSubmit={handleAddComment} className="border border-border/80 bg-card/60 p-3 rounded-xl flex flex-col gap-2.5 shadow-sm mt-1 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all relative">
+                {/* Reply Context Indicator */}
+                {replyParentComment && (
+                  <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-3 py-1.5 text-xs text-primary font-medium">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Reply className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">
+                        Membalas komentar <strong className="font-semibold">{replyParentComment.author.name}</strong>: &quot;{replyParentComment.body.slice(0, 40)}{replyParentComment.body.length > 40 ? "..." : ""}&quot;
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyParentComment(null)}
+                      className="p-1 hover:bg-primary/20 rounded-full cursor-pointer transition-colors"
+                      title="Batal Balas"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 <textarea
-                  placeholder="Start typing..."
+                  placeholder={
+                    replyParentComment
+                      ? `Tulis balasan untuk ${replyParentComment.author.name}...`
+                      : "Start typing..."
+                  }
                   value={newCommentText}
                   onChange={(e) => handleTextareaChange(e, "comment")}
                   onKeyDown={(e) => handleTextareaKeyDown(e, "comment")}
                   className="w-full min-h-[50px] max-h-[140px] bg-transparent border-0 px-2 py-1 text-[13px] focus-visible:outline-none placeholder-muted-foreground/60 text-foreground resize-y"
-                  required
                 />
+
+                {/* Hidden input for comment image attachments */}
+                <input
+                  ref={commentImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleCommentImageSelect}
+                />
+
+                {/* Pending comment image previews */}
+                {pendingCommentImages.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
+                    {pendingCommentImages.map((file, idx) => {
+                      const previewUrl = URL.createObjectURL(file);
+                      return (
+                        <div key={idx} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border/80 bg-muted/40 shadow-xs">
+                          <img src={previewUrl} alt={file.name} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePendingCommentImage(idx)}
+                            className="absolute top-0.5 right-0.5 bg-background/90 hover:bg-destructive hover:text-destructive-foreground text-foreground p-0.5 rounded-full transition-colors cursor-pointer shadow-xs"
+                            title="Hapus gambar"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Autocomplete Mention Popover for Comment Composer */}
                 {mentionActive && mentionTarget === "comment" && filteredMembers.length > 0 && (
@@ -1351,10 +1452,10 @@ export default function IssueDetailPage() {
                     <button
                       type="button"
                       className="rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-                      onClick={() => document.getElementById("page-files-input")?.click()}
-                      title="Unggah Lampiran"
+                      onClick={() => commentImageInputRef.current?.click()}
+                      title="Lampirkan Gambar"
                     >
-                      <Paperclip className="h-5 w-5" />
+                      <FileImage className="h-5 w-5" />
                     </button>
                     <button
                       type="button"
@@ -1433,9 +1534,13 @@ export default function IssueDetailPage() {
                   <button
                     type="submit"
                     className="rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/85 transition-colors cursor-pointer disabled:opacity-40"
-                    disabled={!newCommentText.trim()}
+                    disabled={(!newCommentText.trim() && pendingCommentImages.length === 0) || isSubmittingComment}
                   >
-                    <Send className="h-[21px] w-[21px]" />
+                    {isSubmittingComment ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    ) : (
+                      <Send className="h-[21px] w-[21px]" />
+                    )}
                   </button>
                 </div>
               </form>
@@ -1460,215 +1565,277 @@ export default function IssueDetailPage() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4 bg-muted/5 border border-border/50 p-4 rounded-xl">
-                    {comments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="flex gap-3 items-start text-xs border-b border-border/50 pb-3 last:border-b-0 last:pb-0 group"
-                      >
-                        <Avatar className="h-7 w-7 mt-0.5 border border-border shadow-sm">
-                          {comment.author.image ? (
-                            <img src={comment.author.image} alt={comment.author.name} className="h-full w-full object-cover rounded-full" />
-                          ) : (
-                            <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">
-                              {comment.author.name.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
-                        <div className="flex-1 flex flex-col gap-1 min-w-0">
-                          <div className="flex items-baseline gap-1.5 flex-wrap">
-                            <span className="font-semibold text-foreground text-[13.5px]">{comment.author.name}</span>
-                            <span className="text-[11.5px] text-muted-foreground">
-                              left a comment at {formatCommentDate(comment.createdAt)}
-                              {comment.updatedAt && (
-                                <span className="text-[9px] italic text-muted-foreground/60 ml-1.5">(diedit)</span>
-                              )}
-                            </span>
-                          </div>
+                    {comments
+                      .filter((c) => !c.parentCommentId)
+                      .map((comment) => {
+                        const replies = comments.filter((c) => c.parentCommentId === comment.id);
+                        return (
+                          <div
+                            key={comment.id}
+                            className="flex flex-col gap-2.5 border-b border-border/50 pb-4 last:border-b-0 last:pb-0"
+                          >
+                            {/* Main Comment Row */}
+                            <div className="flex gap-3 items-start text-xs group">
+                              <Avatar className="h-7 w-7 mt-0.5 border border-border shadow-xs shrink-0">
+                                {comment.author.image ? (
+                                  <img src={comment.author.image} alt={comment.author.name} className="h-full w-full object-cover rounded-full" />
+                                ) : (
+                                  <AvatarFallback className="text-[10px] font-bold bg-primary/10 text-primary">
+                                    {comment.author.name.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                )}
+                              </Avatar>
+                              <div className="flex-1 flex flex-col gap-1 min-w-0">
+                                <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-foreground text-[13.5px]">{comment.author.name}</span>
+                                    <span className="text-[11.5px] text-muted-foreground">
+                                      left a comment at {formatCommentDate(comment.createdAt)}
+                                      {comment.updatedAt && (
+                                        <span className="text-[9px] italic text-muted-foreground/60 ml-1.5">(diedit)</span>
+                                      )}
+                                    </span>
+                                  </div>
 
-                          {editingCommentId === comment.id ? (
-                            <div className="flex flex-col gap-2 mt-1.5 bg-card border border-border/80 p-2.5 rounded-lg relative">
-                              <textarea
-                                value={editingCommentText}
-                                onChange={(e) => handleTextareaChange(e, { type: "comment-edit", id: comment.id })}
-                                onKeyDown={(e) => handleTextareaKeyDown(e, { type: "comment-edit", id: comment.id })}
-                                className="w-full min-h-[60px] rounded border border-input bg-transparent px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary"
-                                placeholder="Edit komentar... Gunakan @ untuk mention member."
-                              />
-
-                              {/* Autocomplete Mention Popover for Comment Edit */}
-                              {mentionActive && typeof mentionTarget === "object" && mentionTarget?.type === "comment-edit" && mentionTarget?.id === comment.id && filteredMembers.length > 0 && (
-                                <div className="absolute left-2 bottom-full mb-1 z-50 w-56 rounded-lg border border-border bg-popover p-1 shadow-lg text-xs flex flex-col gap-0.5">
-                                  {filteredMembers.map((m, idx) => (
+                                  {/* Actions for Main Comment: Balas, Edit, Delete */}
+                                  <div className="flex items-center gap-2 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
-                                      key={m.id}
                                       type="button"
-                                      onClick={() => insertMention(m)}
-                                      className={`flex items-center gap-2 w-full text-left px-2 py-1.5 rounded cursor-pointer ${idx === mentionIndex ? "bg-accent text-accent-foreground font-semibold" : "hover:bg-muted/60"
-                                        }`}
-                                    >
-                                      <Avatar className="h-4 w-4 shrink-0">
-                                        {m.image ? (
-                                          <img src={m.image} alt={m.name} className="h-full w-full object-cover rounded-full" />
-                                        ) : (
-                                          <AvatarFallback className="text-[7px] font-bold">
-                                            {m.name.slice(0, 2).toUpperCase()}
-                                          </AvatarFallback>
-                                        )}
-                                      </Avatar>
-                                      <span className="truncate">{m.name}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-
-                              <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 text-muted-foreground hover:text-foreground px-1.5"
-                                    onClick={() => document.getElementById("page-files-input")?.click()}
-                                    title="Unggah Lampiran"
-                                  >
-                                    <Paperclip className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 text-muted-foreground hover:text-foreground px-1.5"
-                                    onClick={(e) => {
-                                      const parent = e.currentTarget.closest(".flex-col");
-                                      const textarea = parent?.querySelector("textarea") as HTMLTextAreaElement;
-                                      if (textarea) {
-                                        const value = textarea.value;
-                                        const cursor = textarea.selectionStart;
-                                        const before = value.slice(0, cursor);
-                                        const after = value.slice(cursor);
-                                        const newValue = before + "@" + after;
-                                        setEditingCommentText(newValue);
-                                        textarea.focus();
-                                        setTimeout(() => {
-                                          const newCursorPos = cursor + 1;
-                                          textarea.setSelectionRange(newCursorPos, newCursorPos);
-                                          const changeEvent = new Event('input', { bubbles: true }) as any;
-                                          Object.defineProperty(changeEvent, 'target', { writable: false, value: textarea });
-                                          handleTextareaChange(changeEvent as any, { type: "comment-edit", id: comment.id });
-                                        }, 10);
-                                      }
-                                    }}
-                                    title="Mention Member"
-                                  >
-                                    <AtSign className="h-4 w-4" />
-                                  </Button>
-
-                                  <div className="relative flex items-center">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 text-muted-foreground hover:text-foreground px-1.5"
-                                      onClick={(e) => {
-                                        setEmojiActiveTarget(
-                                          emojiActiveTarget && typeof emojiActiveTarget === "object" && emojiActiveTarget.type === "comment-edit" && emojiActiveTarget.id === comment.id
-                                            ? null
-                                            : { type: "comment-edit", id: comment.id }
-                                        );
-                                        const parent = e.currentTarget.closest(".flex-col");
-                                        const textarea = parent?.querySelector("textarea") as HTMLTextAreaElement;
-                                        if (textarea) setEmojiTextareaRef(textarea);
+                                      onClick={() => {
+                                        setReplyParentComment(comment);
+                                        const form = document.querySelector("form");
+                                        const textarea = form?.querySelector("textarea");
+                                        textarea?.focus();
                                       }}
+                                      className="flex items-center gap-1 text-muted-foreground hover:text-primary px-1.5 py-0.5 rounded hover:bg-muted/80 transition-colors font-medium cursor-pointer"
                                     >
-                                      <Smile className="h-4 w-4" />
-                                    </Button>
+                                      <Reply className="h-3 w-3" />
+                                      <span>Balas</span>
+                                    </button>
 
-                                    {/* Emoji Picker Dropdown */}
-                                    {emojiActiveTarget && typeof emojiActiveTarget === "object" && emojiActiveTarget.type === "comment-edit" && emojiActiveTarget.id === comment.id && (
+                                    {editingCommentId !== comment.id && (
                                       <>
-                                        <div
-                                          className="fixed inset-0 z-40 bg-transparent cursor-default"
-                                          onClick={() => setEmojiActiveTarget(null)}
-                                        />
-                                        <div className="absolute left-0 bottom-full mb-2 z-50 bg-popover border border-border rounded-lg shadow-lg">
-                                          <EmojiPicker
-                                            onEmojiClick={(emojiData: any) => insertEmoji(emojiData.emoji)}
-                                            autoFocusSearch={false}
-                                            theme={"dark" as any}
-                                            height={400}
-                                            width={330}
-                                            style={{
-                                              "--epr-emoji-size": "22px",
-                                              "--epr-category-navigation-button-size": "22px",
-                                              "--epr-category-title-font-size": "12px",
-                                              "--epr-emoji-padding": "6px",
-                                              "--epr-horizontal-padding": "14px",
-                                              "--epr-header-padding": "8px 14px",
-                                            } as React.CSSProperties}
-                                            previewConfig={{ showPreview: true }}
-                                          />
-                                        </div>
+                                        {comment.author.id === session?.user?.id && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleStartEditComment(comment.id, comment.body)}
+                                            className="hover:text-foreground hover:underline flex items-center gap-0.5 transition-colors cursor-pointer text-muted-foreground"
+                                          >
+                                            <Edit2 className="h-2.5 w-2.5" /> Edit
+                                          </button>
+                                        )}
+                                        {(comment.author.id === session?.user?.id || isAdmin) && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteComment(comment.id)}
+                                            className="hover:text-destructive hover:underline flex items-center gap-0.5 transition-colors cursor-pointer text-muted-foreground"
+                                          >
+                                            <Trash2 className="h-2.5 w-2.5" /> Hapus
+                                          </button>
+                                        )}
                                       </>
                                     )}
                                   </div>
                                 </div>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 text-[11px] px-2.5"
-                                    onClick={() => {
-                                      setEditingCommentId(null);
-                                      setEmojiActiveTarget(null);
-                                    }}
-                                  >
-                                    Batal
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="h-7 text-[11px] px-2.5"
-                                    onClick={() => handleSaveEditComment(comment.id)}
-                                    disabled={!editingCommentText.trim()}
-                                  >
-                                    Simpan
-                                  </Button>
-                                </div>
+
+                                {editingCommentId === comment.id ? (
+                                  /* Edit Form */
+                                  <div className="flex flex-col gap-2 mt-1.5 bg-card border border-border/80 p-2.5 rounded-lg relative">
+                                    <textarea
+                                      value={editingCommentText}
+                                      onChange={(e) => handleTextareaChange(e, { type: "comment-edit", id: comment.id })}
+                                      onKeyDown={(e) => handleTextareaKeyDown(e, { type: "comment-edit", id: comment.id })}
+                                      className="w-full min-h-[60px] rounded border border-input bg-transparent px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary"
+                                      placeholder="Edit komentar... Gunakan @ untuk mention member."
+                                    />
+                                    <div className="flex justify-end gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-[11px] px-2.5"
+                                        onClick={() => setEditingCommentId(null)}
+                                      >
+                                        Batal
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-7 text-[11px] px-2.5"
+                                        onClick={() => handleSaveEditComment(comment.id)}
+                                        disabled={!editingCommentText.trim()}
+                                      >
+                                        Simpan
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-[13px] text-foreground leading-relaxed whitespace-pre-wrap select-text pr-4 mt-0.5">
+                                    {renderFormattedText(comment.body)}
+                                  </div>
+                                )}
+
+                                {/* Image Thumbnail Grid for Main Comment */}
+                                {comment.commentAttachments && comment.commentAttachments.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mt-2">
+                                    {comment.commentAttachments.map((img) => (
+                                      <div
+                                        key={img.id}
+                                        className="relative group rounded-lg overflow-hidden border border-border/80 bg-card cursor-pointer hover:border-primary/50 transition-all shadow-xs"
+                                        onClick={() =>
+                                          setPreviewAttachment({
+                                            id: img.id,
+                                            issueId: issue!.id,
+                                            fileName: img.fileName,
+                                            r2ObjectKey: img.r2ObjectKey,
+                                            uploadedBy: comment.author.name,
+                                            uploadedAt: img.uploadedAt,
+                                          })
+                                        }
+                                      >
+                                        <img
+                                          src={
+                                            img.r2ObjectKey.startsWith("http") || img.r2ObjectKey.startsWith("/api/")
+                                              ? img.r2ObjectKey
+                                              : `/api/uploads/${img.r2ObjectKey}`
+                                          }
+                                          alt={img.fileName}
+                                          className="h-20 w-24 object-cover group-hover:scale-105 transition-transform"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
-                          ) : (
-                            <div className="text-[13px] text-foreground leading-relaxed whitespace-pre-wrap select-text pr-4 mt-0.5">
-                              {renderFormattedText(comment.body)}
-                            </div>
-                          )}
 
-                          {/* Quick Edit/Delete links on Hover */}
-                          {editingCommentId !== comment.id && (
-                            <div className="flex gap-3.5 mt-1 text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                              {comment.author.id === session?.user?.id && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEditComment(comment.id, comment.body)}
-                                  className="hover:text-foreground hover:underline flex items-center gap-0.5 transition-colors cursor-pointer"
-                                >
-                                  <Edit2 className="h-2.5 w-2.5" /> Edit
-                                </button>
-                              )}
-                              {(comment.author.id === session?.user?.id || isAdmin) && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteComment(comment.id)}
-                                  className="hover:text-destructive hover:underline flex items-center gap-0.5 transition-colors cursor-pointer"
-                                >
-                                  <Trash2 className="h-2.5 w-2.5" /> Hapus
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                            {/* Render Threaded Replies (Indented with left vertical line) */}
+                            {replies.length > 0 && (
+                              <div className="ml-7 pl-3.5 border-l-2 border-border/50 flex flex-col gap-3 mt-1">
+                                {replies.map((reply) => (
+                                  <div key={reply.id} className="flex gap-2.5 items-start text-xs group">
+                                    <Avatar className="h-6 w-6 mt-0.5 border border-border shadow-xs shrink-0">
+                                      {reply.author.image ? (
+                                        <img src={reply.author.image} alt={reply.author.name} className="h-full w-full object-cover rounded-full" />
+                                      ) : (
+                                        <AvatarFallback className="text-[9px] font-bold bg-secondary text-secondary-foreground">
+                                          {reply.author.name.slice(0, 2).toUpperCase()}
+                                        </AvatarFallback>
+                                      )}
+                                    </Avatar>
+
+                                    <div className="flex-1 flex flex-col gap-1 min-w-0">
+                                      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                                          <span className="font-semibold text-foreground text-[12.5px]">{reply.author.name}</span>
+                                          <span className="text-[11px] text-muted-foreground">
+                                            replied at {formatCommentDate(reply.createdAt)}
+                                            {reply.updatedAt && (
+                                              <span className="text-[9px] italic text-muted-foreground/60 ml-1.5">(diedit)</span>
+                                            )}
+                                          </span>
+                                        </div>
+
+                                        {/* Actions for Reply: Edit, Delete (No "Balas" button to enforce 1-level) */}
+                                        {editingCommentId !== reply.id && (
+                                          <div className="flex items-center gap-2 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity">
+                                            {reply.author.id === session?.user?.id && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleStartEditComment(reply.id, reply.body)}
+                                                className="hover:text-foreground hover:underline flex items-center gap-0.5 transition-colors cursor-pointer text-muted-foreground"
+                                              >
+                                                <Edit2 className="h-2.5 w-2.5" /> Edit
+                                              </button>
+                                            )}
+                                            {(reply.author.id === session?.user?.id || isAdmin) && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteComment(reply.id)}
+                                                className="hover:text-destructive hover:underline flex items-center gap-0.5 transition-colors cursor-pointer text-muted-foreground"
+                                              >
+                                                <Trash2 className="h-2.5 w-2.5" /> Hapus
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {editingCommentId === reply.id ? (
+                                        <div className="flex flex-col gap-2 mt-1.5 bg-card border border-border/80 p-2.5 rounded-lg relative">
+                                          <textarea
+                                            value={editingCommentText}
+                                            onChange={(e) => handleTextareaChange(e, { type: "comment-edit", id: reply.id })}
+                                            onKeyDown={(e) => handleTextareaKeyDown(e, { type: "comment-edit", id: reply.id })}
+                                            className="w-full min-h-[60px] rounded border border-input bg-transparent px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary"
+                                            placeholder="Edit komentar... Gunakan @ untuk mention member."
+                                          />
+                                          <div className="flex justify-end gap-2">
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-7 text-[11px] px-2.5"
+                                              onClick={() => setEditingCommentId(null)}
+                                            >
+                                              Batal
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              className="h-7 text-[11px] px-2.5"
+                                              onClick={() => handleSaveEditComment(reply.id)}
+                                              disabled={!editingCommentText.trim()}
+                                            >
+                                              Simpan
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="text-[12.5px] text-foreground leading-relaxed whitespace-pre-wrap select-text pr-4 mt-0.5">
+                                          {renderFormattedText(reply.body)}
+                                        </div>
+                                      )}
+
+                                      {/* Image Thumbnail Grid for Reply */}
+                                      {reply.commentAttachments && reply.commentAttachments.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                          {reply.commentAttachments.map((img) => (
+                                            <div
+                                              key={img.id}
+                                              className="relative group rounded-lg overflow-hidden border border-border/80 bg-card cursor-pointer hover:border-primary/50 transition-all shadow-xs"
+                                              onClick={() =>
+                                                setPreviewAttachment({
+                                                  id: img.id,
+                                                  issueId: issue!.id,
+                                                  fileName: img.fileName,
+                                                  r2ObjectKey: img.r2ObjectKey,
+                                                  uploadedBy: reply.author.name,
+                                                  uploadedAt: img.uploadedAt,
+                                                })
+                                              }
+                                            >
+                                              <img
+                                                src={
+                                                  img.r2ObjectKey.startsWith("http") || img.r2ObjectKey.startsWith("/api/")
+                                                    ? img.r2ObjectKey
+                                                    : `/api/uploads/${img.r2ObjectKey}`
+                                                }
+                                                alt={img.fileName}
+                                                className="h-16 w-20 object-cover group-hover:scale-105 transition-transform"
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                   </div>
                 )}
               </div>

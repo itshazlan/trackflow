@@ -507,10 +507,21 @@ export async function deleteIssueAttachment(issueId: string, attachmentId: strin
   }
 }
 
+export interface CommentAttachment {
+  id: string;
+  commentId: string;
+  fileName: string;
+  r2ObjectKey: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  uploadedAt: string;
+}
+
 export interface IssueComment {
   id: string;
   issueId: string;
   body: string;
+  parentCommentId: string | null;
   createdAt: string;
   updatedAt: string | null;
   author: {
@@ -519,6 +530,7 @@ export interface IssueComment {
     email: string;
     image: string | null;
   };
+  commentAttachments?: CommentAttachment[];
 }
 
 export async function getIssueComments(issueId: string): Promise<IssueComment[]> {
@@ -537,13 +549,17 @@ export async function getIssueComments(issueId: string): Promise<IssueComment[]>
   return res.json();
 }
 
-export async function createIssueComment(issueId: string, body: string): Promise<IssueComment> {
+export async function createIssueComment(
+  issueId: string,
+  body: string,
+  parentCommentId?: string | null,
+): Promise<IssueComment> {
   const res = await fetch(`/api/issues/${issueId}/comments`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, parentCommentId: parentCommentId || undefined }),
   });
 
   if (!res.ok) {
@@ -552,6 +568,66 @@ export async function createIssueComment(issueId: string, body: string): Promise
   }
 
   return res.json();
+}
+
+export async function uploadCommentImage(
+  issueId: string,
+  commentId: string,
+  file: File,
+): Promise<CommentAttachment> {
+  const initRes = await fetch(`/api/issues/${issueId}/comments/${commentId}/images`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fileName: file.name,
+      mimeType: file.type || "image/png",
+      fileSizeBytes: file.size,
+    }),
+  });
+
+  if (!initRes.ok) {
+    const errorData = await initRes.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to initialize image upload");
+  }
+
+  const { imageId, uploadUrl, r2ObjectKey } = await initRes.json();
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "image/png",
+    },
+    body: file,
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error("Failed to upload image binary to storage");
+  }
+
+  const confirmRes = await fetch(
+    `/api/issues/${issueId}/comments/${commentId}/images/${imageId}/confirm`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        r2ObjectKey,
+        mimeType: file.type || "image/png",
+        fileSizeBytes: file.size,
+      }),
+    },
+  );
+
+  if (!confirmRes.ok) {
+    const errorData = await confirmRes.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to confirm image upload");
+  }
+
+  return confirmRes.json();
 }
 
 export async function updateIssueComment(
