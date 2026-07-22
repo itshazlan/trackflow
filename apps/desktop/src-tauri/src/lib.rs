@@ -1,6 +1,8 @@
 use keyring::{Entry, Error};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
+#[cfg(not(target_os = "macos"))]
+use std::sync::atomic::AtomicU64;
 use std::path::PathBuf;
 use rusqlite::{Connection, params};
 use tauri::Manager;
@@ -11,6 +13,9 @@ static ALLOW_REAL_EXIT: AtomicBool = AtomicBool::new(false);
 // Global Atomic Event Counters for OS Input Hook (Keyboard / Mouse)
 static KEYBOARD_COUNT: AtomicU32 = AtomicU32::new(0);
 static MOUSE_COUNT: AtomicU32 = AtomicU32::new(0);
+// Only used by the non-macOS rdev push-based input_callback; macOS polls
+// CGEventSourceCounterForEventType instead (see spawn_activity_poller).
+#[cfg(not(target_os = "macos"))]
 static LAST_MOUSE_MOVE: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(target_os = "macos")]
@@ -259,6 +264,10 @@ fn commit_block_to_db(
     Ok(id)
 }
 
+// Non-macOS platforms: rdev's live CGEventTap-equivalent hooks (SetWindowsHookEx on
+// Windows, X11/evdev grabs on Linux) don't share the WindowServer-latency problem
+// this app hit on macOS, so they keep the original push-based listener.
+#[cfg(not(target_os = "macos"))]
 fn input_callback(event: rdev::Event) {
     match event.event_type {
         rdev::EventType::KeyPress(_) => {
@@ -279,6 +288,67 @@ fn input_callback(event: rdev::Event) {
         }
         _ => {}
     }
+}
+
+// macOS: instead of a live CGEventTap (which, even in listen-only mode, can add
+// perceptible delay to scroll/cursor event delivery to every app on the system
+// when the tap-owning process is under load), poll CGEventSourceCounterForEventType —
+// a passive OS-maintained counter that doesn't sit in the event delivery path at all.
+// Deltas since the last poll are folded into the same KEYBOARD_COUNT/MOUSE_COUNT
+// atomics the rest of the app already reads every 10-minute block.
+#[cfg(target_os = "macos")]
+fn spawn_activity_poller() {
+    use objc2_core_graphics::{CGEventSource, CGEventSourceStateID, CGEventType};
+
+    fn counter(event_type: CGEventType) -> u32 {
+        CGEventSource::counter_for_event_type(CGEventSourceStateID::CombinedSessionState, event_type)
+    }
+
+    std::thread::spawn(|| {
+        let mut last_key = counter(CGEventType::KeyDown);
+        let mut last_left = counter(CGEventType::LeftMouseDown);
+        let mut last_right = counter(CGEventType::RightMouseDown);
+        let mut last_other = counter(CGEventType::OtherMouseDown);
+        let mut last_wheel = counter(CGEventType::ScrollWheel);
+        let mut last_moved = counter(CGEventType::MouseMoved);
+
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+
+            let key = counter(CGEventType::KeyDown);
+            let left = counter(CGEventType::LeftMouseDown);
+            let right = counter(CGEventType::RightMouseDown);
+            let other = counter(CGEventType::OtherMouseDown);
+            let wheel = counter(CGEventType::ScrollWheel);
+            let moved = counter(CGEventType::MouseMoved);
+
+            let key_delta = key.wrapping_sub(last_key);
+            if key_delta > 0 {
+                KEYBOARD_COUNT.fetch_add(key_delta, Ordering::Relaxed);
+            }
+
+            let click_delta = left.wrapping_sub(last_left)
+                + right.wrapping_sub(last_right)
+                + other.wrapping_sub(last_other)
+                + wheel.wrapping_sub(last_wheel);
+            if click_delta > 0 {
+                MOUSE_COUNT.fetch_add(click_delta, Ordering::Relaxed);
+            }
+
+            // Mirror the previous 500ms-throttled "presence pulse" for continuous
+            // mouse movement instead of the raw (very high frequency) move counter.
+            if moved != last_moved {
+                MOUSE_COUNT.fetch_add(1, Ordering::Relaxed);
+            }
+
+            last_key = key;
+            last_left = left;
+            last_right = right;
+            last_other = other;
+            last_wheel = wheel;
+            last_moved = moved;
+        }
+    });
 }
 
 #[cfg(target_os = "macos")]
@@ -331,24 +401,7 @@ fn with_autoreleasepool<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, S
     f()
 }
 
-// TEMPORARY DIAGNOSTIC FLAG — bisection test for the WindowServer port/CPU leak
-// reported after long uptime. When true, xcap's Monitor::all()/capture_image()
-// is skipped entirely (no screenshot taken, no review widget shown) so we can
-// confirm whether xcap itself is still the source after the autoreleasepool fix.
-// Revert to false and remove this flag once the test is done.
-const DEBUG_DISABLE_SCREENSHOT_CAPTURE: bool = true;
-
 fn capture_and_save_screenshot(app_handle: &tauri::AppHandle) -> Result<ScreenshotData, String> {
-    if DEBUG_DISABLE_SCREENSHOT_CAPTURE {
-        println!("[Tauri Rust] DEBUG_DISABLE_SCREENSHOT_CAPTURE=true — skipping xcap capture for leak bisection test");
-        let (window_title, app_name) = get_current_active_window();
-        return Ok(ScreenshotData {
-            screenshot_path: String::new(),
-            active_window_title: window_title,
-            active_app_name: app_name,
-        });
-    }
-
     use xcap::Monitor;
 
     let app_data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -1686,7 +1739,14 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Spawn resilient global input hook listener in OS thread
+            // Start keyboard/mouse activity tracking.
+            #[cfg(target_os = "macos")]
+            {
+                println!("[Tauri Rust] Starting macOS activity poller (CGEventSourceCounterForEventType, no live input tap)...");
+                spawn_activity_poller();
+            }
+
+            #[cfg(not(target_os = "macos"))]
             std::thread::spawn(move || {
                 loop {
                     println!("[Tauri Rust] Starting global rdev listener...");

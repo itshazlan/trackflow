@@ -5438,6 +5438,7 @@ dependencies = [
  "image",
  "keyring",
  "objc2",
+ "objc2-core-graphics",
  "rdev",
  "reqwest 0.12.28",
  "rusqlite",

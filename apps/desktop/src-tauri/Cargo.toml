@@ -26,7 +26,6 @@ keyring = { version = "3.2", features = ["apple-native", "windows-native", "sync
 tokio = { version = "1", features = ["rt", "time", "sync"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
-rdev = { git = "https://github.com/rustdesk-org/rdev" }
 xcap = "0.9"
 active-win-pos-rs = "0.8.3"
 image = { version = "0.25", default-features = false, features = ["webp"] }
@@ -35,8 +34,16 @@ reqwest = { version = "0.12", features = ["json"] }
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 
+# rdev installs a live CGEventTap on macOS which, under system load, can add
+# perceptible latency to scroll/cursor event delivery for every app on the
+# system (see the CGEventSourceCounterForEventType-based polling replacement
+# in lib.rs). Keep it only for platforms where that isn't a concern.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+rdev = { git = "https://github.com/rustdesk-org/rdev" }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+objc2-core-graphics = { version = "0.3", features = ["CGEventSource", "CGEventTypes"] }
 
 [features]
 macos-private-api = ["tauri/macos-private-api"]
