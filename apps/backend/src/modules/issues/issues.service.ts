@@ -23,6 +23,8 @@ import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
 import {
   CreateCommentDto,
   UpdateCommentDto,
+  CreateCommentAttachmentDto,
+  ConfirmCommentAttachmentDto,
   CreateCommentImageDto,
   ConfirmCommentImageDto,
 } from './dto/comment.dto';
@@ -768,10 +770,10 @@ export class IssuesService {
     };
   }
 
-  async createCommentImagePresignedUrl(
+  async createCommentAttachmentPresignedUrl(
     issueId: string,
     commentId: string,
-    createImageDto: CreateCommentImageDto,
+    createAttachmentDto: CreateCommentAttachmentDto,
     userId: string,
   ) {
     const { issue } = await this.getIssueWithMemberAccess(issueId, userId);
@@ -788,38 +790,36 @@ export class IssuesService {
       );
     }
 
-    if (
-      !createImageDto.mimeType ||
-      !createImageDto.mimeType.toLowerCase().startsWith('image/')
-    ) {
-      throw new BadRequestException(
-        'Invalid mimeType. Only image/* files are allowed',
-      );
+    // Soft-limit 50MB check (52,428,800 bytes)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+    if (createAttachmentDto.fileSizeBytes > MAX_FILE_SIZE) {
+      throw new BadRequestException('Ukuran file tidak boleh melebihi 50MB');
     }
 
-    const imageId = randomUUID();
-    const objectKey = `project/${issue.projectId}/issues/${issueId}/comments/${commentId}/${imageId}-${createImageDto.fileName}`;
+    const attachmentId = randomUUID();
+    const objectKey = `project/${issue.projectId}/issues/${issueId}/comments/${commentId}/${attachmentId}-${createAttachmentDto.fileName}`;
     const uploadUrl = await this.r2Service.getPresignedUploadUrl(
       objectKey,
-      createImageDto.mimeType,
+      createAttachmentDto.mimeType || 'application/octet-stream',
     );
 
     return {
-      imageId,
+      attachmentId,
+      imageId: attachmentId,
       commentId,
       uploadUrl,
       r2ObjectKey: objectKey,
-      fileName: createImageDto.fileName,
-      mimeType: createImageDto.mimeType,
-      fileSizeBytes: createImageDto.fileSizeBytes,
+      fileName: createAttachmentDto.fileName,
+      mimeType: createAttachmentDto.mimeType,
+      fileSizeBytes: createAttachmentDto.fileSizeBytes,
     };
   }
 
-  async confirmCommentImageUpload(
+  async confirmCommentAttachmentUpload(
     issueId: string,
     commentId: string,
-    imageId: string,
-    confirmDto: ConfirmCommentImageDto,
+    attachmentId: string,
+    confirmDto: ConfirmCommentAttachmentDto,
     userId: string,
   ) {
     const { issue } = await this.getIssueWithMemberAccess(issueId, userId);
@@ -836,17 +836,17 @@ export class IssuesService {
       );
     }
 
-    const fileName = confirmDto?.fileName || 'image.png';
-    const mimeType = confirmDto?.mimeType || 'image/png';
+    const fileName = confirmDto?.fileName || 'file';
+    const mimeType = confirmDto?.mimeType || 'application/octet-stream';
     const fileSizeBytes = confirmDto?.fileSizeBytes || 0;
     const r2ObjectKey =
       confirmDto?.r2ObjectKey ||
-      `project/${issue.projectId}/issues/${issueId}/comments/${commentId}/${imageId}-${fileName}`;
+      `project/${issue.projectId}/issues/${issueId}/comments/${commentId}/${attachmentId}-${fileName}`;
 
     const [attachment] = await this.db
       .insert(commentAttachments)
       .values({
-        id: imageId,
+        id: attachmentId,
         commentId,
         fileName,
         r2ObjectKey,
@@ -856,6 +856,53 @@ export class IssuesService {
       .returning();
 
     return attachment;
+  }
+
+  async getCommentAttachmentDownloadUrl(
+    issueId: string,
+    commentId: string,
+    attachmentId: string,
+    userId: string,
+  ) {
+    await this.getIssueWithMemberAccess(issueId, userId);
+
+    const [attachment] = await this.db
+      .select()
+      .from(commentAttachments)
+      .where(and(eq(commentAttachments.id, attachmentId), eq(commentAttachments.commentId, commentId)))
+      .limit(1);
+
+    if (!attachment) {
+      throw new NotFoundException(
+        `Attachment with ID ${attachmentId} not found on comment ${commentId}`,
+      );
+    }
+
+    const downloadUrl = await this.r2Service.getPresignedDownloadUrl(attachment.r2ObjectKey);
+
+    return {
+      downloadUrl,
+      fileName: attachment.fileName,
+    };
+  }
+
+  async createCommentImagePresignedUrl(
+    issueId: string,
+    commentId: string,
+    createImageDto: CreateCommentImageDto,
+    userId: string,
+  ) {
+    return this.createCommentAttachmentPresignedUrl(issueId, commentId, createImageDto, userId);
+  }
+
+  async confirmCommentImageUpload(
+    issueId: string,
+    commentId: string,
+    imageId: string,
+    confirmDto: ConfirmCommentImageDto,
+    userId: string,
+  ) {
+    return this.confirmCommentAttachmentUpload(issueId, commentId, imageId, confirmDto, userId);
   }
 
   async updateComment(

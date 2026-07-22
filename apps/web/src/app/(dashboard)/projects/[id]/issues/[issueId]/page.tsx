@@ -18,6 +18,8 @@ import {
   getIssueComments,
   createIssueComment,
   uploadCommentImage,
+  uploadCommentAttachment,
+  getCommentAttachmentDownloadUrl,
   updateIssueComment,
   deleteIssueComment,
   updateIssueStatus,
@@ -70,6 +72,7 @@ import {
   Smile,
   Reply,
   Link as LinkIcon,
+  Download,
 } from "lucide-react";
 
 const EmojiPicker = dynamic(
@@ -623,9 +626,7 @@ export default function IssueDetailPage() {
 
   const handleCommentImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const filesArray = Array.from(e.target.files).filter((file) =>
-        file.type.startsWith("image/")
-      );
+      const filesArray = Array.from(e.target.files);
       setPendingCommentImages((prev) => [...prev, ...filesArray]);
       if (e.target) e.target.value = "";
     }
@@ -650,12 +651,12 @@ export default function IssueDetailPage() {
 
       if (pendingCommentImages.length > 0) {
         const uploadedAttachments: CommentAttachment[] = [];
-        for (const imageFile of pendingCommentImages) {
+        for (const fileItem of pendingCommentImages) {
           try {
-            const att = await uploadCommentImage(issue.id, newComment.id, imageFile);
+            const att = await uploadCommentAttachment(issue.id, newComment.id, fileItem);
             uploadedAttachments.push(att);
           } catch (err) {
-            console.error("Gagal mengunggah gambar komentar:", err);
+            console.error("Gagal mengunggah lampiran komentar:", err);
           }
         }
         newComment.commentAttachments = uploadedAttachments;
@@ -936,6 +937,100 @@ export default function IssueDetailPage() {
       </div>
     </div>
   );
+
+  const renderCommentAttachments = (commentId: string, attachments?: CommentAttachment[], authorName?: string) => {
+    if (!attachments || attachments.length === 0) return null;
+
+    const imageAtts = attachments.filter(
+      (att) => att.mimeType?.toLowerCase().startsWith("image/") || isImageFile(att.fileName)
+    );
+    const fileAtts = attachments.filter(
+      (att) => !att.mimeType?.toLowerCase().startsWith("image/") && !isImageFile(att.fileName)
+    );
+
+    return (
+      <div className="flex flex-col gap-2 mt-2">
+        {/* Image Thumbnail Grid */}
+        {imageAtts.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {imageAtts.map((img) => (
+              <div
+                key={img.id}
+                className="relative group rounded-lg overflow-hidden border border-border/80 bg-card cursor-pointer hover:border-primary/50 transition-all shadow-xs"
+                onClick={() =>
+                  setPreviewAttachment({
+                    id: img.id,
+                    issueId: issue!.id,
+                    fileName: img.fileName,
+                    r2ObjectKey: img.r2ObjectKey,
+                    uploadedBy: authorName || "User",
+                    uploadedAt: img.uploadedAt,
+                  })
+                }
+              >
+                <img
+                  src={
+                    img.r2ObjectKey.startsWith("http") || img.r2ObjectKey.startsWith("/api/")
+                      ? img.r2ObjectKey
+                      : `/api/uploads/${img.r2ObjectKey}`
+                  }
+                  alt={img.fileName}
+                  className="h-20 w-24 object-cover group-hover:scale-105 transition-transform"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Non-image File Attachments */}
+        {fileAtts.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {fileAtts.map((att) => (
+              <div
+                key={att.id}
+                className="flex items-center justify-between gap-3 border border-border/70 bg-card hover:bg-muted/40 px-3 py-2 rounded-lg text-xs transition-colors"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded shrink-0 border border-border/60 bg-muted flex items-center justify-center">
+                    {getFileIcon(att.fileName)}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-semibold text-foreground truncate max-w-[200px] sm:max-w-[320px]">
+                      {att.fileName}
+                    </span>
+                    {att.fileSizeBytes && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {(Number(att.fileSizeBytes) / (1024 * 1024)).toFixed(2)} MB
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await getCommentAttachmentDownloadUrl(issue!.id, commentId, att.id);
+                      if (res.downloadUrl) {
+                        window.open(res.downloadUrl, "_blank");
+                      }
+                    } catch {
+                      window.open(`/api/uploads/${att.r2ObjectKey}`, "_blank");
+                    }
+                  }}
+                  className="flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline shrink-0 px-2.5 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer"
+                  title="Unduh File"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Unduh</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden text-[13px]">
@@ -1388,29 +1483,45 @@ export default function IssueDetailPage() {
                   className="w-full min-h-[50px] max-h-[140px] bg-transparent border-0 px-2 py-1 text-[13px] focus-visible:outline-none placeholder-muted-foreground/60 text-foreground resize-y"
                 />
 
-                {/* Hidden input for comment image attachments */}
+                {/* Hidden input for comment attachments */}
                 <input
                   ref={commentImageInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="*"
                   multiple
                   className="hidden"
                   onChange={handleCommentImageSelect}
                 />
 
-                {/* Pending comment image previews */}
+                {/* Pending comment attachment previews */}
                 {pendingCommentImages.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
                     {pendingCommentImages.map((file, idx) => {
-                      const previewUrl = URL.createObjectURL(file);
-                      return (
+                      const isImg = file.type.startsWith("image/") || isImageFile(file.name);
+                      const previewUrl = isImg ? URL.createObjectURL(file) : null;
+                      return isImg ? (
                         <div key={idx} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-border/80 bg-muted/40 shadow-xs">
-                          <img src={previewUrl} alt={file.name} className="w-full h-full object-cover" />
+                          <img src={previewUrl!} alt={file.name} className="w-full h-full object-cover" />
                           <button
                             type="button"
                             onClick={() => handleRemovePendingCommentImage(idx)}
                             className="absolute top-0.5 right-0.5 bg-background/90 hover:bg-destructive hover:text-destructive-foreground text-foreground p-0.5 rounded-full transition-colors cursor-pointer shadow-xs"
-                            title="Hapus gambar"
+                            title="Hapus file"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div key={idx} className="relative group flex items-center gap-2 border border-border/80 bg-card px-2.5 py-1.5 rounded-lg text-xs max-w-[220px]">
+                          <div className="w-6 h-6 rounded border border-border/60 bg-muted flex items-center justify-center shrink-0">
+                            {getFileIcon(file.name)}
+                          </div>
+                          <span className="truncate text-foreground text-[11px] font-medium">{file.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePendingCommentImage(idx)}
+                            className="text-muted-foreground hover:text-destructive p-0.5 rounded transition-colors cursor-pointer shrink-0"
+                            title="Hapus file"
                           >
                             <X className="h-3 w-3" />
                           </button>
@@ -1456,6 +1567,14 @@ export default function IssueDetailPage() {
                       title="Lampirkan Gambar"
                     >
                       <FileImage className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                      onClick={() => commentImageInputRef.current?.click()}
+                      title="Unggah Lampiran File"
+                    >
+                      <Paperclip className="h-5 w-5" />
                     </button>
                     <button
                       type="button"
@@ -1675,37 +1794,8 @@ export default function IssueDetailPage() {
                                   </div>
                                 )}
 
-                                {/* Image Thumbnail Grid for Main Comment */}
-                                {comment.commentAttachments && comment.commentAttachments.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mt-2">
-                                    {comment.commentAttachments.map((img) => (
-                                      <div
-                                        key={img.id}
-                                        className="relative group rounded-lg overflow-hidden border border-border/80 bg-card cursor-pointer hover:border-primary/50 transition-all shadow-xs"
-                                        onClick={() =>
-                                          setPreviewAttachment({
-                                            id: img.id,
-                                            issueId: issue!.id,
-                                            fileName: img.fileName,
-                                            r2ObjectKey: img.r2ObjectKey,
-                                            uploadedBy: comment.author.name,
-                                            uploadedAt: img.uploadedAt,
-                                          })
-                                        }
-                                      >
-                                        <img
-                                          src={
-                                            img.r2ObjectKey.startsWith("http") || img.r2ObjectKey.startsWith("/api/")
-                                              ? img.r2ObjectKey
-                                              : `/api/uploads/${img.r2ObjectKey}`
-                                          }
-                                          alt={img.fileName}
-                                          className="h-20 w-24 object-cover group-hover:scale-105 transition-transform"
-                                        />
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                                {/* Attachments for Main Comment */}
+                                {renderCommentAttachments(comment.id, comment.commentAttachments, comment.author.name)}
                               </div>
                             </div>
 
@@ -1797,37 +1887,8 @@ export default function IssueDetailPage() {
                                         </div>
                                       )}
 
-                                      {/* Image Thumbnail Grid for Reply */}
-                                      {reply.commentAttachments && reply.commentAttachments.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                          {reply.commentAttachments.map((img) => (
-                                            <div
-                                              key={img.id}
-                                              className="relative group rounded-lg overflow-hidden border border-border/80 bg-card cursor-pointer hover:border-primary/50 transition-all shadow-xs"
-                                              onClick={() =>
-                                                setPreviewAttachment({
-                                                  id: img.id,
-                                                  issueId: issue!.id,
-                                                  fileName: img.fileName,
-                                                  r2ObjectKey: img.r2ObjectKey,
-                                                  uploadedBy: reply.author.name,
-                                                  uploadedAt: img.uploadedAt,
-                                                })
-                                              }
-                                            >
-                                              <img
-                                                src={
-                                                  img.r2ObjectKey.startsWith("http") || img.r2ObjectKey.startsWith("/api/")
-                                                    ? img.r2ObjectKey
-                                                    : `/api/uploads/${img.r2ObjectKey}`
-                                                }
-                                                alt={img.fileName}
-                                                className="h-16 w-20 object-cover group-hover:scale-105 transition-transform"
-                                              />
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
+                                      {/* Attachments for Reply */}
+                                      {renderCommentAttachments(reply.id, reply.commentAttachments, reply.author.name)}
                                     </div>
                                   </div>
                                 ))}

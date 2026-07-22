@@ -570,44 +570,45 @@ export async function createIssueComment(
   return res.json();
 }
 
-export async function uploadCommentImage(
+export async function uploadCommentAttachment(
   issueId: string,
   commentId: string,
   file: File,
 ): Promise<CommentAttachment> {
-  const initRes = await fetch(`/api/issues/${issueId}/comments/${commentId}/images`, {
+  const initRes = await fetch(`/api/issues/${issueId}/comments/${commentId}/attachments`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       fileName: file.name,
-      mimeType: file.type || "image/png",
+      mimeType: file.type || "application/octet-stream",
       fileSizeBytes: file.size,
     }),
   });
 
   if (!initRes.ok) {
     const errorData = await initRes.json().catch(() => ({}));
-    throw new Error(errorData.message || "Failed to initialize image upload");
+    throw new Error(errorData.message || "Failed to initialize attachment upload");
   }
 
-  const { imageId, uploadUrl, r2ObjectKey } = await initRes.json();
+  const { attachmentId, imageId, uploadUrl, r2ObjectKey } = await initRes.json();
+  const targetId = attachmentId || imageId;
 
   const uploadRes = await fetch(uploadUrl, {
     method: "PUT",
     headers: {
-      "Content-Type": file.type || "image/png",
+      "Content-Type": file.type || "application/octet-stream",
     },
     body: file,
   });
 
   if (!uploadRes.ok) {
-    throw new Error("Failed to upload image binary to storage");
+    throw new Error("Failed to upload attachment binary to storage");
   }
 
   const confirmRes = await fetch(
-    `/api/issues/${issueId}/comments/${commentId}/images/${imageId}/confirm`,
+    `/api/issues/${issueId}/comments/${commentId}/attachments/${targetId}/confirm`,
     {
       method: "POST",
       headers: {
@@ -616,7 +617,7 @@ export async function uploadCommentImage(
       body: JSON.stringify({
         fileName: file.name,
         r2ObjectKey,
-        mimeType: file.type || "image/png",
+        mimeType: file.type || "application/octet-stream",
         fileSizeBytes: file.size,
       }),
     },
@@ -624,10 +625,35 @@ export async function uploadCommentImage(
 
   if (!confirmRes.ok) {
     const errorData = await confirmRes.json().catch(() => ({}));
-    throw new Error(errorData.message || "Failed to confirm image upload");
+    throw new Error(errorData.message || "Failed to confirm attachment upload");
   }
 
   return confirmRes.json();
+}
+
+export const uploadCommentImage = uploadCommentAttachment;
+
+export async function getCommentAttachmentDownloadUrl(
+  issueId: string,
+  commentId: string,
+  attachmentId: string,
+): Promise<{ downloadUrl: string; fileName: string }> {
+  const res = await fetch(
+    `/api/issues/${issueId}/comments/${commentId}/attachments/${attachmentId}/download`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to get download URL");
+  }
+
+  return res.json();
 }
 
 export async function updateIssueComment(

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.8 (Lean Internal) |
+| **Versi Dokumen** | 2.9 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: lampiran gambar pada komentar Issue Activity, reply komentar 1 tingkat) |
+| **Tanggal** | 14 Juli 2026 (revisi: lampiran komentar diperluas mendukung file apa saja, bukan hanya gambar — gambar tetap dapat perlakuan khusus sebagai thumbnail) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -146,7 +146,7 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-027 | Pengguna dapat **melampirkan file** pada tiket, baik saat pembuatan maupun setelahnya, disimpan di Cloudflare R2 |
 | FR-028 | Setiap tiket memiliki panel **Aktivitas/Komentar** ala forum — **seluruh anggota proyek (peran manapun: Manager/Developer/Reporter-QA)** dapat menulis dan membaca komentar, tanpa dibatasi role tertentu (berbeda dari transisi status yang bisa dibatasi role) |
 | FR-029 | Komentar dapat diedit/dihapus oleh penulisnya sendiri; Admin dapat menghapus komentar siapapun untuk keperluan moderasi |
-| FR-029a | Pengguna dapat **melampirkan gambar** pada komentar (diunggah setelah teks komentar tersimpan, ditampilkan sebagai thumbnail di bawah teks — klik untuk lihat ukuran penuh) |
+| FR-029a | Pengguna dapat **melampirkan file apa saja** pada komentar (diunggah setelah teks komentar tersimpan). File bertipe **gambar** ditampilkan sebagai thumbnail di bawah teks (klik untuk lihat ukuran penuh); tipe file lain ditampilkan sebagai kartu (ikon + nama + ukuran) dengan tombol **unduh** |
 | FR-029b | Pengguna dapat **membalas** komentar yang sudah ada — balasan ditampilkan terindentasi di bawah komentar induknya. **Reply dibatasi 1 tingkat** (tidak bisa membalas balasan) — cukup untuk menjawab komentar spesifik tanpa kompleksitas thread berlapis-lapis |
 
 ### 7.4 Issue Template (Preset & Dapat Diperluas — Sebagai Filler Judul & Deskripsi)

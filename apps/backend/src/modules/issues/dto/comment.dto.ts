@@ -16,21 +16,20 @@ export class UpdateCommentDto {
   body: string;
 }
 
-export class CreateCommentImageDto {
+export class CreateCommentAttachmentDto {
   @IsString()
   @IsNotEmpty()
   fileName: string;
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^image\//i, { message: 'mimeType must be an image/*' })
   mimeType: string;
 
   @IsNumber()
   fileSizeBytes: number;
 }
 
-export class ConfirmCommentImageDto {
+export class ConfirmCommentAttachmentDto {
   @IsOptional()
   @IsString()
   fileName?: string;
@@ -47,3 +46,6 @@ export class ConfirmCommentImageDto {
   @IsNumber()
   fileSizeBytes?: number;
 }
+
+export class CreateCommentImageDto extends CreateCommentAttachmentDto {}
+export class ConfirmCommentImageDto extends ConfirmCommentAttachmentDto {}

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.0 (Lean Internal) |
+| **Versi Dokumen** | 3.1 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: lampiran gambar pada komentar — tabel `comment_attachments`; reply komentar 1 tingkat via `parent_comment_id`, divalidasi di backend) |
+| **Tanggal** | 14 Juli 2026 (revisi: lampiran komentar digeneralisasi mendukung file apa saja — endpoint `/attachments` menggantikan `/images`, ditambah endpoint download, validasi `mimeType` dihapus) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -459,16 +459,18 @@ erDiagram
 
 > Guard: **siapapun member proyek** (peran manapun) atau Admin boleh baca & tulis komentar — sengaja tidak dibatasi role tertentu, berbeda dari transisi status tiket (FR-028). Edit hanya oleh penulis; hapus oleh penulis atau Admin (moderasi, FR-029).
 
-#### `comment_attachments` (lampiran gambar pada komentar)
+#### `comment_attachments` (lampiran file pada komentar — mendukung tipe apa saja)
 | Kolom | Tipe | Keterangan |
 |---|---|---|
 | id | uuid (PK) | |
-| comment_id | uuid (FK → issue_comments, `onDelete: cascade`) | Menghapus komentar otomatis menghapus gambar lampirannya |
+| comment_id | uuid (FK → issue_comments, `onDelete: cascade`) | Menghapus komentar otomatis menghapus seluruh lampirannya |
 | file_name | varchar | |
-| r2_object_key | varchar | `project/{projectId}/issues/{issueId}/comments/{commentId}/{imageId}-{fileName}` |
-| mime_type | varchar | **Wajib divalidasi `image/*`** di endpoint upload (FR-029a) — tolak (400) kalau bukan tipe gambar |
-| file_size_bytes | bigint | |
+| r2_object_key | varchar | `project/{projectId}/issues/{issueId}/comments/{commentId}/{attachmentId}-{fileName}` |
+| mime_type | varchar | Tidak lagi divalidasi wajib `image/*` (FR-029a direvisi) — disimpan murni untuk keputusan render di frontend: `image/*` → thumbnail grid, tipe lain → kartu ikon+nama+tombol download |
+| file_size_bytes | bigint | Soft-limit maks. 50MB, konsisten dengan modul lampiran Issue & Dokumen |
 | uploaded_at | timestamptz | |
+
+> **Keputusan scope:** hapus attachment individual tidak disediakan endpoint terpisah — attachment ikut terhapus (cascade) hanya saat komentar induknya dihapus.
 
 #### `time_blocks`
 > Tabel PostgreSQL biasa dengan composite index `(user_id, block_start)` dan `(project_id, block_start)`.
@@ -602,8 +604,9 @@ erDiagram
 | Issue Attachments | `/issues/:id/attachments/:attachmentId` | DELETE | Hapus lampiran (uploader atau Admin) |
 | Issue Comments | `/issues/:id/comments` | GET/POST | List & tambah komentar — **anggota proyek peran manapun** boleh akses. Body POST: `{ body, parentCommentId? }` — kalau `parentCommentId` diisi, backend validasi comment tersebut milik issue yang sama **dan** `parent_comment_id`-nya sendiri `NULL` (cegah reply-ke-reply, FR-029b) |
 | Issue Comments | `/issues/:id/comments/:commentId` | PATCH/DELETE | Edit (penulis saja) / Hapus (penulis atau Admin untuk moderasi) |
-| Comment Images | `/issues/:id/comments/:commentId/images` | POST | Presigned upload URL untuk gambar. Body: `{ fileName, mimeType, fileSizeBytes }` — **ditolak (400)** kalau `mimeType` bukan `image/*` (FR-029a) |
-| Comment Images | `/issues/:id/comments/:commentId/images/:imageId/confirm` | POST | Konfirmasi upload gambar selesai |
+| Comment Attachments | `/issues/:id/comments/:commentId/attachments` | POST | Presigned upload URL untuk lampiran (file apa saja). Body: `{ fileName, mimeType, fileSizeBytes }` — validasi hanya `fileSizeBytes <= 50MB`, **tidak** membatasi `mimeType` tertentu (FR-029a) |
+| Comment Attachments | `/issues/:id/comments/:commentId/attachments/:attachmentId/confirm` | POST | Konfirmasi upload lampiran selesai |
+| Comment Attachments | `/issues/:id/comments/:commentId/attachments/:attachmentId/download` | GET | Presigned download URL (kedaluwarsa singkat, mis. 5 menit) — wajib untuk lampiran non-gambar yang perlu diunduh eksplisit |
 | Templates | `/projects/:id/issue-templates` | GET/POST/PATCH | Kelola template (termasuk edit array `fields`) — **Manager/Admin** |
 | Documents | `/projects/:id/documents` | GET | List seluruh **Document** (kontainer) — tiap baris tampilkan `title`, `category`, `fileCount`, bukan file itu sendiri |
 | Documents | `/projects/:id/documents` | POST | Buat Document baru: `{ title, description?, category }` — **belum ada file** di langkah ini (FR-041) |
@@ -838,7 +841,7 @@ sequenceDiagram
     Note over A: Sub-proyek punya project_id & issue_sequence sendiri — nomor TIDAK bersambung dengan proyek induk
 ```
 
-### 10.7 Alur Komentar Issue Activity — Termasuk Reply & Lampiran Gambar (Realtime)
+### 10.7 Alur Komentar Issue Activity — Termasuk Reply & Lampiran File Universal (Realtime)
 
 ```mermaid
 sequenceDiagram
@@ -848,19 +851,19 @@ sequenceDiagram
     participant R2 as Cloudflare R2
     participant QA as QA (via WS)
 
-    Note over Dev: Komentar utama, dengan lampiran gambar
+    Note over Dev: Komentar utama, dengan lampiran file (gambar ATAU tipe lain, mis. PDF)
     Dev->>A: POST /issues/:id/comments {body}
     A->>A: Cek: pengirim member proyek manapun (role apapun) atau Admin?
     A->>PG: Insert issue_comments (parent_comment_id=NULL)
     A-->>Dev: 201 Created {commentId}
-    Dev->>A: POST /issues/:id/comments/:commentId/images {fileName, mimeType, fileSizeBytes}
-    A->>A: Validasi mimeType = image/*
-    A-->>Dev: presigned upload URL + imageId
-    Dev->>R2: Upload gambar langsung ke R2
-    Dev->>A: POST .../images/:imageId/confirm
-    A->>PG: Insert comment_attachments
+    Dev->>A: POST /issues/:id/comments/:commentId/attachments {fileName, mimeType, fileSizeBytes}
+    A->>A: Validasi fileSizeBytes <= 50MB (mimeType TIDAK dibatasi tipe tertentu)
+    A-->>Dev: presigned upload URL + attachmentId
+    Dev->>R2: Upload file langsung ke R2
+    Dev->>A: POST .../attachments/:attachmentId/confirm
+    A->>PG: Insert comment_attachments (mimeType disimpan untuk keputusan render FE)
     A->>QA: emit issue.comment_created {commentId, parentCommentId=null, hasImages=true}
-    Note over QA: Panel Aktivitas QA ter-update dengan komentar + thumbnail gambar
+    Note over QA: Panel Aktivitas QA ter-update — file bertipe image/* dirender thumbnail, tipe lain dirender kartu ikon+nama+tombol download
 
     Note over QA: QA membalas komentar tersebut
     QA->>A: POST /issues/:id/comments {body, parentCommentId: commentId}
@@ -873,6 +876,11 @@ sequenceDiagram
         A->>Dev: emit issue.comment_created {parentCommentId=commentId, hasImages=false}
         Note over Dev: Reply tersisip terindentasi di bawah komentar induk, bukan di akhir list
     end
+
+    Note over Dev: Kapan saja setelahnya — download lampiran non-gambar
+    Dev->>A: GET /issues/:id/comments/:commentId/attachments/:attachmentId/download
+    A-->>Dev: presigned download URL (kedaluwarsa singkat, mis. 5 menit)
+    Dev->>R2: Download langsung dari R2
 ```
 
 ### 10.8 Alur Tray Icon — Hide, Bukan Quit
@@ -1278,7 +1286,8 @@ flowchart TB
 | Discard di Floating Widget tidak tercatat di audit log (karena data memang tidak pernah sampai ke server) — Admin tidak bisa melihat riwayat berapa kali/kapan seorang pekerja men-discard screenshot | Diterima sebagai trade-off kesederhanaan sesuai keputusan desain (§6); jika suatu saat dibutuhkan visibilitas ini, opsi lanjutan: kirim event count-only (tanpa gambar) ke server saat discard, tanpa menyimpan screenshot itu sendiri |
 | Proyek yang diarsipkan menumpuk seiring waktu tanpa pernah dibersihkan (soft-delete tidak pernah otomatis jadi hard-delete) | Diterima sebagai trade-off keamanan data — pertumbuhan tabel `projects`/`issues` dari proyek terarsip relatif kecil dibanding `time_blocks`/`screenshots`; hard-delete manual tetap tersedia untuk Admin bila memang perlu membersihkan proyek uji coba |
 | Parsing `@username` pada komentar bisa gagal cocok kalau username mengandung karakter di luar `\w` (mis. titik, strip) | Batasi format `username` saat registrasi/edit profil ke alfanumerik + underscore saja (dicek di validasi form), konsisten dengan pola regex mention |
-| Gambar komentar tanpa batas ukuran bisa membengkakkan storage R2 tanpa terkontrol | Terapkan soft-limit yang sama seperti lampiran issue/dokumen (mis. maks. 50MB/gambar), divalidasi di frontend sebelum upload |
+| Lampiran komentar tanpa batas ukuran bisa membengkakkan storage R2 tanpa terkontrol | Terapkan soft-limit yang sama seperti lampiran issue/dokumen (mis. maks. 50MB/file), divalidasi di frontend sebelum upload |
+| Tanpa validasi `mimeType`, lampiran komentar berpotensi disalahgunakan untuk unggah file executable/berbahaya | Terapkan mitigasi yang sama seperti lampiran Issue/Dokumen — antivirus scan opsional di sisi R2/backend jika kebutuhan keamanan meningkat; untuk MVP internal, diterima sebagai trade-off karena hanya anggota proyek terautentikasi yang bisa upload |
 | Validasi "reply dibatasi 1 tingkat" hanya berarti kalau ditegakkan di backend, bukan cuma disembunyikan di UI | Endpoint POST comments **wajib** cek `parent_comment_id` milik parent yang direferensikan — tolak (400) kalau parent tersebut sendiri sudah punya parent (lihat §10.7) |
 | Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
 | Tanpa code signing (belum ada sertifikat berbayar), karyawan mendapat peringatan Gatekeeper (macOS)/SmartScreen (Windows) saat instalasi pertama | Diterima sebagai trade-off distribusi internal; instruksikan "klik kanan → Buka" (macOS) atau "More info → Run anyway" (Windows) — revisit beli sertifikat kalau tim membesar atau keluhan meningkat |

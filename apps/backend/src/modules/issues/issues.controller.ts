@@ -22,6 +22,8 @@ import {
 import {
   CreateCommentDto,
   UpdateCommentDto,
+  CreateCommentAttachmentDto,
+  ConfirmCommentAttachmentDto,
   CreateCommentImageDto,
   ConfirmCommentImageDto,
 } from './dto/comment.dto';
@@ -156,6 +158,54 @@ export class UserIssuesController {
     );
   }
 
+  @Post(':id/comments/:commentId/attachments')
+  createCommentAttachmentPresignedUrl(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Body() createAttachmentDto: CreateCommentAttachmentDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.createCommentAttachmentPresignedUrl(
+      id,
+      commentId,
+      createAttachmentDto,
+      req.user.id,
+    );
+  }
+
+  @Post(':id/comments/:commentId/attachments/:attachmentId/confirm')
+  confirmCommentAttachmentUpload(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Param('attachmentId') attachmentId: string,
+    @Body() confirmDto: ConfirmCommentAttachmentDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.confirmCommentAttachmentUpload(
+      id,
+      commentId,
+      attachmentId,
+      confirmDto,
+      req.user.id,
+    );
+  }
+
+  @Get(':id/comments/:commentId/attachments/:attachmentId/download')
+  getCommentAttachmentDownloadUrl(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Param('attachmentId') attachmentId: string,
+    @Req() req: any,
+  ) {
+    return this.issuesService.getCommentAttachmentDownloadUrl(
+      id,
+      commentId,
+      attachmentId,
+      req.user.id,
+    );
+  }
+
+  // Backwards compatibility aliases for /images
   @Post(':id/comments/:commentId/images')
   createCommentImagePresignedUrl(
     @Param('id') id: string,
@@ -163,12 +213,7 @@ export class UserIssuesController {
     @Body() createImageDto: CreateCommentImageDto,
     @Req() req: any,
   ) {
-    return this.issuesService.createCommentImagePresignedUrl(
-      id,
-      commentId,
-      createImageDto,
-      req.user.id,
-    );
+    return this.createCommentAttachmentPresignedUrl(id, commentId, createImageDto, req);
   }
 
   @Post(':id/comments/:commentId/images/:imageId/confirm')
@@ -179,13 +224,7 @@ export class UserIssuesController {
     @Body() confirmDto: ConfirmCommentImageDto,
     @Req() req: any,
   ) {
-    return this.issuesService.confirmCommentImageUpload(
-      id,
-      commentId,
-      imageId,
-      confirmDto,
-      req.user.id,
-    );
+    return this.confirmCommentAttachmentUpload(id, commentId, imageId, confirmDto, req);
   }
 }
 
