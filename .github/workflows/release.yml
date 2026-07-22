@@ -60,7 +60,8 @@ jobs:
             libdbus-1-dev \
             libpipewire-0.3-dev \
             libwayland-dev \
-            libegl-dev
+            libegl-dev \
+            libgbm-dev
 
       - name: Install dependencies
         run: |
