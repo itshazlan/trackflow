@@ -29,3 +29,11 @@ lerna-debug.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Database dumps (never commit real/dev data)
+*.sql
+!apps/backend/src/db/migrations/**/*.sql
+
+# User-uploaded runtime content (screenshots, avatars, attachments) —
+# generated at runtime, not source, and may contain real user data
+apps/backend/uploads/
