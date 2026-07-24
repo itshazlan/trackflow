@@ -1,14 +1,36 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { invoke } from '@tauri-apps/api/core';
-import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: (user: any) => void;
 }
 
+// Deliberately generic — mirrors the web app's behavior of not revealing
+// whether a username exists, whether login failed on identifier resolution
+// or on the password itself.
+const GENERIC_ERROR_MSG = 'Username/email atau password salah';
+
+async function resolveIdentifier(identifier: string): Promise<string> {
+  const trimmed = identifier.trim();
+  if (trimmed.includes('@')) {
+    return trimmed;
+  }
+
+  const res = await api.post<{ email: string }>('/auth/resolve-identifier', {
+    identifier: trimmed,
+  });
+
+  if (res.error || !res.data) {
+    throw new Error(GENERIC_ERROR_MSG);
+  }
+
+  return res.data.email;
+}
+
 export function Login({ onLoginSuccess }: LoginProps) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -16,13 +38,22 @@ export function Login({ onLoginSuccess }: LoginProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError('Email and password are required');
+    if (!identifier || !password) {
+      setError('Username/email dan password wajib diisi');
       return;
     }
 
     setLoading(true);
     setError(null);
+
+    let email: string;
+    try {
+      email = await resolveIdentifier(identifier);
+    } catch (err) {
+      setError(GENERIC_ERROR_MSG);
+      setLoading(false);
+      return;
+    }
 
     const response = await api.post<{ token: string; user: any }>(
       '/api/auth/sign-in/email',
@@ -30,17 +61,17 @@ export function Login({ onLoginSuccess }: LoginProps) {
     );
 
     if (response.error || !response.data) {
-      setError(response.error || 'Invalid credentials');
+      setError(GENERIC_ERROR_MSG);
       setLoading(false);
       return;
     }
 
     try {
       const { token, user } = response.data;
-      
+
       // Save token securely in OS Keychain
       await invoke('save_token', { token });
-      
+
       onLoginSuccess(user);
     } catch (err: any) {
       console.error('[Login] Failed to save token:', err);
@@ -86,21 +117,23 @@ export function Login({ onLoginSuccess }: LoginProps) {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="space-y-1">
             <label
-              htmlFor="email"
+              htmlFor="identifier"
               className="text-xs font-medium text-muted-foreground"
             >
-              Email Address
+              Username atau Email
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
-                <Mail className="h-4 w-4" />
+                <User className="h-4 w-4" />
               </span>
               <input
-                id="email"
-                type="email"
-                placeholder="developer@trackflow.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="identifier"
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                placeholder="developer atau developer@trackflow.com"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 disabled={loading}
                 className="w-full rounded border border-input bg-background py-2 pl-10 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-foreground focus:ring-1 focus:ring-foreground focus:outline-none disabled:opacity-50"
                 required

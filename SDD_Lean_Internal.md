@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.1 (Lean Internal) |
+| **Versi Dokumen** | 3.2 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: lampiran komentar digeneralisasi mendukung file apa saja — endpoint `/attachments` menggantikan `/images`, ditambah endpoint download, validasi `mimeType` dihapus) |
+| **Tanggal** | 14 Juli 2026 (revisi: integrasi Discord Webhook — tabel `discord_webhooks`, endpoint konfigurasi/test tingkat aplikasi & proyek, trigger fire-and-forget) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -250,6 +250,8 @@ erDiagram
     USERS ||--o{ TIMESHEETS : has
     TIMESHEETS ||--o{ TIMESHEET_APPROVALS : "reviewed via"
     USERS ||--o{ NOTIFICATIONS : receives
+    PROJECTS ||--o{ DISCORD_WEBHOOKS : "configured for"
+    USERS ||--o{ DISCORD_WEBHOOKS : configures
 ```
 
 ### 7.2 Definisi Tabel (PostgreSQL via Drizzle ORM)
@@ -571,6 +573,18 @@ erDiagram
 
 > Composite index pada `(user_id, is_read, created_at)` — query paling sering adalah "notifikasi belum dibaca milik user ini, urut terbaru" untuk badge counter & panel notifikasi.
 
+#### `discord_webhooks` (Integrasi Discord — level aplikasi & level proyek)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| project_id | uuid (FK → projects, nullable) | `NULL` = webhook tingkat aplikasi (event `project_created`); terisi = webhook tingkat proyek (event `issue_created`), FR-110/111 |
+| webhook_url | varchar | **Diperlakukan sebagai kredensial sensitif** — tidak pernah dikembalikan utuh ke frontend setelah tersimpan (FR-114), hanya status `configured: true` |
+| events | jsonb | Array event yang diaktifkan, mis. `["project_created"]` atau `["issue_created"]` |
+| created_by | uuid (FK → users) | |
+| created_at | timestamptz | |
+
+> **Catatan keamanan:** siapapun yang memegang `webhook_url` bisa mengirim pesan ke channel Discord terkait. Pertimbangkan enkripsi kolom ini di database (application-level encryption) jika kebutuhan keamanan meningkat di masa depan — untuk MVP, dianggap cukup dilindungi lewat guard endpoint (Admin/Manager only) dan tidak pernah di-expose ke response API.
+
 > **Catatan indexing:** skema didefinisikan & di-migrasi via `drizzle-kit generate`/`drizzle-kit migrate`. Tanpa entitas organisasi, tidak ada kolom `organization_id` yang perlu di-index di tabel manapun — menyederhanakan seluruh query dibanding draft v1.1.
 
 ---
@@ -628,6 +642,9 @@ erDiagram
 | Notifications | `/notifications` | GET | List notifikasi milik user sendiri, paginated, filter `?unread=true` |
 | Notifications | `/notifications/:id/read` | PATCH | Tandai satu notifikasi sebagai telah dibaca |
 | Notifications | `/notifications/read-all` | PATCH | Tandai seluruh notifikasi milik user sebagai telah dibaca |
+| Discord Integration | `/admin/integrations/discord` | GET/POST/DELETE | Webhook **tingkat aplikasi** (event `project_created`) — **Admin only**. Response GET tidak pernah sertakan `webhookUrl` utuh, hanya `{ configured: boolean, events: [] }` (FR-114) |
+| Discord Integration | `/projects/:id/integrations/discord` | GET/POST/DELETE | Webhook **tingkat proyek** (event `issue_created`) — Manager/Admin |
+| Discord Integration | `/projects/:id/integrations/discord/test` | POST | Kirim pesan percobaan ke channel yang dikonfigurasi, untuk verifikasi sebelum diandalkan (FR-113) |
 
 ### 8.1 Contoh Payload — Buat Tiket dari Template Bug (Sebagai Filler Teks)
 
@@ -1115,6 +1132,42 @@ sequenceDiagram
 - `DELETE /projects/:id/documents/:documentId` → hapus Document **beserta seluruh file di dalamnya** (cascade DB + hapus semua object R2 terkait).
 - `DELETE /projects/:id/documents/:documentId/files/:fileId` → hapus **1 file saja**, Document dan file lain tetap utuh.
 
+### 10.16 Alur Integrasi Discord — Konfigurasi & Trigger Notifikasi (Fire-and-Forget)
+
+```mermaid
+sequenceDiagram
+    participant Adm as Admin/Manager
+    participant DC as Discord (Channel)
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant U as User Lain (buat proyek/issue)
+
+    Note over Adm,DC: Setup — dilakukan sekali di sisi Discord terlebih dahulu
+    Adm->>DC: Buat Webhook baru di pengaturan channel, salin URL
+    Adm->>A: POST /projects/:id/integrations/discord {webhookUrl, events: ["issue_created"]}
+    A->>PG: Insert discord_webhooks
+    A-->>Adm: 201 Created {configured: true} — webhookUrl TIDAK dikembalikan ke response
+    Adm->>A: POST /projects/:id/integrations/discord/test
+    A->>DC: Kirim pesan percobaan
+    DC-->>Adm: "✅ TrackFlow berhasil terhubung ke channel ini" muncul di Discord
+
+    Note over U,DC: Trigger sesungguhnya — tidak boleh blocking/menggagalkan proses utama
+    U->>A: POST /projects/:id/issues {title, ...}
+    A->>PG: Insert issues (proses utama, SELALU berhasil terlepas dari status Discord)
+    A-->>U: 201 Created
+    A->>PG: Query discord_webhooks WHERE project_id=:id AND events CONTAINS 'issue_created'
+    alt Webhook terkonfigurasi
+        A->>DC: POST webhookUrl {embeds: [{title, url, color}]} — fire-and-forget, tanpa await blocking response ke U
+        alt Discord API gagal/timeout
+            A->>A: Log warning, TIDAK throw error — issue tetap berhasil dibuat
+        end
+    else Belum terkonfigurasi
+        Note over A: Tidak ada notifikasi terkirim — tidak ada fallback ke webhook tingkat aplikasi (FR-112)
+    end
+```
+
+**Prinsip penting:** insert `issues`/`projects` ke database **selalu dianggap selesai** sebelum proses kirim ke Discord dimulai — kegagalan Discord (channel dihapus, rate limit, downtime) tidak boleh pernah menggagalkan atau menunda response ke user (FR-115).
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -1134,6 +1187,7 @@ sequenceDiagram
 | Retensi data | Screenshot dihapus otomatis setelah 12 bulan (§13) |
 | Model instalasi | Single-tenant tanpa entitas organisasi — permukaan risiko lebih kecil dibanding model SaaS multi-tenant |
 | Moderasi komunikasi | Issue Activity terbuka untuk semua anggota proyek (tanpa batasan role), namun Admin tetap dapat menghapus komentar siapapun untuk moderasi jika terjadi penyalahgunaan |
+| Kredensial webhook eksternal | URL Discord Webhook diperlakukan sebagai kredensial sensitif — tidak pernah dikembalikan utuh ke frontend setelah tersimpan (FR-114), guard endpoint dibatasi Admin (app-level) / Manager-Admin (project-level) |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
 ---
@@ -1231,14 +1285,14 @@ Tidak berubah dari revisi sebelumnya — `turbo.json` mengatur pipeline `build`/
 
 ### 15.3 CI/CD Build Desktop Client (3-Platform via GitHub Actions)
 
-Berbeda dari backend/frontend web (deploy manual ke server saat ini), Desktop Client **dibangun sepenuhnya lewat CI** — bukan di-build lokal per platform di laptop developer. Keputusan ini diambil karena cross-compile Rust/Tauri dari satu mesin (mis. macOS Apple Silicon) ke Windows/Linux sangat menyulitkan dan rawan gagal; GitHub Actions menyediakan runner native per-OS (`macos-latest`, `windows-latest`, `ubuntu-24.04`) yang masing-masing adalah mesin sungguhan dengan toolchain aslinya.
+Berbeda dari backend/frontend web (deploy manual ke server saat ini), Desktop Client **dibangun sepenuhnya lewat CI** — bukan di-build lokal per platform di laptop developer. Keputusan ini diambil karena cross-compile Rust/Tauri dari satu mesin (mis. macOS Apple Silicon) ke Windows/Linux sangat menyulitkan dan rawan gagal; GitHub Actions menyediakan runner native per-OS (`macos-latest`, `windows-latest`, `ubuntu-22.04`) yang masing-masing adalah mesin sungguhan dengan toolchain aslinya.
 
 ```mermaid
 flowchart TB
     TAG["git push tag v*"] --> GH["GitHub Actions Trigger"]
     GH --> M["Job: macos-latest"]
     GH --> W["Job: windows-latest"]
-    GH --> L["Job: ubuntu-24.04"]
+    GH --> L["Job: ubuntu-22.04"]
 
     M --> MB["Build universal binary\n(aarch64 + x86_64 via lipo)"]
     MB --> MS["Code sign + Notarize\n(Apple Developer ID)"]
@@ -1259,7 +1313,7 @@ flowchart TB
 |---|---|
 | **Build 100% via CI, bukan build lokal per platform** | Developer (Anda) hanya perlu bekerja dari satu mesin (macOS Apple Silicon); push tag Git memicu build native paralel di 3 runner OS berbeda sekaligus |
 | **macOS: Universal Binary, bukan 2 file terpisah** | `--target universal-apple-darwin` menggabungkan `aarch64-apple-darwin` (Apple Silicon) + `x86_64-apple-darwin` (Intel) jadi **satu** `.app` via `lipo` — karyawan Intel maupun Apple Silicon install file yang sama, tidak perlu dipilihkan manual |
-| **Windows & Linux: build native, bukan cross-compile** | Masing-masing dikompilasi di runner OS aslinya (`windows-latest`, `ubuntu-24.04`), menghasilkan `.msi`/`.exe` (NSIS) untuk Windows dan `.deb` + `.AppImage` untuk Linux |
+| **Windows & Linux: build native, bukan cross-compile** | Masing-masing dikompilasi di runner OS aslinya (`windows-latest`, `ubuntu-22.04`), menghasilkan `.msi`/`.exe` (NSIS) untuk Windows dan `.deb` + `.AppImage` untuk Linux |
 | **Code signing terintegrasi di pipeline yang sama** | Sertifikat macOS (Developer ID + notarization) dan Windows (Authenticode) diambil dari GitHub Secrets, diproses otomatis oleh `tauri-apps/tauri-action`. Untuk distribusi internal, signing bersifat **opsional** (bisa dilewati bila sertifikat belum tersedia), dengan trade-off peringatan Gatekeeper/SmartScreen saat instalasi pertama |
 | **Release dibuat sebagai `draft`, bukan langsung publish** | `releaseDraft: true` — artifact ter-upload ke GitHub Release tapi **belum terlihat publik / belum memicu auto-updater** sampai seseorang meninjau dan klik "Publish" manual. Ini gerbang review terakhir sebelum rilis sampai ke seluruh karyawan — konsisten dengan prinsip "build sukses ≠ teruji" (§14, kriteria selesai Slice 23) |
 | **Testing tetap butuh device fisik minimal 1x per rilis per OS** | CI menjamin *build berhasil*, bukan *aplikasi berjalan mulus* di OS tersebut (mis. permission dialog macOS Intel, versi WebView2 lama di Windows kantor tertentu, dependency `libwebkit2gtk` di distro Linux tertentu) — smoke test manual tetap wajib sebelum publish, idealnya oleh 1 orang per platform sebelum rollout ke seluruh tim |
@@ -1288,6 +1342,8 @@ flowchart TB
 | Parsing `@username` pada komentar bisa gagal cocok kalau username mengandung karakter di luar `\w` (mis. titik, strip) | Batasi format `username` saat registrasi/edit profil ke alfanumerik + underscore saja (dicek di validasi form), konsisten dengan pola regex mention |
 | Lampiran komentar tanpa batas ukuran bisa membengkakkan storage R2 tanpa terkontrol | Terapkan soft-limit yang sama seperti lampiran issue/dokumen (mis. maks. 50MB/file), divalidasi di frontend sebelum upload |
 | Tanpa validasi `mimeType`, lampiran komentar berpotensi disalahgunakan untuk unggah file executable/berbahaya | Terapkan mitigasi yang sama seperti lampiran Issue/Dokumen — antivirus scan opsional di sisi R2/backend jika kebutuhan keamanan meningkat; untuk MVP internal, diterima sebagai trade-off karena hanya anggota proyek terautentikasi yang bisa upload |
+| URL Discord Webhook bocor (mis. ter-commit ke git, ter-log tanpa sengaja) memungkinkan pihak luar mengirim pesan ke channel tersebut | Jangan pernah log `webhook_url` mentah di server log; response API tidak pernah mengembalikannya utuh (FR-114); revoke & buat webhook baru di Discord jika dicurigai bocor |
+| Discord API down/rate-limited saat volume pembuatan proyek/tiket tinggi | Diterima sebagai fire-and-forget (§10.16) — kegagalan tidak memengaruhi fungsi inti TrackFlow; tidak ada retry queue di MVP ini (bisa ditambah BullMQ nanti jika keandalan notifikasi jadi kebutuhan kritis) |
 | Validasi "reply dibatasi 1 tingkat" hanya berarti kalau ditegakkan di backend, bukan cuma disembunyikan di UI | Endpoint POST comments **wajib** cek `parent_comment_id` milik parent yang direferensikan — tolak (400) kalau parent tersebut sendiri sudah punya parent (lihat §10.7) |
 | Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
 | Tanpa code signing (belum ada sertifikat berbayar), karyawan mendapat peringatan Gatekeeper (macOS)/SmartScreen (Windows) saat instalasi pertama | Diterima sebagai trade-off distribusi internal; instruksikan "klik kanan → Buka" (macOS) atau "More info → Run anyway" (Windows) — revisit beli sertifikat kalau tim membesar atau keluhan meningkat |

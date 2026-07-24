@@ -856,6 +856,21 @@ fn emit_timer_state(app_handle: &tauri::AppHandle) {
     });
 }
 
+// do_start_timer/do_pause_timer/do_stop_timer run synchronously inside the
+// native tray menu's on_menu_event callback (e.g. clicking "Pause/Resume").
+// Calling update_tray_state() inline from there mutates that very same menu
+// item (set_text/set_enabled) and the tray icon while still inside its own
+// click callback — a known crash pattern on Windows (reentrant native menu
+// mutation), even though it's harmless on macOS. Defer it to the next tick
+// so the callback has already returned to the OS event loop before the
+// mutation happens.
+fn schedule_tray_update(app_handle: &tauri::AppHandle) {
+    let handle = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        update_tray_state(&handle);
+    });
+}
+
 fn update_tray_state(app_handle: &tauri::AppHandle) {
     let timer_state = app_handle.state::<ActiveTimerState>();
     let tracking_state = app_handle.state::<ActiveTrackingState>();
@@ -979,7 +994,7 @@ fn do_start_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     drop(current_block_start);
 
     emit_timer_state(app_handle);
-    update_tray_state(app_handle);
+    schedule_tray_update(app_handle);
     Ok(())
 }
 
@@ -1057,7 +1072,7 @@ fn do_pause_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     drop(current_block_start);
 
     emit_timer_state(app_handle);
-    update_tray_state(app_handle);
+    schedule_tray_update(app_handle);
     Ok(())
 }
 
@@ -1141,7 +1156,7 @@ fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     drop(status);
 
     emit_timer_state(app_handle);
-    update_tray_state(app_handle);
+    schedule_tray_update(app_handle);
     Ok(())
 }
 
@@ -1303,6 +1318,20 @@ struct LocalTimeBlock {
     _retry_count: u32,
 }
 
+async fn check_session_valid(token: &str, client: &reqwest::Client) -> Result<(), SyncError> {
+    let response = client
+        .get("https://trackflow.chimney.id/api/auth/get-session")
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await
+        .map_err(|e| SyncError::Network(e.to_string()))?;
+
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(SyncError::Unauthorized);
+    }
+    Ok(())
+}
+
 async fn sync_pending_blocks(
     db_path: &std::path::Path,
     token: &str,
@@ -1376,6 +1405,16 @@ async fn sync_pending_blocks(
         }
         pending
     };
+
+    // When there's nothing to sync, the loop below never touches the network, so an
+    // invalidated/expired session would otherwise go undetected indefinitely (the
+    // timer/activity tracking itself is fully local and never surfaces this on its
+    // own). Do a cheap validity check instead so a dead session is still caught
+    // within one sync cycle even during idle stretches between 10-minute blocks.
+    if pending.is_empty() {
+        check_session_valid(token, client).await?;
+        return Ok(false);
+    }
 
     let mut synced_any = false;
 

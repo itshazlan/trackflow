@@ -37,7 +37,7 @@ export default function App() {
       try {
         // 1. Retrieve the token from OS Keychain
         const token = await invoke<string>('get_token');
-        
+
         if (!token || token.trim() === '') {
           setUser(null);
           setLoading(false);

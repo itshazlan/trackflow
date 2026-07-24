@@ -53,6 +53,18 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
     windowTitle: string;
   } | null>(null);
 
+  // Central 401 handler: an invalidated/expired session should immediately
+  // clear the stored token and drop back to login, rather than surfacing a
+  // generic "failed to load" error while leaving a dead session in place.
+  const handleUnauthorized = async () => {
+    try {
+      await invoke('delete_token');
+    } catch (err) {
+      console.error('[Dashboard] Failed to clear token after 401:', err);
+    }
+    onLogout();
+  };
+
   // Sync / restore timer state helper
   const syncTimerState = async () => {
     try {
@@ -158,6 +170,10 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
       // 1. Fetch projects from backend
       const res = await api.get<any[]>('/projects');
+      if (res.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
       if (res.error) {
         setError('Failed to load projects: ' + res.error);
         setLoadingProjects(false);
@@ -177,6 +193,11 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
           // Fetch issues for this project
           setLoadingIssues(true);
           const issuesRes = await api.get<any[]>(`/projects/${activeProjId}/issues`);
+
+          if (issuesRes.status === 401) {
+            await handleUnauthorized();
+            return;
+          }
 
           if (!issuesRes.error && issuesRes.data) {
             // Filter issues assigned to this user and exclude Done issues
@@ -297,6 +318,10 @@ export function Dashboard({ user, onLogout }: DashboardProps) {
 
     setLoadingIssues(true);
     const res = await api.get<any[]>(`/projects/${projectId}/issues`);
+    if (res.status === 401) {
+      await handleUnauthorized();
+      return;
+    }
     if (res.error) {
       setError('Failed to load tasks: ' + res.error);
     } else if (res.data) {

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 2.9 (Lean Internal) |
+| **Versi Dokumen** | 3.0 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: lampiran komentar diperluas mendukung file apa saja, bukan hanya gambar — gambar tetap dapat perlakuan khusus sebagai thumbnail) |
+| **Tanggal** | 14 Juli 2026 (revisi: integrasi Discord Webhook — notifikasi proyek baru tingkat aplikasi, notifikasi tiket baru tingkat proyek) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -256,6 +256,17 @@ Field:
 | FR-105 | Notifikasi tampil di ikon lonceng pada topbar dengan indikator jumlah belum dibaca, diperbarui **real-time** tanpa perlu refresh halaman |
 | FR-106 | Klik notifikasi menandainya sebagai telah dibaca dan mengarahkan pengguna langsung ke halaman/entitas terkait (proyek, tiket, timesheet, atau blok waktu yang dimaksud) |
 
+### 7.11 Integrasi Pihak Ketiga (Discord Webhook)
+
+| ID | Requirement |
+|---|---|
+| FR-110 | Admin dapat menghubungkan **Discord Webhook tingkat aplikasi** untuk menerima notifikasi setiap kali **proyek baru dibuat** |
+| FR-111 | Manager/Admin dapat menghubungkan **Discord Webhook tingkat proyek** (terpisah dari tingkat aplikasi) untuk menerima notifikasi setiap kali **tiket baru dibuat** pada proyek tersebut |
+| FR-112 | Proyek yang belum mengonfigurasi webhook-nya sendiri **tidak** menerima notifikasi Discord untuk tiket baru — tidak ada fallback otomatis ke webhook tingkat aplikasi, supaya tidak ambigu proyek mana masuk ke channel mana |
+| FR-113 | Tersedia tombol **"Test Koneksi"** untuk mengirim pesan percobaan ke channel Discord yang dikonfigurasi, sebelum webhook diandalkan sungguhan |
+| FR-114 | URL Webhook Discord **tidak pernah ditampilkan ulang** setelah tersimpan (hanya status "Terhubung" yang ditampilkan) — diperlakukan sebagai kredensial sensitif |
+| FR-115 | Kegagalan mengirim notifikasi ke Discord (mis. channel dihapus, webhook tidak valid) **tidak boleh menggagalkan** proses pembuatan proyek/tiket itu sendiri |
+
 ---
 
 ## 8. Kebutuhan Non-Fungsional
@@ -348,6 +359,12 @@ Field:
 6. Anggota tim mengunduh file yang dibutuhkan; file bergambar langsung terlihat sebagai thumbnail pratinjau.
 7. Kalau ada file yang keliru diunggah, pengunggahnya sendiri (atau Manager/Admin) dapat menghapus file tersebut tanpa memengaruhi file lain di Document yang sama.
 
+### 9.13 Menghubungkan Notifikasi ke Discord
+1. Admin membuat webhook baru di pengaturan channel Discord kantor, menyalin URL-nya.
+2. Di Admin Settings TrackFlow, Admin menempelkan URL tersebut pada bagian "Integrasi Discord", memilih event "Proyek Baru Dibuat", lalu klik "Test Koneksi" — muncul pesan percobaan di channel Discord sebagai konfirmasi.
+3. Manager sebuah proyek melakukan hal serupa di pengaturan proyeknya sendiri, memilih event "Issue Baru Dibuat", menghubungkannya ke channel Discord tim proyek tersebut.
+4. Sejak saat itu, setiap proyek baru dibuat → pesan otomatis muncul di channel Discord tingkat aplikasi; setiap tiket baru dibuat di proyek yang sudah dikonfigurasi → pesan muncul di channel Discord proyek tersebut.
+
 ---
 
 ## 10. Metrik Keberhasilan
@@ -377,7 +394,7 @@ Field:
 |---|---|
 | **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view), Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
 | **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual |
-| **Fase 3** | Notifikasi lanjutan (email/push), integrasi pihak ketiga, dashboard analitik lanjutan |
+| **Fase 3** | Notifikasi lanjutan (email/push), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan |
 
 ---
 
