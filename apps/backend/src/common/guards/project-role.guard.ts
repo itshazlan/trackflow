@@ -19,9 +19,9 @@ export class ProjectRoleGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredRoles = this.reflector.get<ProjectRole[]>(
+    const requiredRoles = this.reflector.getAllAndOverride<ProjectRole[]>(
       'roles',
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
     const request = context.switchToHttp().getRequest();
     const user = request.user;

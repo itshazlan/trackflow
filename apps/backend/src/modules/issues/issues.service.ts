@@ -345,6 +345,19 @@ export class IssuesService {
 
     if (updated) {
       this.realtimeGateway.emitIssueUpdated(projectId, updated);
+
+      if (
+        updateIssueDto.statusId &&
+        updateIssueDto.statusId !== existingIssue.statusId
+      ) {
+        // Fire-and-forget notification to Discord
+        this.sendDiscordStatusChangedNotification(
+          existingIssue,
+          existingIssue.statusId,
+          updateIssueDto.statusId,
+          userId,
+        );
+      }
     }
 
     return updated;
@@ -408,6 +421,8 @@ export class IssuesService {
       );
     }
 
+    const oldStatusId = issue.statusId;
+
     // 5. Perform Update
     const [updated] = await this.db
       .update(issues)
@@ -417,9 +432,68 @@ export class IssuesService {
 
     if (updated) {
       this.realtimeGateway.emitIssueUpdated(projectId, updated);
+
+      if (oldStatusId !== statusId) {
+        this.sendDiscordStatusChangedNotification(
+          issue,
+          oldStatusId,
+          statusId,
+          userId,
+        );
+      }
     }
 
     return updated;
+  }
+
+  private async sendDiscordStatusChangedNotification(
+    issue: any,
+    oldStatusId: string,
+    newStatusId: string,
+    userId: string,
+  ) {
+    try {
+      const [oldStatusObj] = await this.db
+        .select({ name: issueStatuses.name })
+        .from(issueStatuses)
+        .where(eq(issueStatuses.id, oldStatusId))
+        .limit(1);
+
+      const [newStatusObj] = await this.db
+        .select({ name: issueStatuses.name })
+        .from(issueStatuses)
+        .where(eq(issueStatuses.id, newStatusId))
+        .limit(1);
+
+      const [project] = await this.db
+        .select({ key: projects.key })
+        .from(projects)
+        .where(eq(projects.id, issue.projectId))
+        .limit(1);
+
+      const [actor] = await this.db
+        .select({ name: user.name })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1);
+
+      if (oldStatusObj && newStatusObj) {
+        this.discordService.notifyDiscordStatusChanged(
+          {
+            id: issue.id,
+            number: issue.number,
+            title: issue.title,
+            projectId: issue.projectId,
+            projectKey: project?.key || 'PRJ',
+          },
+          oldStatusObj.name,
+          newStatusObj.name,
+          { id: userId, name: actor?.name || 'Pengguna' },
+        );
+      }
+    } catch (err: any) {
+      // Fire-and-forget, ignore errors
+    }
   }
 
   async remove(projectId: string, id: string) {

@@ -14,6 +14,14 @@ import {
   CalendarDays,
 } from "lucide-react";
 
+import DiscordWebhookCard from "@/components/discord-webhook-card";
+import {
+  getAppDiscordWebhook,
+  saveAppDiscordWebhook,
+  deleteAppDiscordWebhook,
+  testAppDiscordWebhook,
+} from "@/lib/discord-service";
+
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [companyName, setCompanyName] = useState("");
@@ -172,6 +180,22 @@ export default function AdminSettingsPage() {
           </div>
         </form>
       )}
+
+      {/* Section Integrasi (App-Level Discord Webhook) */}
+      <div className="flex flex-col gap-3 pt-2">
+        <h2 className="text-sm font-bold text-foreground tracking-tight">Integrasi Sistem</h2>
+        <DiscordWebhookCard
+          title="Integrasi Discord (App-Level)"
+          description="Kirim notifikasi otomatis ke channel Discord saat proyek baru dibuat di aplikasi."
+          eventOptions={[
+            { id: "project_created", label: "Notifikasi saat Proyek Baru Dibuat" },
+          ]}
+          onFetch={getAppDiscordWebhook}
+          onSave={saveAppDiscordWebhook}
+          onDelete={deleteAppDiscordWebhook}
+          onTest={testAppDiscordWebhook}
+        />
+      </div>
     </div>
   );
 }

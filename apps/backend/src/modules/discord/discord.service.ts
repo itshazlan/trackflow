@@ -5,7 +5,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, isNull, and } from 'drizzle-orm';
+import { eq, isNull, and, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { discordWebhooks } from '../../db/schema/discord-webhooks';
 import { SaveDiscordWebhookDto } from './dto/save-discord-webhook.dto';
@@ -39,71 +39,81 @@ export class DiscordService {
   // --- APP-LEVEL WEBHOOK (NULL projectId) ---
 
   async getAppWebhook() {
-    const [webhook] = await this.db
-      .select()
-      .from(discordWebhooks)
-      .where(isNull(discordWebhooks.projectId))
-      .limit(1);
+    try {
+      const [webhook] = await this.db
+        .select()
+        .from(discordWebhooks)
+        .where(isNull(discordWebhooks.projectId))
+        .limit(1);
 
-    if (!webhook) {
+      if (!webhook) {
+        return { configured: false };
+      }
+
+      return {
+        configured: true,
+        id: webhook.id,
+        webhookUrl: this.maskWebhookUrl(webhook.webhookUrl),
+        events: webhook.events,
+        createdAt: webhook.createdAt,
+      };
+    } catch (err: any) {
+      this.logger.error(`Failed to fetch app webhook: ${err.message}`);
       return { configured: false };
     }
-
-    return {
-      configured: true,
-      id: webhook.id,
-      webhookUrl: this.maskWebhookUrl(webhook.webhookUrl),
-      events: webhook.events,
-      createdAt: webhook.createdAt,
-    };
   }
 
   async saveAppWebhook(dto: SaveDiscordWebhookDto, userId: string) {
-    const events = dto.events && dto.events.length > 0 ? dto.events : ['project_created'];
+    try {
+      const events = dto.events && dto.events.length > 0 ? dto.events : ['project_created'];
 
-    const [existing] = await this.db
-      .select()
-      .from(discordWebhooks)
-      .where(isNull(discordWebhooks.projectId))
-      .limit(1);
+      const [existing] = await this.db
+        .select()
+        .from(discordWebhooks)
+        .where(isNull(discordWebhooks.projectId))
+        .limit(1);
 
-    if (existing) {
-      const [updated] = await this.db
-        .update(discordWebhooks)
-        .set({
-          webhookUrl: dto.webhookUrl,
-          events,
-          createdBy: userId,
-          createdAt: new Date(),
-        })
-        .where(eq(discordWebhooks.id, existing.id))
-        .returning();
+      if (existing) {
+        const [updated] = await this.db
+          .update(discordWebhooks)
+          .set({
+            webhookUrl: dto.webhookUrl,
+            events: sql`${JSON.stringify(events)}::jsonb`,
+            createdBy: userId,
+            createdAt: new Date(),
+          })
+          .where(eq(discordWebhooks.id, existing.id))
+          .returning();
 
-      return {
-        configured: true,
-        id: updated.id,
-        webhookUrl: this.maskWebhookUrl(updated.webhookUrl),
-        events: updated.events,
-        createdAt: updated.createdAt,
-      };
-    } else {
-      const [inserted] = await this.db
-        .insert(discordWebhooks)
-        .values({
-          projectId: null,
-          webhookUrl: dto.webhookUrl,
-          events,
-          createdBy: userId,
-        })
-        .returning();
+        return {
+          configured: true,
+          id: updated.id,
+          webhookUrl: this.maskWebhookUrl(updated.webhookUrl),
+          events: updated.events,
+          createdAt: updated.createdAt,
+        };
+      } else {
+        const [inserted] = await this.db
+          .insert(discordWebhooks)
+          .values({
+            projectId: null,
+            webhookUrl: dto.webhookUrl,
+            events: sql`${JSON.stringify(events)}::jsonb`,
+            createdBy: userId,
+          })
+          .returning();
 
-      return {
-        configured: true,
-        id: inserted.id,
-        webhookUrl: this.maskWebhookUrl(inserted.webhookUrl),
-        events: inserted.events,
-        createdAt: inserted.createdAt,
-      };
+        return {
+          configured: true,
+          id: inserted.id,
+          webhookUrl: this.maskWebhookUrl(inserted.webhookUrl),
+          events: inserted.events,
+          createdAt: inserted.createdAt,
+        };
+      }
+    } catch (err: any) {
+      this.logger.error(`Gagal menyimpan app webhook: ${err.message}`, err.stack);
+      throw new BadRequestException(`Gagal menyimpan Discord Webhook: ${err.message}`);
     }
   }
 
@@ -132,23 +142,28 @@ export class DiscordService {
   // --- PROJECT-LEVEL WEBHOOK ---
 
   async getProjectWebhook(projectId: string) {
-    const [webhook] = await this.db
-      .select()
-      .from(discordWebhooks)
-      .where(eq(discordWebhooks.projectId, projectId))
-      .limit(1);
+    try {
+      const [webhook] = await this.db
+        .select()
+        .from(discordWebhooks)
+        .where(eq(discordWebhooks.projectId, projectId))
+        .limit(1);
 
-    if (!webhook) {
+      if (!webhook) {
+        return { configured: false };
+      }
+
+      return {
+        configured: true,
+        id: webhook.id,
+        webhookUrl: this.maskWebhookUrl(webhook.webhookUrl),
+        events: webhook.events,
+        createdAt: webhook.createdAt,
+      };
+    } catch (err: any) {
+      this.logger.error(`Failed to fetch project webhook: ${err.message}`);
       return { configured: false };
     }
-
-    return {
-      configured: true,
-      id: webhook.id,
-      webhookUrl: this.maskWebhookUrl(webhook.webhookUrl),
-      events: webhook.events,
-      createdAt: webhook.createdAt,
-    };
   }
 
   async saveProjectWebhook(
@@ -156,51 +171,56 @@ export class DiscordService {
     dto: SaveDiscordWebhookDto,
     userId: string,
   ) {
-    const events = dto.events && dto.events.length > 0 ? dto.events : ['issue_created'];
+    try {
+      const events = dto.events && dto.events.length > 0 ? dto.events : ['issue_created'];
 
-    const [existing] = await this.db
-      .select()
-      .from(discordWebhooks)
-      .where(eq(discordWebhooks.projectId, projectId))
-      .limit(1);
+      const [existing] = await this.db
+        .select()
+        .from(discordWebhooks)
+        .where(eq(discordWebhooks.projectId, projectId))
+        .limit(1);
 
-    if (existing) {
-      const [updated] = await this.db
-        .update(discordWebhooks)
-        .set({
-          webhookUrl: dto.webhookUrl,
-          events,
-          createdBy: userId,
-          createdAt: new Date(),
-        })
-        .where(eq(discordWebhooks.id, existing.id))
-        .returning();
+      if (existing) {
+        const [updated] = await this.db
+          .update(discordWebhooks)
+          .set({
+            webhookUrl: dto.webhookUrl,
+            events: sql`${JSON.stringify(events)}::jsonb`,
+            createdBy: userId,
+            createdAt: new Date(),
+          })
+          .where(eq(discordWebhooks.id, existing.id))
+          .returning();
 
-      return {
-        configured: true,
-        id: updated.id,
-        webhookUrl: this.maskWebhookUrl(updated.webhookUrl),
-        events: updated.events,
-        createdAt: updated.createdAt,
-      };
-    } else {
-      const [inserted] = await this.db
-        .insert(discordWebhooks)
-        .values({
-          projectId,
-          webhookUrl: dto.webhookUrl,
-          events,
-          createdBy: userId,
-        })
-        .returning();
+        return {
+          configured: true,
+          id: updated.id,
+          webhookUrl: this.maskWebhookUrl(updated.webhookUrl),
+          events: updated.events,
+          createdAt: updated.createdAt,
+        };
+      } else {
+        const [inserted] = await this.db
+          .insert(discordWebhooks)
+          .values({
+            projectId,
+            webhookUrl: dto.webhookUrl,
+            events: sql`${JSON.stringify(events)}::jsonb`,
+            createdBy: userId,
+          })
+          .returning();
 
-      return {
-        configured: true,
-        id: inserted.id,
-        webhookUrl: this.maskWebhookUrl(inserted.webhookUrl),
-        events: inserted.events,
-        createdAt: inserted.createdAt,
-      };
+        return {
+          configured: true,
+          id: inserted.id,
+          webhookUrl: this.maskWebhookUrl(inserted.webhookUrl),
+          events: inserted.events,
+          createdAt: inserted.createdAt,
+        };
+      }
+    } catch (err: any) {
+      this.logger.error(`Gagal menyimpan project webhook: ${err.message}`, err.stack);
+      throw new BadRequestException(`Gagal menyimpan Discord Webhook: ${err.message}`);
     }
   }
 
@@ -337,6 +357,49 @@ export class DiscordService {
       });
     } catch (err: any) {
       this.logger.warn(`Gagal kirim notifikasi Discord: ${err.message}`);
+    }
+  }
+
+  async notifyDiscordStatusChanged(
+    issue: {
+      id: string;
+      number: number;
+      title: string;
+      projectId: string;
+      projectKey: string;
+    },
+    oldStatus: string,
+    newStatus: string,
+    actor: { id: string; name: string },
+  ) {
+    try {
+      const [webhook] = await this.db
+        .select()
+        .from(discordWebhooks)
+        .where(eq(discordWebhooks.projectId, issue.projectId))
+        .limit(1);
+
+      if (!webhook || !webhook.webhookUrl) return;
+
+      const events = (webhook.events as string[]) || [];
+      if (!events.includes('issue_status_changed')) return;
+
+      await fetch(webhook.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          embeds: [
+            {
+              title: `🔄 ${issue.projectKey}-${issue.number}: ${issue.title}`,
+              description: `**${oldStatus}** → **${newStatus}**\nOleh: ${actor.name}`,
+              color: 0x818cf8,
+              url: `https://trackflow.internal/projects/${issue.projectId}/issues/${issue.id}`,
+            },
+          ],
+        }),
+      });
+    } catch (err: any) {
+      this.logger.warn(`Gagal kirim notifikasi status Discord: ${err.message}`);
     }
   }
 }

@@ -55,6 +55,7 @@ import {
   FileText,
   Users,
   Settings,
+  Webhook,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
@@ -64,6 +65,13 @@ import {
   restoreProject,
   deleteProject,
 } from "@/lib/projects-service";
+import DiscordWebhookCard from "@/components/discord-webhook-card";
+import {
+  getProjectDiscordWebhook,
+  saveProjectDiscordWebhook,
+  deleteProjectDiscordWebhook,
+  testProjectDiscordWebhook,
+} from "@/lib/discord-service";
 
 interface SettingsSectionProps {
   projectId: string;
@@ -537,6 +545,10 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
             <Users className="h-3.5 w-3.5" />
             Anggota Proyek
           </TabsTrigger>
+          <TabsTrigger value="integrations" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
+            <Webhook className="h-3.5 w-3.5" />
+            Integrasi
+          </TabsTrigger>
         </TabsList>
 
         {/* General Settings Content */}
@@ -911,6 +923,22 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
               </TableBody>
             </Table>
           </div>
+        </TabsContent>
+
+        {/* Integrasi settings content */}
+        <TabsContent value="integrations" className="mt-0 flex flex-col gap-4 pb-24">
+          <DiscordWebhookCard
+            title="Integrasi Discord Proyek"
+            description="Kirim notifikasi otomatis ke channel Discord khusus proyek ini saat issue baru dibuat atau status berubah."
+            eventOptions={[
+              { id: "issue_created", label: "Notifikasi saat Issue Baru Dibuat" },
+              { id: "issue_status_changed", label: "Notifikasi saat Status Issue Berubah" },
+            ]}
+            onFetch={() => getProjectDiscordWebhook(projectId)}
+            onSave={(url, events) => saveProjectDiscordWebhook(projectId, url, events)}
+            onDelete={() => deleteProjectDiscordWebhook(projectId)}
+            onTest={() => testProjectDiscordWebhook(projectId)}
+          />
         </TabsContent>
       </Tabs>
 

@@ -48,11 +48,13 @@ export class ProjectDiscordController {
   constructor(private readonly discordService: DiscordService) {}
 
   @Get()
+  @Roles('manager')
   getProjectWebhook(@Param('projectId') projectId: string) {
     return this.discordService.getProjectWebhook(projectId);
   }
 
   @Post()
+  @Roles('manager')
   saveProjectWebhook(
     @Param('projectId') projectId: string,
     @Body() dto: SaveDiscordWebhookDto,
@@ -62,11 +64,13 @@ export class ProjectDiscordController {
   }
 
   @Delete()
+  @Roles('manager')
   deleteProjectWebhook(@Param('projectId') projectId: string) {
     return this.discordService.deleteProjectWebhook(projectId);
   }
 
   @Post('test')
+  @Roles('manager')
   testProjectWebhook(@Param('projectId') projectId: string) {
     return this.discordService.testProjectWebhook(projectId);
   }
