@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.0 (Lean Internal) |
+| **Versi Dokumen** | 3.1 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: integrasi Discord Webhook — notifikasi proyek baru tingkat aplikasi, notifikasi tiket baru tingkat proyek) |
+| **Tanggal** | 14 Juli 2026 (revisi: event Discord "Status Issue Berubah" — dapat diaktifkan independen dari event "Issue Baru Dibuat") |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -266,6 +266,7 @@ Field:
 | FR-113 | Tersedia tombol **"Test Koneksi"** untuk mengirim pesan percobaan ke channel Discord yang dikonfigurasi, sebelum webhook diandalkan sungguhan |
 | FR-114 | URL Webhook Discord **tidak pernah ditampilkan ulang** setelah tersimpan (hanya status "Terhubung" yang ditampilkan) — diperlakukan sebagai kredensial sensitif |
 | FR-115 | Kegagalan mengirim notifikasi ke Discord (mis. channel dihapus, webhook tidak valid) **tidak boleh menggagalkan** proses pembuatan proyek/tiket itu sendiri |
+| FR-116 | Manager/Admin dapat mengaktifkan event **"Status Issue Berubah"** secara terpisah dari event "Issue Baru Dibuat" pada webhook tingkat proyek — notifikasi mencakup status lama, status baru, dan siapa yang mengubahnya. Dua event ini dapat diaktifkan/nonaktifkan independen satu sama lain, supaya tim bisa menyesuaikan tingkat "kebisingan" notifikasi sesuai kebutuhan |
 
 ---
 
@@ -362,8 +363,8 @@ Field:
 ### 9.13 Menghubungkan Notifikasi ke Discord
 1. Admin membuat webhook baru di pengaturan channel Discord kantor, menyalin URL-nya.
 2. Di Admin Settings TrackFlow, Admin menempelkan URL tersebut pada bagian "Integrasi Discord", memilih event "Proyek Baru Dibuat", lalu klik "Test Koneksi" — muncul pesan percobaan di channel Discord sebagai konfirmasi.
-3. Manager sebuah proyek melakukan hal serupa di pengaturan proyeknya sendiri, memilih event "Issue Baru Dibuat", menghubungkannya ke channel Discord tim proyek tersebut.
-4. Sejak saat itu, setiap proyek baru dibuat → pesan otomatis muncul di channel Discord tingkat aplikasi; setiap tiket baru dibuat di proyek yang sudah dikonfigurasi → pesan muncul di channel Discord proyek tersebut.
+3. Manager sebuah proyek melakukan hal serupa di pengaturan proyeknya sendiri, mengaktifkan event "Issue Baru Dibuat" dan/atau "Status Issue Berubah" secara independen, menghubungkannya ke channel Discord tim proyek tersebut.
+4. Sejak saat itu, setiap proyek baru dibuat → pesan otomatis muncul di channel Discord tingkat aplikasi; setiap tiket baru dibuat atau statusnya berubah (sesuai event yang diaktifkan) di proyek yang sudah dikonfigurasi → pesan muncul di channel Discord proyek tersebut.
 
 ---
 

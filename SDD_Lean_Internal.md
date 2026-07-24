@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.2 (Lean Internal) |
+| **Versi Dokumen** | 3.3 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: integrasi Discord Webhook — tabel `discord_webhooks`, endpoint konfigurasi/test tingkat aplikasi & proyek, trigger fire-and-forget) |
+| **Tanggal** | 14 Juli 2026 (revisi: event Discord `issue_status_changed` — trigger terpisah & independen dari `issue_created` pada webhook tingkat proyek) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -579,7 +579,7 @@ erDiagram
 | id | uuid (PK) | |
 | project_id | uuid (FK → projects, nullable) | `NULL` = webhook tingkat aplikasi (event `project_created`); terisi = webhook tingkat proyek (event `issue_created`), FR-110/111 |
 | webhook_url | varchar | **Diperlakukan sebagai kredensial sensitif** — tidak pernah dikembalikan utuh ke frontend setelah tersimpan (FR-114), hanya status `configured: true` |
-| events | jsonb | Array event yang diaktifkan, mis. `["project_created"]` atau `["issue_created"]` |
+| events | jsonb | Array event yang diaktifkan (masing-masing dapat di-toggle independen), mis. `["project_created"]` (level aplikasi) atau `["issue_created", "issue_status_changed"]` (level proyek, FR-116) |
 | created_by | uuid (FK → users) | |
 | created_at | timestamptz | |
 
@@ -643,7 +643,7 @@ erDiagram
 | Notifications | `/notifications/:id/read` | PATCH | Tandai satu notifikasi sebagai telah dibaca |
 | Notifications | `/notifications/read-all` | PATCH | Tandai seluruh notifikasi milik user sebagai telah dibaca |
 | Discord Integration | `/admin/integrations/discord` | GET/POST/DELETE | Webhook **tingkat aplikasi** (event `project_created`) — **Admin only**. Response GET tidak pernah sertakan `webhookUrl` utuh, hanya `{ configured: boolean, events: [] }` (FR-114) |
-| Discord Integration | `/projects/:id/integrations/discord` | GET/POST/DELETE | Webhook **tingkat proyek** (event `issue_created`) — Manager/Admin |
+| Discord Integration | `/projects/:id/integrations/discord` | GET/POST/DELETE | Webhook **tingkat proyek** — mendukung 2 event independen: `issue_created` dan `issue_status_changed` (FR-116) — Manager/Admin |
 | Discord Integration | `/projects/:id/integrations/discord/test` | POST | Kirim pesan percobaan ke channel yang dikonfigurasi, untuk verifikasi sebelum diandalkan (FR-113) |
 
 ### 8.1 Contoh Payload — Buat Tiket dari Template Bug (Sebagai Filler Teks)
@@ -1132,7 +1132,7 @@ sequenceDiagram
 - `DELETE /projects/:id/documents/:documentId` → hapus Document **beserta seluruh file di dalamnya** (cascade DB + hapus semua object R2 terkait).
 - `DELETE /projects/:id/documents/:documentId/files/:fileId` → hapus **1 file saja**, Document dan file lain tetap utuh.
 
-### 10.16 Alur Integrasi Discord — Konfigurasi & Trigger Notifikasi (Fire-and-Forget)
+### 10.16 Alur Integrasi Discord — Konfigurasi & Trigger Notifikasi Issue Baru + Perubahan Status (Fire-and-Forget)
 
 ```mermaid
 sequenceDiagram
@@ -1163,6 +1163,18 @@ sequenceDiagram
         end
     else Belum terkonfigurasi
         Note over A: Tidak ada notifikasi terkirim — tidak ada fallback ke webhook tingkat aplikasi (FR-112)
+    end
+
+    Note over U,DC: Trigger terpisah — perubahan status (FR-116), independen dari event issue_created
+    U->>A: PATCH /issues/:id/status {statusId}
+    A->>A: Validasi restricted_to_role (§10.3) — tidak terkait sama sekali dengan konfigurasi Discord
+    A->>PG: Update issues.status_id (proses utama, SELALU berhasil terlepas dari status Discord)
+    A-->>U: 200 OK
+    A->>PG: Query discord_webhooks WHERE project_id=:id AND events CONTAINS 'issue_status_changed'
+    alt Event ini terkonfigurasi (terpisah dari toggle issue_created)
+        A->>DC: POST webhookUrl {embeds: [{title, description: "oldStatus → newStatus, oleh actor"}]}
+    else Belum terkonfigurasi
+        Note over A: Tidak terkirim — checkbox event ini independen, bisa nonaktif meski issue_created aktif
     end
 ```
 
