@@ -31,6 +31,7 @@ import {
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
 import { R2Service } from '../time-tracking/r2.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DiscordService } from '../discord/discord.service';
 
 @Injectable()
 export class IssuesService {
@@ -39,6 +40,7 @@ export class IssuesService {
     private readonly realtimeGateway: RealtimeGateway,
     private readonly r2Service: R2Service,
     private readonly notificationsService: NotificationsService,
+    private readonly discordService: DiscordService,
   ) {}
 
   async create(
@@ -124,6 +126,13 @@ export class IssuesService {
         entityId: newIssue.id,
       });
     }
+
+    // Fire-and-forget notification to Discord (non-blocking)
+    this.discordService.notifyDiscordIssueCreated(newIssue, {
+      id: projectId,
+      key: newIssue.projectKey,
+      name: newIssue.projectName,
+    });
 
     return newIssue;
   }

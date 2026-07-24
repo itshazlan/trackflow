@@ -10,15 +10,20 @@ import { DRIZZLE } from '../../db/drizzle.provider';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { issueStatuses } from '../../db/schema/issues';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { DiscordService } from '../discord/discord.service';
 
 @Injectable()
 export class ProjectsService {
-  constructor(@Inject(DRIZZLE) private db: any) { }
+  constructor(
+    @Inject(DRIZZLE) private db: any,
+    private readonly discordService: DiscordService,
+  ) {}
 
   async create(createProjectDto: CreateProjectDto, userId: string) {
+    let createdProject: any;
     try {
       const normalizedKey = createProjectDto.key.toUpperCase();
-      return await this.db.transaction(async (tx: any) => {
+      createdProject = await this.db.transaction(async (tx: any) => {
         // 0. Check if key is already taken
         const [existing] = await tx
           .select()
@@ -85,9 +90,17 @@ export class ProjectsService {
         return newProject;
       });
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       console.error('[ProjectsService.create Error]:', err);
       throw new InternalServerErrorException('Failed to create project');
     }
+
+    // Fire-and-Forget notification to Discord (non-blocking)
+    if (createdProject) {
+      this.discordService.notifyDiscordProjectCreated(createdProject);
+    }
+
+    return createdProject;
   }
 
   async findAll(user: { id: string; isAdmin: boolean }) {

@@ -7,4 +7,6 @@ export * from './time-tracking';
 export * from './timesheets';
 export * from './notifications';
 export * from './documents';
+export * from './discord-webhooks';
+
 

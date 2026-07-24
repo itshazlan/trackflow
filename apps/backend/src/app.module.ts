@@ -14,6 +14,7 @@ import { UsersModule } from './modules/users/users.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { DiscordModule } from './modules/discord/discord.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { DocumentsModule } from './modules/documents/documents.module';
     RealtimeModule,
     NotificationsModule,
     DocumentsModule,
+    DiscordModule,
   ],
 
   controllers: [AppController],
