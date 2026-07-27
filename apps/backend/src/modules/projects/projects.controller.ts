@@ -45,6 +45,13 @@ export class ProjectsController {
     return this.projectsService.findOne(id);
   }
 
+  @Get(':id/workload')
+  @UseGuards(ProjectRoleGuard)
+  @Roles('manager')
+  getWorkload(@Param('id') id: string) {
+    return this.projectsService.getWorkload(id);
+  }
+
   @Get([':id/subprojects', ':id/sub-projects'])
   @UseGuards(ProjectRoleGuard)
   findSubProjects(@Param('id') id: string) {

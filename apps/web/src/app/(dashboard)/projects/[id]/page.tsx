@@ -17,6 +17,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import IssuesSection from "@/components/project/issues-section";
 import SettingsSection from "@/components/project/settings-section";
 import TimeBookSection from "@/components/project/timebook-section";
+import WorkloadSection from "@/components/project/workload-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +40,7 @@ import {
   LineChart,
   Settings,
   Pencil,
+  BarChart3,
 } from "lucide-react";
 
 export default function ProjectDetailPage() {
@@ -414,6 +416,12 @@ export default function ProjectDetailPage() {
             <Settings className="h-3.5 w-3.5" />
             Settings
           </TabsTrigger>
+          {(session?.user?.isAdmin || members.find((m) => m.email === session?.user?.email || m.username === session?.user?.username)?.role === "manager") && (
+            <TabsTrigger value="workload" className="text-[12px] font-medium px-4 rounded-md flex items-center gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Workload Overview
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Tab Empty/Placeholder states */}
@@ -428,6 +436,12 @@ export default function ProjectDetailPage() {
         <TabsContent value="settings" className="mt-0">
           <SettingsSection projectId={projectId} />
         </TabsContent>
+
+        {(session?.user?.isAdmin || members.find((m) => m.email === session?.user?.email || m.username === session?.user?.username)?.role === "manager") && (
+          <TabsContent value="workload" className="mt-0">
+            <WorkloadSection projectId={projectId} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Create Subproject Dialog */}

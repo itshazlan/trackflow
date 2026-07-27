@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { io } from "socket.io-client";
 import {
@@ -87,6 +87,7 @@ import {
   Plus,
   Search,
   Sliders,
+  Filter,
   AlertCircle,
   Trash2,
   Calendar,
@@ -433,7 +434,14 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     queryFn: () => getSession(),
   });
 
-  const { data: issuesList = [], isLoading: issuesLoading, error: issuesError } = useQuery<Issue[]>({
+  const searchParams = useSearchParams();
+  const filterAssigneeId = searchParams.get("assigneeId");
+  const filterStatusId = searchParams.get("statusId");
+  const isOverdueFilter =
+    searchParams.get("filter") === "overdue" ||
+    searchParams.get("overdue") === "true";
+
+  const { data: rawIssuesList = [], isLoading: issuesLoading, error: issuesError } = useQuery<Issue[]>({
     queryKey: ["issues", projectId],
     queryFn: () => getIssues(projectId),
   });
@@ -457,6 +465,50 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     queryKey: ["templates", projectId],
     queryFn: () => getProjectTemplates(projectId),
   });
+
+  const todayDateStr = useMemo(
+    () => new Date().toISOString().split("T")[0],
+    []
+  );
+
+  const issuesList = useMemo(() => {
+    if (!filterAssigneeId && !filterStatusId && !isOverdueFilter) {
+      return rawIssuesList;
+    }
+    return rawIssuesList.filter((issue) => {
+      if (filterAssigneeId) {
+        const isAssigned =
+          issue.assigneeId === filterAssigneeId ||
+          issue.assignee?.id === filterAssigneeId;
+        if (!isAssigned) return false;
+      }
+      if (filterStatusId) {
+        const hasStatus =
+          issue.statusId === filterStatusId ||
+          issue.status?.id === filterStatusId;
+        if (!hasStatus) return false;
+      }
+      if (isOverdueFilter) {
+        if (!issue.dueDate) return false;
+        const st = statuses.find(
+          (s) => s.id === issue.statusId || s.id === issue.status?.id
+        );
+        if (st?.isFinal || issue.status?.isFinal) return false;
+        const issueDateStr = issue.dueDate.split("T")[0];
+        if (issueDateStr >= todayDateStr) return false;
+      }
+      return true;
+    });
+  }, [rawIssuesList, filterAssigneeId, filterStatusId, isOverdueFilter, statuses, todayDateStr]);
+
+  const activeAssignee = members.find(
+    (m) => m.id === filterAssigneeId || (m as any).userId === filterAssigneeId
+  );
+  const activeStatus = statuses.find((s) => s.id === filterStatusId);
+
+  const clearDrillDownFilters = () => {
+    router.push(`/projects/${projectId}?tab=issues`);
+  };
 
   const loading = issuesLoading || statusesLoading;
   const error = issuesError ? "Gagal memuat data issues." : "";
@@ -1004,6 +1056,30 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
 
   return (
     <div className="flex flex-col gap-4 pb-8">
+      {/* Active Drill-Down Filter Banner */}
+      {(filterAssigneeId || filterStatusId || isOverdueFilter) && (
+        <div className="flex items-center justify-between p-3 rounded-lg border border-primary/30 bg-primary/10 text-primary text-xs font-semibold">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 shrink-0" />
+            <span>
+              Filter Workload:
+              {activeAssignee && ` Anggota: ${activeAssignee.name}`}
+              {activeStatus && ` • Status: ${activeStatus.name}`}
+              {isOverdueFilter && ` • Overdue`}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-xs px-2 gap-1 cursor-pointer hover:bg-primary/20 text-primary"
+            onClick={clearDrillDownFilters}
+          >
+            <X className="h-3.5 w-3.5" />
+            Hapus Filter
+          </Button>
+        </div>
+      )}
+
       {/* Toolbar / Filters */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2 text-xs">

@@ -16,6 +16,36 @@ export interface Project {
   } | null;
 }
 
+export interface WorkloadMember {
+  userId: string;
+  name: string;
+  username: string;
+  avatar?: string | null;
+  role: string;
+  totalAssigned: number;
+  byStatus: Record<string, number>;
+  overdueCount: number;
+}
+
+export interface ProjectWorkloadResponse {
+  members: WorkloadMember[];
+}
+
+export async function getProjectWorkload(projectId: string): Promise<ProjectWorkloadResponse> {
+  const res = await fetch(`/api/projects/${projectId}/workload`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch project workload");
+  }
+
+  return res.json();
+}
+
 export async function getProjects(): Promise<Project[]> {
   const res = await fetch("/api/projects", {
     method: "GET",

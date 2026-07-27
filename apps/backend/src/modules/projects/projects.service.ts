@@ -9,6 +9,7 @@ import { eq, and, sql, isNull, count, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { issues, issueStatuses } from '../../db/schema/issues';
+import { user } from '../../db/schema/auth';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { DiscordService } from '../discord/discord.service';
 
@@ -253,6 +254,66 @@ export class ProjectsService {
     }
 
     return updated;
+  }
+
+  async getWorkload(projectId: string) {
+    await this.findOne(projectId);
+
+    // 1. Get all members of the project
+    const membersList = await this.db
+      .select({
+        userId: user.id,
+        name: user.name,
+        username: user.username,
+        avatar: user.image,
+        role: projectMemberships.role,
+      })
+      .from(projectMemberships)
+      .innerJoin(user, eq(projectMemberships.userId, user.id))
+      .where(eq(projectMemberships.projectId, projectId));
+
+    // 2. Get all project issues with status and due date info
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const projectIssues = await this.db
+      .select({
+        id: issues.id,
+        assigneeId: issues.assigneeId,
+        statusId: issues.statusId,
+        dueDate: issues.dueDate,
+        isFinal: issueStatuses.isFinal,
+      })
+      .from(issues)
+      .innerJoin(issueStatuses, eq(issues.statusId, issueStatuses.id))
+      .where(eq(issues.projectId, projectId));
+
+    // 3. Aggregate per member
+    const members = membersList.map((m: any) => {
+      const assigned = projectIssues.filter((i: any) => i.assigneeId === m.userId);
+
+      const byStatus: Record<string, number> = {};
+      let overdueCount = 0;
+
+      assigned.forEach((i: any) => {
+        byStatus[i.statusId] = (byStatus[i.statusId] || 0) + 1;
+        if (i.dueDate && i.dueDate.split('T')[0] < todayStr && !i.isFinal) {
+          overdueCount++;
+        }
+      });
+
+      return {
+        userId: m.userId,
+        name: m.name,
+        username: m.username,
+        avatar: m.avatar,
+        role: m.role,
+        totalAssigned: assigned.length,
+        byStatus,
+        overdueCount,
+      };
+    });
+
+    return { members };
   }
 
   async hardDelete(projectId: string, confirmKey: string) {
