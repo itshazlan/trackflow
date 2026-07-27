@@ -87,5 +87,40 @@ describe('DiscordService', () => {
         }),
       ).resolves.not.toThrow();
     });
+
+    it('should send payload with trackflow.chimney.id domain in embed url', async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 'w1',
+          webhookUrl: 'https://discord.com/api/webhooks/111/secret',
+          events: ['project_created'],
+        },
+      ]);
+
+      const mockFetch = jest.fn().mockResolvedValueOnce({ ok: true });
+      global.fetch = mockFetch;
+
+      await service.notifyDiscordProjectCreated({
+        id: 'p1',
+        key: 'PRJ',
+        name: 'Project 1',
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://discord.com/api/webhooks/111/secret',
+        expect.objectContaining({
+          body: JSON.stringify({
+            embeds: [
+              {
+                title: '📁 Proyek Baru: Project 1',
+                description: 'Kode: `PRJ`',
+                color: 0x4f46e5,
+                url: 'https://trackflow.chimney.id/projects/p1',
+              },
+            ],
+          }),
+        }),
+      );
+    });
   });
 });

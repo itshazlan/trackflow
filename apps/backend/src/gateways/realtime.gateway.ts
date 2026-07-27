@@ -64,6 +64,11 @@ export class RealtimeGateway
     this.server.emit('issue.updated', issue);
   }
 
+  emitIssueDeleted(projectId: string, issueId: string) {
+    this.server.to(`project:${projectId}`).emit('issue.deleted', { issueId });
+    this.server.emit('issue.deleted', { issueId });
+  }
+
   emitCommentCreated(
     projectId: string,
     payload: {

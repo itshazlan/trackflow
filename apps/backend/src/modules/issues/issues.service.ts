@@ -496,7 +496,29 @@ export class IssuesService {
     }
   }
 
-  async remove(projectId: string, id: string) {
+  async remove(
+    projectId: string,
+    id: string,
+    currentUser: { id: string; isAdmin?: boolean },
+    projectRole: string,
+  ) {
+    const issue = await this.findOne(id);
+
+    if (issue.projectId !== projectId) {
+      throw new NotFoundException(
+        `Issue with ID ${id} not found in project ${projectId}`,
+      );
+    }
+
+    const isCreator = issue.createdBy === currentUser.id;
+    const isManagerOrAdmin = projectRole === 'manager' || !!currentUser?.isAdmin;
+
+    if (!isCreator && !isManagerOrAdmin) {
+      throw new ForbiddenException(
+        'Hanya pembuat tiket ini, Manager proyek, atau Admin yang dapat menghapusnya',
+      );
+    }
+
     const [deleted] = await this.db
       .delete(issues)
       .where(and(eq(issues.id, id), eq(issues.projectId, projectId)))
@@ -507,6 +529,8 @@ export class IssuesService {
         `Issue with ID ${id} not found in project ${projectId}`,
       );
     }
+
+    this.realtimeGateway.emitIssueDeleted(projectId, id);
 
     return { message: 'Issue deleted successfully', deleted };
   }

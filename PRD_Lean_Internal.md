@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.1 (Lean Internal) |
+| **Versi Dokumen** | 3.2 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: event Discord "Status Issue Berubah" — dapat diaktifkan independen dari event "Issue Baru Dibuat") |
+| **Tanggal** | 14 Juli 2026 (revisi: guard hapus tiket dipisah dari edit — hanya pembuat/Manager/Admin; halaman "Tugas Saya" — agregasi tiket lintas proyek sebagai mini-board per proyek) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -143,6 +143,7 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-025b | **Calendar:** menampilkan tiket berdasarkan **tenggat waktu (`due_date`)** saja — bukan rentang tanggal mulai/selesai. Tiket **tanpa** `due_date` tidak muncul di Calendar (tetap muncul normal di List/Kanban) |
 | FR-025c | Klik tiket di Kanban maupun Calendar membuka detail/edit tiket yang sama seperti dari List — bukan tampilan terpisah |
 | FR-026 | Tiket dapat **diedit** setelah dibuat (judul, deskripsi, assignee, priority, tanggal, lampiran) oleh Assignee, Manager proyek terkait, atau Admin |
+| FR-026a | Tiket dapat **dihapus** hanya oleh **pembuatnya sendiri** (peran apapun: Developer/QA/Manager, selama dia yang membuat tiket tersebut), atau oleh Manager proyek terkait/Admin. **Assignee yang bukan pembuat tidak dapat menghapus tiket** — ini guard yang lebih ketat dari edit (FR-026), sengaja dipisah karena hapus bersifat destruktif sedangkan edit tidak |
 | FR-027 | Pengguna dapat **melampirkan file** pada tiket, baik saat pembuatan maupun setelahnya, disimpan di Cloudflare R2 |
 | FR-028 | Setiap tiket memiliki panel **Aktivitas/Komentar** ala forum — **seluruh anggota proyek (peran manapun: Manager/Developer/Reporter-QA)** dapat menulis dan membaca komentar, tanpa dibatasi role tertentu (berbeda dari transisi status yang bisa dibatasi role) |
 | FR-029 | Komentar dapat diedit/dihapus oleh penulisnya sendiri; Admin dapat menghapus komentar siapapun untuk keperluan moderasi |
@@ -268,6 +269,17 @@ Field:
 | FR-115 | Kegagalan mengirim notifikasi ke Discord (mis. channel dihapus, webhook tidak valid) **tidak boleh menggagalkan** proses pembuatan proyek/tiket itu sendiri |
 | FR-116 | Manager/Admin dapat mengaktifkan event **"Status Issue Berubah"** secara terpisah dari event "Issue Baru Dibuat" pada webhook tingkat proyek — notifikasi mencakup status lama, status baru, dan siapa yang mengubahnya. Dua event ini dapat diaktifkan/nonaktifkan independen satu sama lain, supaya tim bisa menyesuaikan tingkat "kebisingan" notifikasi sesuai kebutuhan |
 
+### 7.12 Tugas Saya (Agregasi Tiket Lintas Proyek)
+
+| ID | Requirement |
+|---|---|
+| FR-120 | Setiap pengguna memiliki halaman **"Tugas Saya"** yang menampilkan seluruh tiket yang **ditugaskan (assignee)** kepadanya, dikumpulkan dari **semua proyek** yang dia ikuti dalam satu tempat |
+| FR-121 | Halaman ini mendukung mode tampilan **List, Kanban, dan Calendar** — sama seperti tampilan tiket per-proyek |
+| FR-122 | Pada mode **List dan Kanban**, tiket dikelompokkan sebagai **mini-board terpisah per proyek**, masing-masing dapat **di-collapse/expand** secara independen. Mini-board Kanban tiap proyek menggunakan **kolom status milik proyek itu sendiri** (termasuk status kustom yang berbeda antar proyek) |
+| FR-123 | Pada mode **Calendar**, seluruh tiket dari semua proyek ditampilkan dalam **satu kalender gabungan** (bukan kalender terpisah per proyek), dengan tiap tiket diberi penanda visual (badge/warna) sesuai kode proyek asalnya |
+| FR-124 | Drag-and-drop pada mini-board Kanban di halaman ini mengubah status tiket dengan validasi yang **sama persis** seperti di tampilan Kanban per-proyek (termasuk pembatasan status ke role tertentu) |
+| FR-125 | Proyek yang tidak memiliki tiket assigned ke pengguna tersebut **tidak ditampilkan** sebagai mini-board kosong — hanya proyek dengan minimal satu tiket assigned yang muncul |
+
 ---
 
 ## 8. Kebutuhan Non-Fungsional
@@ -366,6 +378,19 @@ Field:
 3. Manager sebuah proyek melakukan hal serupa di pengaturan proyeknya sendiri, mengaktifkan event "Issue Baru Dibuat" dan/atau "Status Issue Berubah" secara independen, menghubungkannya ke channel Discord tim proyek tersebut.
 4. Sejak saat itu, setiap proyek baru dibuat → pesan otomatis muncul di channel Discord tingkat aplikasi; setiap tiket baru dibuat atau statusnya berubah (sesuai event yang diaktifkan) di proyek yang sudah dikonfigurasi → pesan muncul di channel Discord proyek tersebut.
 
+### 9.14 Menghapus Tiket yang Dibuat Sendiri
+1. Developer membuat sebuah tiket, menugaskan ke Developer lain sebagai assignee.
+2. Developer lain (assignee) membuka tiket tersebut — tombol "Hapus" tidak terlihat sama sekali baginya, karena bukan pembuatnya.
+3. Developer pembuat tiket membuka tiket yang sama — tombol "Hapus" tersedia, karena dia pembuatnya.
+4. Manager proyek terkait tetap bisa menghapus tiket siapapun di proyeknya, terlepas dari siapa pembuatnya.
+
+### 9.15 Melihat Semua Tugas Lintas Proyek
+1. Developer yang tergabung di 3 proyek berbeda membuka menu "Tugas Saya".
+2. Melihat 3 mini-board terpisah (satu per proyek yang punya tiket assigned kepadanya), masing-masing dengan kolom status sesuai konfigurasi proyeknya sendiri.
+3. Collapse salah satu mini-board proyek yang sedang tidak jadi fokus — proyek lain tetap terlihat penuh.
+4. Drag satu tiket antar kolom status di salah satu mini-board — berfungsi sama seperti Kanban per-proyek biasa.
+5. Beralih ke mode Calendar — melihat seluruh tenggat waktu dari ketiga proyek dalam satu kalender, dibedakan lewat badge warna per proyek.
+
 ---
 
 ## 10. Metrik Keberhasilan
@@ -393,7 +418,7 @@ Field:
 
 | Fase | Cakupan |
 |---|---|
-| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view), Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
+| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view) + guard hapus tiket khusus pembuat, Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Halaman Tugas Saya (agregasi lintas proyek), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
 | **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual |
 | **Fase 3** | Notifikasi lanjutan (email/push), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan |
 

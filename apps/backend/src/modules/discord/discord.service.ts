@@ -281,6 +281,15 @@ export class DiscordService {
     }
   }
 
+  private getAppBaseUrl(): string {
+    const envUrl =
+      process.env.APP_URL || process.env.FRONTEND_URL || process.env.WEB_URL;
+    if (envUrl) {
+      return envUrl.replace(/\/$/, '');
+    }
+    return 'https://trackflow.chimney.id';
+  }
+
   // --- FIRE-AND-FORGET TRIGGERS ---
 
   async notifyDiscordProjectCreated(project: {
@@ -300,6 +309,8 @@ export class DiscordService {
       const events = (webhook.events as string[]) || [];
       if (!events.includes('project_created')) return;
 
+      const baseUrl = this.getAppBaseUrl();
+
       await fetch(webhook.webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -309,7 +320,7 @@ export class DiscordService {
               title: `📁 Proyek Baru: ${project.name}`,
               description: `Kode: \`${project.key}\``,
               color: 0x4f46e5,
-              url: `https://trackflow.internal/projects/${project.id}`,
+              url: `${baseUrl}/projects/${project.id}`,
             },
           ],
         }),
@@ -341,6 +352,8 @@ export class DiscordService {
       const events = (webhook.events as string[]) || [];
       if (!events.includes('issue_created')) return;
 
+      const baseUrl = this.getAppBaseUrl();
+
       await fetch(webhook.webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -350,7 +363,7 @@ export class DiscordService {
               title: `📌 Issue Baru: [${project.key}-${issue.number}] ${issue.title}`,
               description: issue.description || 'Tidak ada deskripsi',
               color: 0x4f46e5,
-              url: `https://trackflow.internal/projects/${project.id}/issues/${issue.id}`,
+              url: `${baseUrl}/projects/${project.id}/issues/${issue.id}`,
             },
           ],
         }),
@@ -384,6 +397,8 @@ export class DiscordService {
       const events = (webhook.events as string[]) || [];
       if (!events.includes('issue_status_changed')) return;
 
+      const baseUrl = this.getAppBaseUrl();
+
       await fetch(webhook.webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -393,7 +408,7 @@ export class DiscordService {
               title: `🔄 ${issue.projectKey}-${issue.number}: ${issue.title}`,
               description: `**${oldStatus}** → **${newStatus}**\nOleh: ${actor.name}`,
               color: 0x818cf8,
-              url: `https://trackflow.internal/projects/${issue.projectId}/issues/${issue.id}`,
+              url: `${baseUrl}/projects/${issue.projectId}/issues/${issue.id}`,
             },
           ],
         }),

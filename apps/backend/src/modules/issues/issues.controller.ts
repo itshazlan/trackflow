@@ -271,8 +271,16 @@ export class IssuesController {
   }
 
   @Delete(':id')
-  @Roles('manager')
-  remove(@Param('projectId') projectId: string, @Param('id') id: string) {
-    return this.issuesService.remove(projectId, id);
+  remove(
+    @Param('projectId') projectId: string,
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    return this.issuesService.remove(
+      projectId,
+      id,
+      req.user,
+      req.projectRole,
+    );
   }
 }

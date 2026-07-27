@@ -1190,17 +1190,17 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
           </div>
 
           {/* Desktop Table View (hidden on < sm, visible on >= sm) */}
-          <div className="hidden sm:block rounded-lg border border-border bg-card overflow-hidden shadow-sm">
+          <div className="hidden sm:block rounded-lg border border-border bg-card overflow-x-auto shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-20 pl-4">ID</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead className="w-24">Tracker</TableHead>
-                  <TableHead className="w-28">Status</TableHead>
-                  <TableHead className="w-36">Assignee</TableHead>
-                  <TableHead className="w-24">Priority</TableHead>
-                  <TableHead className="w-28 pr-4">Due Date</TableHead>
+                  <TableHead className="w-20 pl-4 whitespace-nowrap">ID</TableHead>
+                  <TableHead className="min-w-[280px]">Title</TableHead>
+                  <TableHead className="w-32 whitespace-nowrap">Tracker</TableHead>
+                  <TableHead className="w-32 whitespace-nowrap">Status</TableHead>
+                  <TableHead className="w-40 whitespace-nowrap">Assignee</TableHead>
+                  <TableHead className="w-28 whitespace-nowrap">Priority</TableHead>
+                  <TableHead className="w-32 pr-4 whitespace-nowrap">Due Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1219,7 +1219,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                         router.push(`/projects/${projectId}/issues/${issue.id}`);
                       }}
                     >
-                      <TableCell className="font-mono text-[11px] text-muted-foreground pl-4">
+                      <TableCell className="font-mono text-[11px] text-muted-foreground pl-4 whitespace-nowrap">
                         #{issue.id.slice(0, 6)}
                       </TableCell>
                       <TableCell className="font-medium text-foreground">
@@ -1232,19 +1232,19 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                           <span className="truncate">{issue.title}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground select-none">
+                      <TableCell className="whitespace-nowrap">
+                        <span className="inline-flex items-center rounded border border-border px-2 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground select-none whitespace-nowrap">
                           {issue.tracker?.name || "Task"}
                         </span>
                       </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold border border-border text-muted-foreground">
+                      <TableCell className="whitespace-nowrap">
+                        <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold border border-border text-muted-foreground whitespace-nowrap">
                           {issue.status?.name || "New"}
                         </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <Avatar className="h-4.5 w-4.5">
+                          <Avatar className="h-4.5 w-4.5 shrink-0">
                             {issue.assignee?.image ? (
                               <img src={issue.assignee.image} alt={issue.assignee.name} className="h-full w-full object-cover rounded-full" />
                             ) : (
@@ -1253,27 +1253,27 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                               </AvatarFallback>
                             )}
                           </Avatar>
-                          <span className="truncate max-w-[100px] text-[12.5px]">
+                          <span className="truncate max-w-[120px] text-[12.5px] whitespace-nowrap">
                             {issue.assignee?.name || "Unassigned"}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <span
-                          className={`text-[11px] font-semibold capitalize ${
+                          className={`text-[11px] font-semibold capitalize whitespace-nowrap ${
                             issue.priority === "urgent"
                               ? "text-red-500 font-bold"
                               : issue.priority === "high"
                               ? "text-red-400"
                               : issue.priority === "medium"
-                              ? "text-amber-400"
+                              ? "text-amber-500 dark:text-amber-400"
                               : "text-muted-foreground"
                           }`}
                         >
                           {issue.priority}
                         </span>
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-[12px] pr-4">
+                      <TableCell className="text-muted-foreground text-[12px] pr-4 whitespace-nowrap">
                         {issue.dueDate
                           ? new Date(issue.dueDate).toLocaleDateString("id-ID", {
                               day: "numeric",

@@ -789,6 +789,11 @@ export default function IssueDetailPage() {
     userRole === "manager" ||
     isAdmin;
 
+  const canDelete =
+    issue.createdBy === session?.user?.id ||
+    userRole === "manager" ||
+    isAdmin;
+
   const creator = members.find((m) => m.id === issue.createdBy);
 
   const propertiesContent = (
@@ -1104,11 +1109,11 @@ export default function IssueDetailPage() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {isAdmin && (
+          {canDelete && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
               onClick={handleDeleteIssue}
               title="Hapus Tiket"
             >

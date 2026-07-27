@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.3 (Lean Internal) |
+| **Versi Dokumen** | 3.4 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: event Discord `issue_status_changed` — trigger terpisah & independen dari `issue_created` pada webhook tingkat proyek) |
+| **Tanggal** | 14 Juli 2026 (revisi: guard DELETE /issues/:id dipisah dari PATCH — creator/Manager/Admin saja; endpoint baru `/issues/mine` untuk agregasi Tugas Saya lintas proyek) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -612,7 +612,9 @@ erDiagram
 | Memberships | `/projects/:id/members` | GET/POST/PATCH | Undang & atur role anggota proyek — **Admin dapat mengakses meski belum jadi member proyek ini** (§4.1) |
 | Issue Statuses | `/projects/:id/issue-statuses` | GET/POST/PATCH/DELETE | CRUD status workflow (termasuk reorder & set `restricted_to_role`) — **Manager/Admin** |
 | Issues | `/projects/:id/issues` | GET/POST | List (view=list\|kanban\|calendar) & buat tiket — nomor issue (`number`) di-generate otomatis, atomik per proyek |
-| Issues | `/issues/:id` | GET/PATCH/DELETE | Detail & update tiket (edit oleh Assignee/Manager/Admin) |
+| Issues | `/issues/:id` | GET/PATCH | Detail & edit tiket — edit oleh Assignee, Manager proyek terkait, atau Admin (FR-026) |
+| Issues | `/issues/:id` | DELETE | Hapus tiket — **guard lebih ketat dari edit**: hanya pembuat tiket (`createdBy === currentUser`, peran apapun), Manager proyek terkait, atau Admin. Assignee yang bukan pembuat **ditolak** (403) (FR-026a). `time_blocks.issue_id` milik tiket yang dihapus di-set `NULL` (jadi kategori "Activity"), **bukan** ikut dihapus — data payroll tetap utuh |
+| Issues | `/issues/mine?view=list\|kanban\|calendar` | GET | **Baru** — agregasi tiket assigned ke user saat ini lintas semua proyek yang diikuti. Response dikelompokkan per proyek (`list`/`kanban`) atau flat lintas-proyek (`calendar`) — lihat §10.17 untuk struktur detail (FR-120–125) |
 | Issues | `/issues/:id/status` | PATCH | Ubah status (dicek terhadap `restricted_to_role`) |
 | Issue Attachments | `/issues/:id/attachments` | GET/POST | List & upload lampiran (presigned URL R2) |
 | Issue Attachments | `/issues/:id/attachments/:attachmentId` | DELETE | Hapus lampiran (uploader atau Admin) |
@@ -1180,6 +1182,49 @@ sequenceDiagram
 
 **Prinsip penting:** insert `issues`/`projects` ke database **selalu dianggap selesai** sebelum proses kirim ke Discord dimulai — kegagalan Discord (channel dihapus, rate limit, downtime) tidak boleh pernah menggagalkan atau menunda response ke user (FR-115).
 
+### 10.17 Alur Guard Hapus Tiket (Creator-Only) & Agregasi "Tugas Saya"
+
+```mermaid
+sequenceDiagram
+    participant Assignee as Developer (Assignee, bukan pembuat)
+    participant Creator as Developer (Pembuat tiket)
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    Assignee->>A: DELETE /issues/:id
+    A->>PG: Cek issues.created_by vs currentUser.id
+    A->>A: created_by != currentUser, dan role bukan manager/admin
+    A-->>Assignee: 403 Forbidden ("Hanya pembuat tiket, Manager, atau Admin yang dapat menghapus")
+
+    Creator->>A: DELETE /issues/:id
+    A->>PG: Cek issues.created_by vs currentUser.id
+    A->>A: created_by == currentUser → diizinkan
+    A->>PG: UPDATE time_blocks SET issue_id=NULL WHERE issue_id=:id (data payroll TIDAK dihapus)
+    A->>PG: DELETE issues (cascade: issue_comments, issue_attachments)
+    A-->>Creator: 200 OK
+```
+
+```mermaid
+sequenceDiagram
+    participant U as Pengguna
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    U->>A: GET /issues/mine?view=kanban
+    A->>PG: SELECT project_id FROM project_memberships WHERE user_id=:currentUser (atau semua proyek jika isAdmin)
+    A->>PG: SELECT * FROM issues WHERE assignee_id=:currentUser AND project_id IN (:myProjectIds)
+    A->>A: Group issues by project_id — proyek tanpa issue assigned DIKECUALIKAN dari response (FR-125)
+    loop Tiap proyek yang punya >=1 issue assigned
+        A->>PG: SELECT issue_statuses WHERE project_id=:projectId ORDER BY order_index
+    end
+    A-->>U: { projects: [{ projectId, projectKey, projectName, statuses, issues }, ...] }
+    U->>U: Render mini-board Kanban per proyek, masing-masing collapsible, kolom sesuai statuses proyek tsb
+
+    Note over U: Drag-and-drop pada mini-board mana pun tetap panggil endpoint yang sama
+    U->>A: PATCH /issues/:id/status {statusId}
+    Note over A: Validasi restricted_to_role identik dengan Kanban per-proyek (§10.10) — tidak ada logic baru
+```
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -1200,6 +1245,7 @@ sequenceDiagram
 | Model instalasi | Single-tenant tanpa entitas organisasi — permukaan risiko lebih kecil dibanding model SaaS multi-tenant |
 | Moderasi komunikasi | Issue Activity terbuka untuk semua anggota proyek (tanpa batasan role), namun Admin tetap dapat menghapus komentar siapapun untuk moderasi jika terjadi penyalahgunaan |
 | Kredensial webhook eksternal | URL Discord Webhook diperlakukan sebagai kredensial sensitif — tidak pernah dikembalikan utuh ke frontend setelah tersimpan (FR-114), guard endpoint dibatasi Admin (app-level) / Manager-Admin (project-level) |
+| Guard hapus vs edit tiket sengaja dibedakan | Edit (FR-026) melibatkan Assignee karena bersifat reversibel; Hapus (FR-026a) dibatasi ke pembuat/Manager/Admin karena bersifat destruktif — assignee yang bukan pembuat tidak boleh menghapus tiket yang bukan miliknya |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
 ---
@@ -1356,6 +1402,8 @@ flowchart TB
 | Tanpa validasi `mimeType`, lampiran komentar berpotensi disalahgunakan untuk unggah file executable/berbahaya | Terapkan mitigasi yang sama seperti lampiran Issue/Dokumen — antivirus scan opsional di sisi R2/backend jika kebutuhan keamanan meningkat; untuk MVP internal, diterima sebagai trade-off karena hanya anggota proyek terautentikasi yang bisa upload |
 | URL Discord Webhook bocor (mis. ter-commit ke git, ter-log tanpa sengaja) memungkinkan pihak luar mengirim pesan ke channel tersebut | Jangan pernah log `webhook_url` mentah di server log; response API tidak pernah mengembalikannya utuh (FR-114); revoke & buat webhook baru di Discord jika dicurigai bocor |
 | Discord API down/rate-limited saat volume pembuatan proyek/tiket tinggi | Diterima sebagai fire-and-forget (§10.16) — kegagalan tidak memengaruhi fungsi inti TrackFlow; tidak ada retry queue di MVP ini (bisa ditambah BullMQ nanti jika keandalan notifikasi jadi kebutuhan kritis) |
+| `/issues/mine?view=kanban` berpotensi N+1 query kalau user tergabung di banyak proyek (query `issue_statuses` per proyek dalam loop) | Diterima untuk skala tim internal (jumlah proyek per user biasanya kecil); optimasi ke satu query `WHERE project_id IN (...)` bisa dilakukan belakangan kalau jumlah proyek per user bertambah signifikan |
+| Menghapus tiket melepas ikatan `time_blocks.issue_id` ke `NULL` — riwayat waktu kerja jadi "Activity" tanpa konteks tiket aslinya | Diterima sebagai trade-off yang disengaja (lebih baik dari kehilangan data payroll sepenuhnya); pertimbangkan menyimpan judul tiket asli sebagai teks di `time_blocks.note` sebelum penghapusan jika jejak konteks dirasa penting nanti |
 | Validasi "reply dibatasi 1 tingkat" hanya berarti kalau ditegakkan di backend, bukan cuma disembunyikan di UI | Endpoint POST comments **wajib** cek `parent_comment_id` milik parent yang direferensikan — tolak (400) kalau parent tersebut sendiri sudah punya parent (lihat §10.7) |
 | Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
 | Tanpa code signing (belum ada sertifikat berbayar), karyawan mendapat peringatan Gatekeeper (macOS)/SmartScreen (Windows) saat instalasi pertama | Diterima sebagai trade-off distribusi internal; instruksikan "klik kanan → Buka" (macOS) atau "More info → Run anyway" (Windows) — revisit beli sertifikat kalau tim membesar atau keluhan meningkat |
