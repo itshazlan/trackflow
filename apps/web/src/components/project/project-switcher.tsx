@@ -295,11 +295,17 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
               filteredAndSortedProjects.map(({ project, isSub }) => {
                 const isActive = project.id === activeProjectId;
                 const isArchived = !!project.archivedAt;
+                const stats = project.issueStats;
+                const hasIssues = stats && stats.total > 0;
+                const pct = hasIssues
+                  ? Math.round((stats.completed / stats.total) * 100)
+                  : 0;
+
                 return (
                   <button
                     key={project.id}
                     onClick={() => handleSelectProject(project.id)}
-                    className={`flex items-center justify-between px-2 py-1.5 rounded-md text-[12.5px] text-left transition-colors cursor-pointer group ${
+                    className={`flex flex-col gap-1 px-2 py-1.5 rounded-md text-[12.5px] text-left transition-colors cursor-pointer group ${
                       isSub ? "pl-5 text-muted-foreground" : "text-foreground font-medium"
                     } ${
                       isActive
@@ -307,18 +313,35 @@ export default function ProjectSwitcher({ currentProjectId }: ProjectSwitcherPro
                         : "hover:bg-accent hover:text-accent-foreground"
                     } ${isArchived ? "opacity-60" : ""}`}
                   >
-                    <div className="flex items-center gap-1.5 truncate">
-                      {isSub && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />}
-                      <span className="truncate">
-                        {project.name}
-                        {isArchived && (
-                          <span className="text-[10px] text-amber-500 font-normal ml-1 bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/10">
-                            (Arsip)
-                          </span>
-                        )}
-                      </span>
+                    <div className="flex items-center justify-between w-full gap-1.5 truncate">
+                      <div className="flex items-center gap-1.5 truncate">
+                        {isSub && <CornerDownRight className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />}
+                        <span className="truncate">
+                          {project.name}
+                          {isArchived && (
+                            <span className="text-[10px] text-amber-500 font-normal ml-1 bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/10">
+                              (Arsip)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                     </div>
-                    {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+
+                    {hasIssues && (
+                      <div className="w-full flex flex-col gap-1 mt-0.5">
+                        <div className="flex items-center justify-between text-[9.5px] text-muted-foreground font-normal">
+                          <span>{stats.completed}/{stats.total} selesai</span>
+                          <span className="font-mono">{pct}%</span>
+                        </div>
+                        <div className="h-1 w-full rounded-full bg-muted/60 overflow-hidden border border-border/30">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all duration-300"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </button>
                 );
               })

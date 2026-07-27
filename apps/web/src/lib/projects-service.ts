@@ -10,6 +10,10 @@ export interface Project {
   parent_project_id?: string | null;
   archivedAt?: string | null;
   archivedBy?: string | null;
+  issueStats?: {
+    total: number;
+    completed: number;
+  } | null;
 }
 
 export async function getProjects(): Promise<Project[]> {

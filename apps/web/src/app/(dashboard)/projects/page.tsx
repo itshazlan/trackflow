@@ -300,50 +300,76 @@ export default function ProjectsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {projects
             .filter((project) => showArchived || !project.archivedAt)
-            .map((project) => (
-              <div
-                key={project.id}
-                onClick={() => handleSelectProject(project.id)}
-                className={`flex flex-col justify-between rounded-lg border border-border bg-card p-4 hover:border-foreground/30 transition-all cursor-pointer group shadow-sm ${
-                  project.archivedAt ? "opacity-60" : ""
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13.5px] font-semibold text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
-                      {project.name}
-                      {project.archivedAt && (
-                        <span className="text-[9px] text-amber-500 font-normal bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/10">
-                          Arsip
-                        </span>
-                      )}
-                    </span>
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+            .map((project) => {
+              const stats = project.issueStats;
+              const hasIssues = stats && stats.total > 0;
+              const pct = hasIssues
+                ? Math.round((stats.completed / stats.total) * 100)
+                : 0;
+
+              return (
+                <div
+                  key={project.id}
+                  onClick={() => handleSelectProject(project.id)}
+                  className={`flex flex-col justify-between rounded-lg border border-border bg-card p-4 hover:border-foreground/30 transition-all cursor-pointer group shadow-sm ${
+                    project.archivedAt ? "opacity-60" : ""
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[13.5px] font-semibold text-foreground truncate group-hover:text-primary transition-colors flex items-center gap-1.5">
+                        {project.name}
+                        {project.archivedAt && (
+                          <span className="text-[9px] text-amber-500 font-normal bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/10">
+                            Arsip
+                          </span>
+                        )}
+                      </span>
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                    </div>
+                    <p className="text-[12px] text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
+                      {project.description || "Tidak ada deskripsi proyek."}
+                    </p>
+
+                    {hasIssues && (
+                      <div className="my-3 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span className="font-medium">Progress Proyek</span>
+                          <span className="font-mono">
+                            {stats.completed}/{stats.total} ({pct}%)
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden border border-border/30">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all duration-300"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-[12px] text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
-                    {project.description || "Tidak ada deskripsi proyek."}
-                  </p>
-                </div>
-                <div className="border-t border-border mt-3 pt-3 flex items-center justify-between">
-                  <span className="text-[10.5px] text-muted-foreground">
-                    Dibuat {new Date(project.createdAt).toLocaleDateString("id-ID", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric"
-                    })}
-                  </span>
-                  {project.archivedAt ? (
-                    <span className="text-[10px] rounded bg-amber-500/10 px-1.5 py-0.5 font-semibold text-amber-600 border border-amber-500/10 uppercase tracking-wider">
-                      Archived
+
+                  <div className="border-t border-border mt-3 pt-3 flex items-center justify-between">
+                    <span className="text-[10.5px] text-muted-foreground">
+                      Dibuat {new Date(project.createdAt).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric"
+                      })}
                     </span>
-                  ) : (
-                    <span className="text-[10px] rounded bg-emerald-500/10 px-1.5 py-0.5 font-semibold text-emerald-600 border border-emerald-500/10 uppercase tracking-wider">
-                      Active
-                    </span>
-                  )}
+                    {project.archivedAt ? (
+                      <span className="text-[10px] rounded bg-amber-500/10 px-1.5 py-0.5 font-semibold text-amber-600 border border-amber-500/10 uppercase tracking-wider">
+                        Archived
+                      </span>
+                    ) : (
+                      <span className="text-[10px] rounded bg-emerald-500/10 px-1.5 py-0.5 font-semibold text-emerald-600 border border-emerald-500/10 uppercase tracking-wider">
+                        Active
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
         </div>
       )}
 

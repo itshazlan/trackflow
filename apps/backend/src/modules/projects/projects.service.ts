@@ -5,10 +5,10 @@ import {
   InternalServerErrorException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, and, sql, isNull } from 'drizzle-orm';
+import { eq, and, sql, isNull, count, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { projects, projectMemberships } from '../../db/schema/projects';
-import { issueStatuses } from '../../db/schema/issues';
+import { issues, issueStatuses } from '../../db/schema/issues';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { DiscordService } from '../discord/discord.service';
 
@@ -105,37 +105,61 @@ export class ProjectsService {
   }
 
   async findAll(user: { id: string; isAdmin: boolean }) {
+    let resultProjects: any[];
     if (user.isAdmin) {
       // Admins see all projects
-      const all = await this.db.select().from(projects);
-      return all.map((p: any) => ({
-        ...p,
-        parent_project_id: p.parentProjectId,
-      }));
+      resultProjects = await this.db.select().from(projects);
+    } else {
+      // Normal users only see projects they are members of
+      resultProjects = await this.db
+        .select({
+          id: projects.id,
+          name: projects.name,
+          key: projects.key,
+          description: projects.description,
+          parentProjectId: projects.parentProjectId,
+          createdBy: projects.createdBy,
+          createdAt: projects.createdAt,
+          archivedAt: projects.archivedAt,
+          archivedBy: projects.archivedBy,
+        })
+        .from(projects)
+        .innerJoin(
+          projectMemberships,
+          eq(projects.id, projectMemberships.projectId),
+        )
+        .where(eq(projectMemberships.userId, user.id));
     }
 
-    // Normal users only see projects they are members of
-    const userProjects = await this.db
-      .select({
-        id: projects.id,
-        name: projects.name,
-        description: projects.description,
-        parentProjectId: projects.parentProjectId,
-        createdBy: projects.createdBy,
-        createdAt: projects.createdAt,
-        archivedAt: projects.archivedAt,
-        archivedBy: projects.archivedBy,
-      })
-      .from(projects)
-      .innerJoin(
-        projectMemberships,
-        eq(projects.id, projectMemberships.projectId),
-      )
-      .where(eq(projectMemberships.userId, user.id));
+    if (!resultProjects || resultProjects.length === 0) {
+      return [];
+    }
 
-    return userProjects.map((p: any) => ({
+    const projectIds = resultProjects.map((p: any) => p.id);
+
+    const stats = await this.db
+      .select({
+        projectId: issues.projectId,
+        total: count(),
+        completed: count(sql`CASE WHEN ${issueStatuses.isFinal} THEN 1 END`),
+      })
+      .from(issues)
+      .innerJoin(issueStatuses, eq(issues.statusId, issueStatuses.id))
+      .where(inArray(issues.projectId, projectIds))
+      .groupBy(issues.projectId);
+
+    const statsMap = new Map<string, { total: number; completed: number }>();
+    stats.forEach((s: any) => {
+      statsMap.set(s.projectId, {
+        total: Number(s.total || 0),
+        completed: Number(s.completed || 0),
+      });
+    });
+
+    return resultProjects.map((p: any) => ({
       ...p,
       parent_project_id: p.parentProjectId,
+      issueStats: statsMap.get(p.id) || { total: 0, completed: 0 },
     }));
   }
 
