@@ -577,6 +577,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
     },
   });
 
@@ -891,6 +892,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       // Invalidate TanStack Query caches
       queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
 
       // Refresh attachments in local details state
       const updatedAttachments = await getIssueAttachments(selectedIssue.id);
@@ -931,6 +933,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     try {
       const updated = await updateIssueStatus(issueId, newStatusId);
       queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
       if (selectedIssue && selectedIssue.id === issueId) {
         setSelectedIssue((prev) => prev ? { ...prev, statusId: newStatusId, status: updated.status } : null);
       }
@@ -952,6 +955,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
     try {
       await deleteIssue(projectId, issueId);
       queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
       setIsDetailOpen(false);
       setSelectedIssue(null);
     } catch (err) {
@@ -973,7 +977,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const isProjectManager = userRole === "manager";
   const isSystemAdmin = isAdmin;
 
-  const canEdit = selectedIssue && (isIssueAssignee || isIssueCreator || isProjectManager || isSystemAdmin);
+  const canEdit = selectedIssue && (!!userRole || isAdmin);
 
   // Filter issues
   const filteredIssues = issuesList.filter((iss) => {

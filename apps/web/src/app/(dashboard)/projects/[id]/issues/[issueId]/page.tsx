@@ -547,6 +547,7 @@ export default function IssueDetailPage() {
       setIssue(updated);
       queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Gagal memperbarui properti tiket.");
@@ -578,6 +579,7 @@ export default function IssueDetailPage() {
       setIssue((prev) => prev ? { ...prev, statusId: newStatusId, status: updated.status } : null);
       queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Gagal memperbarui status.");
@@ -727,6 +729,7 @@ export default function IssueDetailPage() {
       await deleteIssue(projectId, issue.id);
       queryClient.invalidateQueries({ queryKey: ["issues", projectId] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
       router.push(`/projects/${projectId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Gagal menghapus tiket.");
@@ -783,11 +786,7 @@ export default function IssueDetailPage() {
 
   if (!issue) return null;
 
-  const canEdit =
-    issue.assigneeId === session?.user?.id ||
-    issue.createdBy === session?.user?.id ||
-    userRole === "manager" ||
-    isAdmin;
+  const canEdit = !!userRole || isAdmin;
 
   const canDelete =
     issue.createdBy === session?.user?.id ||

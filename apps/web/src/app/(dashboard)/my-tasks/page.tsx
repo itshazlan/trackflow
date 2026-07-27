@@ -254,7 +254,8 @@ export default function MyTasksPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["my-tasks", viewMode],
     queryFn: () => getMyIssues(viewMode),
-    staleTime: 1000 * 30,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const sensors = useSensors(

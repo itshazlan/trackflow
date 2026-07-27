@@ -427,14 +427,12 @@ export class IssuesService {
       throw new NotFoundException(`Issue with ID ${id} not found`);
     }
 
-    // Check permission: Assignee, Creator, Manager, or Admin
-    const isAssignee = existingIssue.assigneeId === userId;
-    const isCreator = existingIssue.createdBy === userId;
-    const isManager = projectRole === 'manager' || isAdmin;
+    // Any member of the project (Developer, QA, Manager) or Admin can update issues in the project
+    const isProjectMember = !!projectRole || !!isAdmin;
 
-    if (!isAssignee && !isCreator && !isManager) {
+    if (!isProjectMember) {
       throw new ForbiddenException(
-        'Hanya Assignee, Pembuat issue, Manager proyek, atau Admin yang dapat memperbarui issue ini',
+        'Hanya anggota proyek atau Admin yang dapat memperbarui issue ini',
       );
     }
 
