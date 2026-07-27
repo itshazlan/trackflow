@@ -133,3 +133,23 @@ export const commentAttachments = pgTable('comment_attachments', {
     .defaultNow()
     .notNull(),
 });
+
+export const recentlyViewedIssues = pgTable(
+  'recently_viewed_issues',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    issueId: uuid('issue_id')
+      .notNull()
+      .references(() => issues.id, { onDelete: 'cascade' }),
+    viewedAt: timestamp('viewed_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique('recently_viewed_user_issue_idx').on(table.userId, table.issueId),
+  ],
+);
+

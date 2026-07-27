@@ -455,6 +455,7 @@ export default function IssueDetailPage() {
       ]);
 
       setIssue(issueData);
+      queryClient.invalidateQueries({ queryKey: ["recently-viewed"] });
       setEditedTitle(issueData.title);
       setEditedDesc(issueData.description || "");
       setProject(projectData);

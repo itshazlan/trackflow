@@ -112,6 +112,49 @@ export interface MyTasksResponse {
   issues?: MyTasksCalendarIssue[];
 }
 
+export interface RecentlyViewedIssue {
+  id: string;
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  title: string;
+  number: number;
+  displayId: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  dueDate?: string | null;
+  viewedAt: string;
+  tracker?: { id: string; name: string } | null;
+  status?: { id: string; name: string; isFinal?: boolean } | null;
+}
+
+export async function getRecentlyViewedIssues(): Promise<RecentlyViewedIssue[]> {
+  const res = await fetch('/api/issues/recently-viewed', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch recently viewed issues');
+  }
+
+  return res.json();
+}
+
+export async function recordIssueView(issueId: string): Promise<void> {
+  try {
+    await fetch(`/api/issues/${issueId}/view`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (err) {
+    console.error('Failed to record issue view', err);
+  }
+}
+
 export async function getMyIssues(
   view: 'list' | 'kanban' | 'calendar' = 'list',
 ): Promise<MyTasksResponse> {
@@ -145,6 +188,9 @@ export async function getIssues(projectId: string): Promise<Issue[]> {
 }
 
 export async function getIssueDetail(projectId: string, issueId: string): Promise<Issue> {
+  // Fire-and-forget record view
+  recordIssueView(issueId);
+
   const res = await fetch(`/api/projects/${projectId}/issues/${issueId}`, {
     method: "GET",
     headers: {

@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import ProjectSwitcher from "@/components/project/project-switcher";
 import ProfileModal from "@/components/profile-modal";
 import NotificationBell from "@/components/notification-bell";
+import RecentlyViewedMenu from "@/components/recently-viewed-menu";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -479,6 +480,7 @@ export default function DashboardLayout({
                 Admin
               </span>
             )}
+            <RecentlyViewedMenu />
             {session?.user?.id && (
               <NotificationBell userId={session.user.id} />
             )}

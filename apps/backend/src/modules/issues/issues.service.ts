@@ -16,6 +16,7 @@ import {
   issueAttachments,
   issueComments,
   commentAttachments,
+  recentlyViewedIssues,
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
@@ -373,6 +374,86 @@ export class IssuesService {
     }
 
     return { projects: activeProjects };
+  }
+
+  async recordView(userId: string, issueId: string) {
+    const [existing] = await this.db
+      .select({ id: issues.id })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException(`Issue with ID ${issueId} not found`);
+    }
+
+    await this.db
+      .insert(recentlyViewedIssues)
+      .values({ userId, issueId, viewedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [recentlyViewedIssues.userId, recentlyViewedIssues.issueId],
+        set: { viewedAt: new Date() },
+      });
+
+    // Trim — sisakan 10 terbaru, hapus sisanya
+    const excess = await this.db
+      .select({ id: recentlyViewedIssues.id })
+      .from(recentlyViewedIssues)
+      .where(eq(recentlyViewedIssues.userId, userId))
+      .orderBy(desc(recentlyViewedIssues.viewedAt))
+      .offset(10);
+
+    if (excess.length > 0) {
+      const idsToDelete = excess.map((e: any) => e.id);
+      await this.db
+        .delete(recentlyViewedIssues)
+        .where(inArray(recentlyViewedIssues.id, idsToDelete));
+    }
+
+    return { success: true };
+  }
+
+  async findRecentlyViewed(userId: string) {
+    const results = await this.db
+      .select({
+        id: issues.id,
+        projectId: issues.projectId,
+        projectKey: projects.key,
+        projectName: projects.name,
+        trackerId: issues.trackerId,
+        trackerName: issueTrackers.name,
+        statusId: issues.statusId,
+        statusName: issueStatuses.name,
+        title: issues.title,
+        number: issues.number,
+        displayId: sql<string>`UPPER(${projects.key}) || '-' || ${issues.number}`,
+        priority: issues.priority,
+        dueDate: issues.dueDate,
+        viewedAt: recentlyViewedIssues.viewedAt,
+      })
+      .from(recentlyViewedIssues)
+      .innerJoin(issues, eq(recentlyViewedIssues.issueId, issues.id))
+      .innerJoin(projects, eq(issues.projectId, projects.id))
+      .leftJoin(issueTrackers, eq(issues.trackerId, issueTrackers.id))
+      .leftJoin(issueStatuses, eq(issues.statusId, issueStatuses.id))
+      .where(eq(recentlyViewedIssues.userId, userId))
+      .orderBy(desc(recentlyViewedIssues.viewedAt))
+      .limit(10);
+
+    return results.map((r: any) => ({
+      id: r.id,
+      projectId: r.projectId,
+      projectKey: r.projectKey,
+      projectName: r.projectName,
+      title: r.title,
+      number: r.number,
+      displayId: r.displayId || `${r.projectKey}-${r.number}`,
+      priority: r.priority,
+      dueDate: r.dueDate,
+      viewedAt: r.viewedAt,
+      tracker: r.trackerName ? { id: r.trackerId, name: r.trackerName } : null,
+      status: r.statusName ? { id: r.statusId, name: r.statusName } : null,
+    }));
   }
 
   async findOne(id: string) {

@@ -13,9 +13,13 @@ describe('IssuesService - remove', () => {
       innerJoin: jest.fn().mockReturnThis(),
       leftJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockResolvedValue([]),
+      orderBy: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([]),
+      offset: jest.fn().mockResolvedValue([]),
       delete: jest.fn().mockReturnThis(),
+      insert: jest.fn().mockReturnThis(),
+      values: jest.fn().mockReturnThis(),
+      onConflictDoUpdate: jest.fn().mockResolvedValue([]),
       returning: jest.fn().mockResolvedValue([]),
     };
 
@@ -221,6 +225,23 @@ describe('IssuesService - remove', () => {
           }),
         ],
       });
+    });
+  });
+
+  describe('recently viewed issues', () => {
+    it('should record an issue view with upsert and trim excess entries', async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: 'iss-1' }]);
+      mockDb.offset.mockResolvedValueOnce([]);
+
+      const result = await service.recordView('user-1', 'iss-1');
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should throw NotFoundException if issue does not exist on recordView', async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+      await expect(service.recordView('user-1', 'non-existent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

@@ -51,6 +51,16 @@ export class UserIssuesController {
     return this.issuesService.findMyIssues(req.user, view || 'list');
   }
 
+  @Get('recently-viewed')
+  findRecentlyViewed(@Req() req: any) {
+    return this.issuesService.findRecentlyViewed(req.user.id);
+  }
+
+  @Post(':id/view')
+  recordView(@Param('id') id: string, @Req() req: any) {
+    return this.issuesService.recordView(req.user.id, id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.issuesService.findOne(id);

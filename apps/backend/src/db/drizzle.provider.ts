@@ -17,6 +17,15 @@ export const DrizzleProvider: Provider = {
     try {
       await client`ALTER TABLE "issue_statuses" ADD COLUMN IF NOT EXISTS "is_final" boolean DEFAULT false NOT NULL;`;
       await client`UPDATE "issue_statuses" SET "is_final" = true WHERE LOWER("name") = 'done';`;
+      await client`
+        CREATE TABLE IF NOT EXISTS "recently_viewed_issues" (
+          "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+          "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE cascade,
+          "issue_id" uuid NOT NULL REFERENCES "issues"("id") ON DELETE cascade,
+          "viewed_at" timestamp with time zone DEFAULT now() NOT NULL,
+          CONSTRAINT "recently_viewed_user_issue_idx" UNIQUE("user_id", "issue_id")
+        );
+      `;
     } catch (err) {
       console.error('[DrizzleProvider] Auto migration error:', err);
     }
