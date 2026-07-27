@@ -1,16 +1,136 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, gte, lte } from 'drizzle-orm';
+import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
+import { eq, and, gte, lte, count, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
-import { timeBlocks } from '../../db/schema/time-tracking';
+import { timeBlocks, activityLogs } from '../../db/schema/time-tracking';
 import { manualTimeEntries } from '../../db/schema/timesheets';
 import { user } from '../../db/schema/auth';
-import { projects } from '../../db/schema/projects';
+import { projects, projectMemberships } from '../../db/schema/projects';
 import { issues } from '../../db/schema/issues';
 import PDFDocument from 'pdfkit';
 
 @Injectable()
 export class ReportsService {
   constructor(@Inject(DRIZZLE) private db: any) {}
+
+  async getActivityRanking(
+    currentUser: { id: string; isAdmin: boolean },
+    period: 'week' | 'month' = 'week',
+    projectId?: string,
+  ) {
+    const now = new Date();
+    let rangeStart: Date;
+
+    if (period === 'month') {
+      rangeStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      rangeStart = new Date(now.setDate(diff));
+      rangeStart.setHours(0, 0, 0, 0);
+    }
+
+    let filterProjectIds: string[] | null = null;
+
+    if (projectId) {
+      if (!currentUser.isAdmin) {
+        const [membership] = await this.db
+          .select()
+          .from(projectMemberships)
+          .where(
+            and(
+              eq(projectMemberships.projectId, projectId),
+              eq(projectMemberships.userId, currentUser.id),
+            ),
+          )
+          .limit(1);
+
+        if (!membership || membership.role !== 'manager') {
+          throw new ForbiddenException(
+            'Hanya Manager proyek ini atau Admin yang dapat melihat peringkat aktivitas',
+          );
+        }
+      }
+      filterProjectIds = [projectId];
+    } else if (!currentUser.isAdmin) {
+      const managed = await this.db
+        .select({ projectId: projectMemberships.projectId })
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.userId, currentUser.id),
+            eq(projectMemberships.role, 'manager'),
+          ),
+        );
+
+      filterProjectIds = managed.map((m: any) => m.projectId);
+      if (!filterProjectIds || filterProjectIds.length === 0) {
+        return [];
+      }
+    }
+
+    const conditions: any[] = [
+      eq(timeBlocks.isDeleted, false),
+      gte(timeBlocks.blockStart, rangeStart),
+    ];
+
+    if (filterProjectIds && filterProjectIds.length > 0) {
+      conditions.push(inArray(timeBlocks.projectId, filterProjectIds));
+    }
+
+    const rows = await this.db
+      .select({
+        userId: timeBlocks.userId,
+        userName: user.name,
+        userUsername: user.username,
+        userAvatar: user.image,
+        totalMinutes: sql<number>`COALESCE(SUM(EXTRACT(EPOCH FROM (${timeBlocks.blockEnd} - ${timeBlocks.blockStart})) / 60), 0)::int`,
+        none: count(sql`CASE WHEN ${activityLogs.activityLevel} = 'none' THEN 1 END`),
+        low: count(sql`CASE WHEN ${activityLogs.activityLevel} = 'low' THEN 1 END`),
+        medium: count(sql`CASE WHEN ${activityLogs.activityLevel} = 'medium' THEN 1 END`),
+        high: count(sql`CASE WHEN ${activityLogs.activityLevel} = 'high' THEN 1 END`),
+        totalBlocks: count(),
+      })
+      .from(timeBlocks)
+      .innerJoin(activityLogs, eq(activityLogs.timeBlockId, timeBlocks.id))
+      .innerJoin(user, eq(timeBlocks.userId, user.id))
+      .where(and(...conditions))
+      .groupBy(timeBlocks.userId, user.name, user.username, user.image);
+
+    const ranking = rows
+      .map((r: any) => {
+        const totalBlocks = Number(r.totalBlocks) || 0;
+        const none = Number(r.none) || 0;
+        const low = Number(r.low) || 0;
+        const medium = Number(r.medium) || 0;
+        const high = Number(r.high) || 0;
+        const totalMinutes = Number(r.totalMinutes) || 0;
+
+        const score =
+          totalBlocks > 0
+            ? (high * 3 + medium * 2 + low * 1 + none * 0) / totalBlocks
+            : 0;
+
+        return {
+          userId: r.userId,
+          name: r.userName,
+          username: r.userUsername,
+          avatar: r.userAvatar,
+          totalMinutes,
+          none,
+          low,
+          medium,
+          high,
+          totalBlocks,
+          activityScore: Number(score.toFixed(2)),
+        };
+      })
+      .sort(
+        (a: any, b: any) =>
+          b.activityScore - a.activityScore || b.totalMinutes - a.totalMinutes,
+      );
+
+    return ranking;
+  }
 
   private formatDateString(d: Date): string {
     return d.toISOString().split('T')[0];

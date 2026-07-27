@@ -46,6 +46,7 @@ import {
   FolderOpen,
   ListTodo,
   LayoutDashboard,
+  Trophy,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -139,6 +140,9 @@ export default function DashboardLayout({
 
   const currentProject = projects.find((p) => p.id === projectId);
 
+  const isManagerOrAdmin =
+    session?.user?.isAdmin || projects.some((p: any) => p.role === "manager");
+
   const navigationItems = [
     {
       id: "dashboard",
@@ -182,6 +186,16 @@ export default function DashboardLayout({
       icon: LineChart,
       href: projectId ? `/reports?projectId=${projectId}` : "/reports",
     },
+    ...(isManagerOrAdmin
+      ? [
+          {
+            id: "activity-ranking",
+            label: "Peringkat Aktivitas",
+            icon: Trophy,
+            href: "/reports/activity-ranking",
+          },
+        ]
+      : []),
     {
       id: "settings",
       label: "Settings",
@@ -242,8 +256,10 @@ export default function DashboardLayout({
                 ? pathname.startsWith("/my-tasks")
                 : item.id === "timesheets"
                 ? pathname.startsWith("/timesheets")
+                : item.id === "activity-ranking"
+                ? pathname.startsWith("/reports/activity-ranking")
                 : item.id === "reports"
-                ? pathname.startsWith("/reports")
+                ? pathname.startsWith("/reports") && !pathname.startsWith("/reports/activity-ranking")
                 : pathname.startsWith(projectId ? `/projects/${projectId}` : "_") && pathname.includes(item.id)
             );
 

@@ -70,3 +70,40 @@ export async function downloadReport(
   a.remove();
   window.URL.revokeObjectURL(url);
 }
+
+export interface ActivityRankingItem {
+  userId: string;
+  name: string;
+  username: string;
+  avatar?: string | null;
+  totalMinutes: number;
+  none: number;
+  low: number;
+  medium: number;
+  high: number;
+  totalBlocks: number;
+  activityScore: number;
+}
+
+export async function getActivityRanking(
+  period: "week" | "month" = "week",
+  projectId?: string
+): Promise<ActivityRankingItem[]> {
+  const params = new URLSearchParams();
+  params.append("period", period);
+  if (projectId) params.append("projectId", projectId);
+
+  const res = await fetch(`/api/reports/activity-ranking?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Gagal mengambil peringkat aktivitas");
+  }
+
+  return res.json();
+}

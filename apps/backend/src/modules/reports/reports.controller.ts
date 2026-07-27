@@ -3,6 +3,7 @@ import {
   Get,
   Query,
   Res,
+  Req,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
@@ -14,6 +15,19 @@ import { AuthGuard } from '../../common/guards/auth.guard';
 @UseGuards(AuthGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
+
+  @Get('activity-ranking')
+  async getActivityRanking(
+    @Req() req: any,
+    @Query('period') period?: 'week' | 'month',
+    @Query('projectId') projectId?: string,
+  ) {
+    return this.reportsService.getActivityRanking(
+      req.user,
+      period || 'week',
+      projectId,
+    );
+  }
 
   @Get('hours/preview')
   async getHoursReportPreview(
