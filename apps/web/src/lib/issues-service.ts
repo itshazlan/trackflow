@@ -82,6 +82,51 @@ export interface IssueAttachment {
   uploadedAt: string;
 }
 
+export interface MyTaskProject {
+  projectId: string;
+  projectKey: string;
+  projectName: string;
+  statuses?: IssueStatus[];
+  issues: Issue[];
+}
+
+export interface MyTasksCalendarIssue {
+  id: string;
+  projectId: string;
+  projectKey: string;
+  number: number;
+  displayId: string;
+  title: string;
+  dueDate: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  statusName: string;
+  status?: { id: string; name: string } | null;
+  tracker?: { id: string; name: string } | null;
+  assignee?: { id: string; name: string; email: string; image?: string | null } | null;
+}
+
+export interface MyTasksResponse {
+  projects?: MyTaskProject[];
+  issues?: MyTasksCalendarIssue[];
+}
+
+export async function getMyIssues(
+  view: 'list' | 'kanban' | 'calendar' = 'list',
+): Promise<MyTasksResponse> {
+  const res = await fetch(`/api/issues/mine?view=${view}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch my issues');
+  }
+
+  return res.json();
+}
+
 export async function getIssues(projectId: string): Promise<Issue[]> {
   const res = await fetch(`/api/projects/${projectId}/issues`, {
     method: "GET",

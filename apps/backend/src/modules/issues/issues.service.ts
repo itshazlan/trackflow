@@ -215,6 +215,166 @@ export class IssuesService {
     }));
   }
 
+  async findMyIssues(
+    currentUser: { id: string; isAdmin?: boolean },
+    view: 'list' | 'kanban' | 'calendar' = 'list',
+  ) {
+    let userProjects: { id: string; key: string; name: string }[] = [];
+
+    if (currentUser.isAdmin) {
+      userProjects = await this.db
+        .select({
+          id: projects.id,
+          key: projects.key,
+          name: projects.name,
+        })
+        .from(projects)
+        .orderBy(asc(projects.name));
+    } else {
+      userProjects = await this.db
+        .select({
+          id: projects.id,
+          key: projects.key,
+          name: projects.name,
+        })
+        .from(projectMemberships)
+        .innerJoin(projects, eq(projectMemberships.projectId, projects.id))
+        .where(eq(projectMemberships.userId, currentUser.id))
+        .orderBy(asc(projects.name));
+    }
+
+    if (!userProjects || userProjects.length === 0) {
+      if (view === 'calendar') {
+        return { issues: [] };
+      }
+      return { projects: [] };
+    }
+
+    const projectIds = userProjects.map((p) => p.id);
+
+    const list = await this.db
+      .select({
+        id: issues.id,
+        projectId: issues.projectId,
+        trackerId: issues.trackerId,
+        statusId: issues.statusId,
+        title: issues.title,
+        description: issues.description,
+        assigneeId: issues.assigneeId,
+        priority: issues.priority,
+        startDate: issues.startDate,
+        dueDate: issues.dueDate,
+        estimatedHours: issues.estimatedHours,
+        createdBy: issues.createdBy,
+        createdAt: issues.createdAt,
+        number: issues.number,
+        projectKey: projects.key,
+        projectName: projects.name,
+        tracker: {
+          id: issueTrackers.id,
+          name: issueTrackers.name,
+        },
+        status: {
+          id: issueStatuses.id,
+          name: issueStatuses.name,
+          orderIndex: issueStatuses.orderIndex,
+        },
+        assignee: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        },
+      })
+      .from(issues)
+      .innerJoin(issueTrackers, eq(issues.trackerId, issueTrackers.id))
+      .innerJoin(issueStatuses, eq(issues.statusId, issueStatuses.id))
+      .innerJoin(projects, eq(issues.projectId, projects.id))
+      .leftJoin(user, eq(issues.assigneeId, user.id))
+      .where(
+        and(
+          eq(issues.assigneeId, currentUser.id),
+          inArray(issues.projectId, projectIds),
+        ),
+      );
+
+    const formattedIssues = list.map((item: any) => ({
+      ...item,
+      displayId: `${item.projectKey}-${item.number}`,
+    }));
+
+    if (view === 'calendar') {
+      const calendarIssues = formattedIssues
+        .filter(
+          (item: any) =>
+            item.dueDate !== null &&
+            item.dueDate !== undefined &&
+            item.dueDate !== '',
+        )
+        .map((item: any) => ({
+          id: item.id,
+          projectId: item.projectId,
+          projectKey: item.projectKey,
+          number: item.number,
+          displayId: item.displayId,
+          title: item.title,
+          dueDate: item.dueDate,
+          priority: item.priority,
+          statusName: item.status?.name || '',
+          status: item.status,
+          tracker: item.tracker,
+          assignee: item.assignee,
+        }));
+
+      return { issues: calendarIssues };
+    }
+
+    // Group issues by project
+    const projectMap = new Map<string, any>();
+    userProjects.forEach((p) => {
+      projectMap.set(p.id, {
+        projectId: p.id,
+        projectKey: p.key,
+        projectName: p.name,
+        issues: [],
+      });
+    });
+
+    formattedIssues.forEach((issueItem: any) => {
+      const proj = projectMap.get(issueItem.projectId);
+      if (proj) {
+        proj.issues.push(issueItem);
+      }
+    });
+
+    // Only include projects that have at least 1 issue assigned to user
+    const activeProjects = Array.from(projectMap.values()).filter(
+      (p) => p.issues.length > 0,
+    );
+
+    if (view === 'kanban') {
+      await Promise.all(
+        activeProjects.map(async (proj) => {
+          const statuses = await this.db
+            .select({
+              id: issueStatuses.id,
+              projectId: issueStatuses.projectId,
+              name: issueStatuses.name,
+              orderIndex: issueStatuses.orderIndex,
+              restrictedToRole: issueStatuses.restrictedToRole,
+            })
+            .from(issueStatuses)
+            .where(eq(issueStatuses.projectId, proj.projectId))
+            .orderBy(asc(issueStatuses.orderIndex));
+
+          proj.statuses = statuses;
+        }),
+      );
+    }
+
+    return { projects: activeProjects };
+  }
+
   async findOne(id: string) {
     const [issue] = await this.db
       .select({

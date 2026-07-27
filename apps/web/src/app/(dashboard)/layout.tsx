@@ -43,6 +43,7 @@ import {
   Sun,
   Moon,
   FolderOpen,
+  ListTodo,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -144,6 +145,12 @@ export default function DashboardLayout({
       href: "/projects",
     },
     {
+      id: "my-tasks",
+      label: "Tugas Saya",
+      icon: ListTodo,
+      href: "/my-tasks",
+    },
+    {
       id: "issues",
       label: "Issues",
       icon: CheckSquare,
@@ -194,7 +201,7 @@ export default function DashboardLayout({
     <div className="flex h-screen w-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <aside
-        className={`flex h-full flex-col border-r border-border bg-card text-card-foreground transition-all duration-150 ease-in-out shrink-0 select-none ${
+        className={`relative flex flex-col border-r border-border bg-sidebar transition-all duration-300 z-20 ${
           sidebarOpen ? "w-60" : "w-14"
         }`}
       >
@@ -221,6 +228,8 @@ export default function DashboardLayout({
             const isActive = item.href && (
               item.id === "projects"
                 ? pathname === "/projects"
+                : item.id === "my-tasks"
+                ? pathname.startsWith("/my-tasks")
                 : item.id === "timesheets"
                 ? pathname.startsWith("/timesheets")
                 : item.id === "reports"

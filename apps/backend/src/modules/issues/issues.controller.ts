@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Req,
+  Query,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
@@ -40,6 +41,14 @@ export class UserIssuesController {
   @Get()
   findAllForUser(@Req() req: any) {
     return this.issuesService.findAllForUser(req.user.id);
+  }
+
+  @Get('mine')
+  findMyIssues(
+    @Query('view') view: 'list' | 'kanban' | 'calendar' = 'list',
+    @Req() req: any,
+  ) {
+    return this.issuesService.findMyIssues(req.user, view || 'list');
   }
 
   @Get(':id')
