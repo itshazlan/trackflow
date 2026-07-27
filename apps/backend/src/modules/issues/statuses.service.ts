@@ -38,6 +38,7 @@ export class StatusesService {
         name: createStatusDto.name,
         orderIndex: createStatusDto.orderIndex,
         restrictedToRole: createStatusDto.restrictedToRole,
+        isFinal: createStatusDto.isFinal ?? false,
       })
       .returning();
 

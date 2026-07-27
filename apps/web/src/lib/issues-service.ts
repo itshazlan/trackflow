@@ -23,6 +23,7 @@ export interface Issue {
   status?: {
     id: string;
     name: string;
+    isFinal?: boolean;
   } | null;
   tracker?: {
     id: string;
@@ -36,6 +37,7 @@ export interface IssueStatus {
   name: string;
   orderIndex: number;
   restrictedToRole: 'manager' | 'developer' | 'reporter_qa' | null;
+  isFinal?: boolean;
 }
 
 export interface Tracker {
@@ -100,7 +102,7 @@ export interface MyTasksCalendarIssue {
   dueDate: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   statusName: string;
-  status?: { id: string; name: string } | null;
+  status?: { id: string; name: string; isFinal?: boolean } | null;
   tracker?: { id: string; name: string } | null;
   assignee?: { id: string; name: string; email: string; image?: string | null } | null;
 }

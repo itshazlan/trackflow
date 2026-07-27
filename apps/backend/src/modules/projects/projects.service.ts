@@ -70,12 +70,12 @@ export class ProjectsService {
 
         // 3. Seed default issue statuses (FR-022)
         const defaultStatuses = [
-          { name: 'New', orderIndex: 0, restrictedToRole: null },
-          { name: 'In Progress', orderIndex: 1, restrictedToRole: null },
-          { name: 'Testing', orderIndex: 2, restrictedToRole: null },
-          { name: 'Ready to Deploy', orderIndex: 3, restrictedToRole: null },
-          { name: 'Blocker', orderIndex: 4, restrictedToRole: null },
-          { name: 'Done', orderIndex: 5, restrictedToRole: 'reporter_qa' },
+          { name: 'New', orderIndex: 0, restrictedToRole: null, isFinal: false },
+          { name: 'In Progress', orderIndex: 1, restrictedToRole: null, isFinal: false },
+          { name: 'Testing', orderIndex: 2, restrictedToRole: null, isFinal: false },
+          { name: 'Ready to Deploy', orderIndex: 3, restrictedToRole: null, isFinal: false },
+          { name: 'Blocker', orderIndex: 4, restrictedToRole: null, isFinal: false },
+          { name: 'Done', orderIndex: 5, restrictedToRole: 'reporter_qa', isFinal: true },
         ];
 
         for (const status of defaultStatuses) {
@@ -84,6 +84,7 @@ export class ProjectsService {
             name: status.name,
             orderIndex: status.orderIndex,
             restrictedToRole: status.restrictedToRole,
+            isFinal: status.isFinal,
           });
         }
 

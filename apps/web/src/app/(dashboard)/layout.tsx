@@ -44,6 +44,7 @@ import {
   Moon,
   FolderOpen,
   ListTodo,
+  LayoutDashboard,
 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -139,6 +140,12 @@ export default function DashboardLayout({
 
   const navigationItems = [
     {
+      id: "dashboard",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      href: "/dashboard",
+    },
+    {
       id: "projects",
       label: "Projects",
       icon: LayoutGrid,
@@ -226,7 +233,9 @@ export default function DashboardLayout({
             const Icon = item.icon;
             const disabled = !item.href;
             const isActive = item.href && (
-              item.id === "projects"
+              item.id === "dashboard"
+                ? pathname === "/dashboard"
+                : item.id === "projects"
                 ? pathname === "/projects"
                 : item.id === "my-tasks"
                 ? pathname.startsWith("/my-tasks")

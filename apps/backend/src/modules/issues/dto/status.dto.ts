@@ -5,6 +5,7 @@ import {
   IsInt,
   IsIn,
   IsArray,
+  IsBoolean,
 } from 'class-validator';
 import type { ProjectRole } from '@trackflow/shared-types';
 
@@ -20,6 +21,10 @@ export class CreateStatusDto {
   @IsOptional()
   @IsIn(['manager', 'developer', 'reporter_qa'])
   restrictedToRole?: ProjectRole | null;
+
+  @IsBoolean()
+  @IsOptional()
+  isFinal?: boolean;
 }
 
 export class UpdateStatusDto {
@@ -35,6 +40,10 @@ export class UpdateStatusDto {
   @IsOptional()
   @IsIn(['manager', 'developer', 'reporter_qa'])
   restrictedToRole?: ProjectRole | null;
+
+  @IsBoolean()
+  @IsOptional()
+  isFinal?: boolean;
 }
 
 export class ReorderStatusesDto {

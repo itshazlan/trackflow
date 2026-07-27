@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.2 (Lean Internal) |
+| **Versi Dokumen** | 3.3 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: guard hapus tiket dipisah dari edit — hanya pembuat/Manager/Admin; halaman "Tugas Saya" — agregasi tiket lintas proyek sebagai mini-board per proyek) |
+| **Tanggal** | 14 Juli 2026 (revisi: penanda status final pada workflow; Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, Peringkat Aktivitas Time Book) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -137,6 +137,7 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-021 | Setiap proyek baru otomatis mendapat set status default: `New → In Progress → Testing → Ready to Deploy → Blocker → Done` |
 | FR-022 | Manager/Admin dapat **menambah, mengganti nama, menghapus, atau mengurutkan ulang** status pada proyeknya — workflow tidak mengunci ke set status bawaan |
 | FR-023 | Setiap status **opsional** dapat dibatasi hanya boleh diset oleh satu role tertentu. Default: hanya **QA** yang boleh mengubah status menjadi **Done**; status lain bebas diset anggota proyek manapun. Aturan ini dapat diubah/dihapus per status oleh Manager/Admin |
+| FR-023a | Setiap status dapat ditandai sebagai **status final** (mis. "Done") oleh Manager/Admin saat konfigurasi workflow. Penanda ini dipakai sistem untuk menghitung tiket "selesai" vs "belum selesai" (progress bar proyek, deteksi overdue) — status "Done" bawaan otomatis ditandai final saat proyek dibuat, status lain default tidak final |
 | FR-024 | Atribut tiket: Assignee, Priority, Tanggal mulai, Tenggat waktu, Estimasi waktu |
 | FR-025 | Tiket dapat ditampilkan sebagai List (default), Kanban, atau Calendar |
 | FR-025a | **Kanban:** kartu dapat dipindah antar kolom (mengubah status) via drag-and-drop, tervalidasi terhadap `restricted_to_role` (FR-023). **Tidak ada** pengurutan ulang posisi kartu di dalam kolom yang sama — urutan dalam kolom mengikuti priority/tanggal dibuat, bukan urutan manual |
@@ -280,6 +281,46 @@ Field:
 | FR-124 | Drag-and-drop pada mini-board Kanban di halaman ini mengubah status tiket dengan validasi yang **sama persis** seperti di tampilan Kanban per-proyek (termasuk pembatasan status ke role tertentu) |
 | FR-125 | Proyek yang tidak memiliki tiket assigned ke pengguna tersebut **tidak ditampilkan** sebagai mini-board kosong — hanya proyek dengan minimal satu tiket assigned yang muncul |
 
+### 7.13 Fitur Visibilitas Tambahan
+
+#### 7.13.1 Widget "Ringkasan Hari Ini" (Dashboard)
+
+| ID | Requirement |
+|---|---|
+| FR-130 | Halaman **Dashboard** menjadi halaman utama setelah login, menampilkan: total jam kerja hari ini, jumlah tiket overdue milik pengguna, dan status tracking terkini (sedang bekerja/idle) |
+| FR-131 | Klik jumlah tiket overdue mengarahkan pengguna ke halaman "Tugas Saya" dengan filter overdue otomatis aktif |
+
+#### 7.13.2 "Dilihat Baru-baru Ini"
+
+| ID | Requirement |
+|---|---|
+| FR-132 | Sistem mencatat 10 tiket terakhir yang dibuka pengguna (lintas proyek), dapat diakses lewat dropdown di topbar |
+| FR-133 | Riwayat ini tersimpan di server (bukan hanya di browser/device), sehingga konsisten meski pengguna berpindah perangkat |
+| FR-134 | Membuka tiket yang sama berulang kali tidak menghasilkan duplikat entri — hanya memperbarui urutannya ke posisi terbaru |
+
+#### 7.13.3 Progress Bar Penyelesaian Proyek
+
+| ID | Requirement |
+|---|---|
+| FR-135 | Project switcher dan kartu proyek menampilkan **progress bar** perbandingan jumlah tiket berstatus final terhadap total tiket proyek tersebut (mis. "12/20") |
+| FR-136 | Proyek tanpa tiket sama sekali tidak menampilkan progress bar (bukan progress bar kosong) |
+
+#### 7.13.4 Workload Overview (Manager)
+
+| ID | Requirement |
+|---|---|
+| FR-137 | Manager/Admin dapat melihat halaman **Workload Overview** per proyek — menampilkan seluruh anggota proyek beserta jumlah tiket yang ditugaskan kepada masing-masing, dipecah per status, termasuk jumlah overdue |
+| FR-138 | Anggota tanpa tiket assigned sama sekali **tetap ditampilkan** (dengan angka nol) — supaya Manager dapat melihat siapa yang belum memiliki penugasan |
+| FR-139 | Klik pada suatu angka di halaman ini mengarahkan ke tampilan Kanban/List proyek yang sudah terfilter sesuai anggota dan status terkait |
+
+#### 7.13.5 Peringkat Aktivitas Time Book (Manager Only)
+
+| ID | Requirement |
+|---|---|
+| FR-140 | Manager/Admin dapat melihat **peringkat aktivitas** seluruh anggota berdasarkan data Time Book (level aktivitas keyboard/mouse), untuk periode Minggu Ini atau Bulan Ini |
+| FR-141 | Admin dapat melihat peringkat lintas seluruh proyek; Manager hanya dapat melihat peringkat untuk proyek yang dia kelola |
+| FR-142 | Blok waktu yang sudah dihapus (baik oleh pekerja sendiri maupun di-override Admin) **dikecualikan** dari perhitungan peringkat — data yang sudah dihapus tidak dipakai untuk penilaian apapun |
+
 ---
 
 ## 8. Kebutuhan Non-Fungsional
@@ -391,6 +432,30 @@ Field:
 4. Drag satu tiket antar kolom status di salah satu mini-board — berfungsi sama seperti Kanban per-proyek biasa.
 5. Beralih ke mode Calendar — melihat seluruh tenggat waktu dari ketiga proyek dalam satu kalender, dibedakan lewat badge warna per proyek.
 
+### 9.16 Memulai Hari Lewat Dashboard
+1. Developer login, langsung melihat halaman Dashboard: jam kerja hari ini masih 0, 2 tiket overdue, status "Idle".
+2. Klik angka "2 tiket overdue" → diarahkan ke Tugas Saya dengan filter overdue otomatis aktif.
+3. Mulai tracking dari desktop client — status di Dashboard berubah jadi "Sedang Bekerja" saat halaman dibuka ulang.
+
+### 9.17 Berpindah Cepat Antar Tiket yang Sering Dibuka
+1. QA membuka beberapa tiket berbeda dari proyek berbeda sepanjang hari untuk verifikasi bug.
+2. Ingin kembali ke tiket yang dibuka 20 menit lalu — klik ikon "Dilihat Baru-baru Ini" di topbar.
+3. Menemukan tiket tersebut di urutan teratas, klik untuk kembali langsung tanpa perlu mencari ulang lewat daftar proyek.
+
+### 9.18 Memantau Kemajuan Proyek Sekilas
+1. Manager membuka project switcher untuk memilih proyek yang ingin dibuka.
+2. Melihat progress bar di bawah nama tiap proyek (mis. "8/15" pada proyek A, "20/20" pada proyek B) — langsung tahu proyek B sudah selesai semua tanpa perlu membuka Kanban-nya.
+
+### 9.19 Meninjau Distribusi Beban Kerja Tim
+1. Manager membuka halaman Workload Overview pada proyeknya.
+2. Melihat satu anggota dengan 8 tiket "In Progress" sementara anggota lain hanya 1 — indikasi beban tidak merata.
+3. Klik angka "8" pada kolom In Progress milik anggota tersebut → Kanban proyek langsung terfilter menampilkan hanya tiket miliknya di status itu.
+
+### 9.20 Meninjau Peringkat Aktivitas Tim
+1. Manager membuka halaman Peringkat Aktivitas, memilih periode "Bulan Ini".
+2. Melihat anggota terurut berdasarkan skor aktivitas — dipakai sebagai bahan diskusi 1-on-1, bukan penilaian otomatis semata.
+3. Menyadari satu anggota punya skor rendah karena banyak blok waktu ber-level "Tidak Ada Aktivitas" — jadi bahan follow-up personal, bukan teguran otomatis dari sistem.
+
 ---
 
 ## 10. Metrik Keberhasilan
@@ -419,7 +484,7 @@ Field:
 | Fase | Cakupan |
 |---|---|
 | **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view) + guard hapus tiket khusus pembuat, Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Halaman Tugas Saya (agregasi lintas proyek), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
-| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual |
+| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, Peringkat Aktivitas Time Book |
 | **Fase 3** | Notifikasi lanjutan (email/push), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan |
 
 ---

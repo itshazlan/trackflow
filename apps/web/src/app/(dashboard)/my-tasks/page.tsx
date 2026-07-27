@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   useDraggable,
@@ -25,6 +25,8 @@ import {
   Loader2,
   CheckCircle2,
   Folder,
+  Filter,
+  X,
 } from "lucide-react";
 import {
   startOfMonth,
@@ -41,7 +43,6 @@ import {
 import { id as idLocale } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Table,
   TableHeader,
@@ -58,7 +59,6 @@ import {
   MyTaskProject,
   MyTasksCalendarIssue,
 } from "@/lib/issues-service";
-import { getSession, UserSession } from "@/lib/auth-service";
 
 // Project Color Map Helper for Badges
 const COLOR_PALETTES = [
@@ -219,11 +219,15 @@ function KanbanColumn({
   );
 }
 
-export default function MyTasksPage() {
+function MyTasksContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
-  const [session, setSession] = useState<UserSession | null>(null);
+  const isOverdueFiltered =
+    searchParams.get("filter") === "overdue" ||
+    searchParams.get("overdue") === "true";
+
   const [viewMode, setViewMode] = useState<"list" | "kanban" | "calendar">("list");
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(new Date());
@@ -245,10 +249,6 @@ export default function MyTasksPage() {
       localStorage.setItem("trackflow_mytasks_view", mode);
     }
   };
-
-  useEffect(() => {
-    getSession().then((s) => setSession(s));
-  }, []);
 
   // Fetch My Tasks
   const { data, isLoading, error } = useQuery({
@@ -273,6 +273,42 @@ export default function MyTasksPage() {
     }));
   };
 
+  const todayDateStr = useMemo(
+    () => new Date().toISOString().split("T")[0],
+    []
+  );
+
+  const isIssueOverdue = useCallback(
+    (dueDate?: string | null, isFinal?: boolean) => {
+      if (!dueDate) return false;
+      if (isFinal) return false;
+      const issueDateStr = dueDate.split("T")[0];
+      return issueDateStr < todayDateStr;
+    },
+    [todayDateStr]
+  );
+
+  const rawProjectsList = data?.projects || [];
+
+  // Filter projects if overdue filter is active
+  const projectsList = useMemo(() => {
+    if (!isOverdueFiltered) return rawProjectsList;
+    return rawProjectsList
+      .map((proj) => {
+        const filteredIssues = proj.issues.filter((iss) => {
+          const st = proj.statuses?.find(
+            (s) => s.id === iss.statusId || s.id === iss.status?.id
+          );
+          return isIssueOverdue(iss.dueDate, st?.isFinal);
+        });
+        return {
+          ...proj,
+          issues: filteredIssues,
+        };
+      })
+      .filter((proj) => proj.issues.length > 0);
+  }, [rawProjectsList, isOverdueFiltered, isIssueOverdue]);
+
   // Calendar dates calculation
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonthDate);
@@ -288,13 +324,19 @@ export default function MyTasksPage() {
     const map: Record<string, MyTasksCalendarIssue[]> = {};
     data.issues.forEach((iss) => {
       if (iss.dueDate) {
+        if (
+          isOverdueFiltered &&
+          !isIssueOverdue(iss.dueDate, iss.status?.isFinal)
+        ) {
+          return;
+        }
         const dateKey = iss.dueDate.split("T")[0];
         if (!map[dateKey]) map[dateKey] = [];
         map[dateKey].push(iss);
       }
     });
     return map;
-  }, [data?.issues]);
+  }, [data?.issues, isOverdueFiltered, isIssueOverdue]);
 
   // Handle Drag End in Kanban mode
   const handleDragEnd = async (event: DragEndEvent, project: MyTaskProject) => {
@@ -311,6 +353,7 @@ export default function MyTasksPage() {
     try {
       await updateIssueStatus(issueId, targetStatusId);
       queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
     } catch (err: any) {
       alert(err.message || "Gagal mengubah status issue");
     }
@@ -328,9 +371,6 @@ export default function MyTasksPage() {
       </div>
     );
   }
-
-  const projectsList = data?.projects || [];
-  const calendarIssues = data?.issues || [];
 
   const totalAssignedIssues = projectsList.reduce(
     (acc, p) => acc + (p.issues?.length || 0),
@@ -389,6 +429,28 @@ export default function MyTasksPage() {
         </div>
       </div>
 
+      {/* Active Filter Banner */}
+      {isOverdueFiltered && (
+        <div className="flex items-center justify-between p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 shrink-0" />
+            <span>
+              Filter Aktif: Menampilkan hanya tugas Overdue (melewati tenggat
+              waktu &amp; belum selesai)
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-xs px-2 gap-1 cursor-pointer hover:bg-amber-500/20 text-amber-600 dark:text-amber-400"
+            onClick={() => router.push("/my-tasks")}
+          >
+            <X className="h-3.5 w-3.5" />
+            Hapus Filter
+          </Button>
+        </div>
+      )}
+
       {/* Error View */}
       {error && (
         <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
@@ -406,11 +468,25 @@ export default function MyTasksPage() {
                 <CheckCircle2 className="h-6 w-6 text-muted-foreground" />
               </div>
               <h3 className="text-base font-semibold text-foreground">
-                Belum Ada Tugas
+                {isOverdueFiltered
+                  ? "Tidak Ada Tugas Overdue"
+                  : "Belum Ada Tugas"}
               </h3>
               <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                Belum ada tugas yang ditugaskan ke Anda saat ini.
+                {isOverdueFiltered
+                  ? "Tidak ada tugas assigned ke Anda yang melewati tenggat waktu."
+                  : "Belum ada tugas yang ditugaskan ke Anda saat ini."}
               </p>
+              {isOverdueFiltered && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 text-xs cursor-pointer"
+                  onClick={() => router.push("/my-tasks")}
+                >
+                  Tampilkan Semua Tugas
+                </Button>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-6">
@@ -543,16 +619,26 @@ export default function MyTasksPage() {
                                         {issue.priority}
                                       </span>
                                     </TableCell>
-                                    <TableCell className="text-muted-foreground text-[12px] pr-4 whitespace-nowrap">
-                                      {issue.dueDate
-                                        ? new Date(issue.dueDate).toLocaleDateString(
-                                            "id-ID",
-                                            {
+                                    <TableCell className="text-[12px] pr-4 whitespace-nowrap">
+                                      <span
+                                        className={
+                                          isIssueOverdue(
+                                            issue.dueDate,
+                                            issue.status?.isFinal
+                                          )
+                                            ? "text-destructive font-bold"
+                                            : "text-muted-foreground"
+                                        }
+                                      >
+                                        {issue.dueDate
+                                          ? new Date(
+                                              issue.dueDate
+                                            ).toLocaleDateString("id-ID", {
                                               day: "numeric",
                                               month: "short",
-                                            }
-                                          )
-                                        : "—"}
+                                            })
+                                          : "—"}
+                                      </span>
                                     </TableCell>
                                   </TableRow>
                                 ))}
@@ -630,7 +716,9 @@ export default function MyTasksPage() {
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0 hover:bg-background rounded-sm cursor-pointer"
-                  onClick={() => setCurrentMonthDate(subMonths(currentMonthDate, 1))}
+                  onClick={() =>
+                    setCurrentMonthDate(subMonths(currentMonthDate, 1))
+                  }
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -638,7 +726,9 @@ export default function MyTasksPage() {
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0 hover:bg-background rounded-sm cursor-pointer"
-                  onClick={() => setCurrentMonthDate(addMonths(currentMonthDate, 1))}
+                  onClick={() =>
+                    setCurrentMonthDate(addMonths(currentMonthDate, 1))
+                  }
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -739,5 +829,19 @@ export default function MyTasksPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MyTasksPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[calc(100vh-100px)] w-full items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <MyTasksContent />
+    </Suspense>
   );
 }

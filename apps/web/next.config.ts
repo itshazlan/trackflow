@@ -56,6 +56,10 @@ const nextConfig: NextConfig = {
         source: "/api/uploads/:path*",
         destination: `${backendUrl}/uploads/:path*`,
       },
+      {
+        source: "/api/dashboard/:path*",
+        destination: `${backendUrl}/dashboard/:path*`,
+      },
     ];
   },
 };

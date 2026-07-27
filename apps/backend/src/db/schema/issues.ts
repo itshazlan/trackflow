@@ -11,6 +11,7 @@ import {
   date,
   numeric,
   unique,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { projects, projectRoleEnum } from './projects';
 import { user } from './auth';
@@ -28,6 +29,7 @@ export const issueStatuses = pgTable('issue_statuses', {
   name: varchar('name', { length: 255 }).notNull(),
   orderIndex: integer('order_index').notNull(),
   restrictedToRole: projectRoleEnum('restricted_to_role'),
+  isFinal: boolean('is_final').notNull().default(false),
 });
 
 export const issueTemplates = pgTable('issue_templates', {

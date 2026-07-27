@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.4 (Lean Internal) |
+| **Versi Dokumen** | 3.5 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: guard DELETE /issues/:id dipisah dari PATCH — creator/Manager/Admin saja; endpoint baru `/issues/mine` untuk agregasi Tugas Saya lintas proyek) |
+| **Tanggal** | 14 Juli 2026 (revisi: kolom `issue_statuses.is_final`; tabel `recently_viewed_issues`; endpoint Dashboard Summary, Recently Viewed, Project Progress, Workload Overview, Activity Ranking) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -251,6 +251,8 @@ erDiagram
     TIMESHEETS ||--o{ TIMESHEET_APPROVALS : "reviewed via"
     USERS ||--o{ NOTIFICATIONS : receives
     PROJECTS ||--o{ DISCORD_WEBHOOKS : "configured for"
+    USERS ||--o{ RECENTLY_VIEWED_ISSUES : views
+    ISSUES ||--o{ RECENTLY_VIEWED_ISSUES : "viewed via"
     USERS ||--o{ DISCORD_WEBHOOKS : configures
 ```
 
@@ -351,6 +353,7 @@ erDiagram
 | name | varchar | Nama status (mis. New, In Progress, Testing, Ready to Deploy, Blocker, Done, atau custom seperti "In Review") |
 | order_index | int | Urutan tampilan Kanban |
 | restricted_to_role | enum(`manager`,`developer`,`reporter_qa`) nullable | **Disederhanakan dari `allowed_roles` jsonb** — cukup satu role pembatas opsional. `NULL` berarti status bebas diset anggota proyek manapun. Default: status "Done" di-seed dengan `restricted_to_role = reporter_qa` |
+| is_final | boolean default false | **Baru** — menandai status ini dianggap "selesai" (FR-023a). Dipakai untuk hitung progress bar proyek (§7.13.3) dan deteksi tiket overdue (§7.13.1) — tidak menebak dari nama status karena nama bebas dikustomisasi. Status "Done" di-seed dengan `is_final = true`, status lain default `false` |
 
 > Saat proyek baru dibuat, backend otomatis men-seed 6 baris default (New, In Progress, Testing, Ready to Deploy, Blocker, Done) via service logic — bukan hardcode di enum kolom, sehingga Manager/Admin tetap bebas menambah, mengganti nama, menghapus, atau mengurutkan ulang status tersebut kapan saja (FR-022).
 
@@ -585,6 +588,16 @@ erDiagram
 
 > **Catatan keamanan:** siapapun yang memegang `webhook_url` bisa mengirim pesan ke channel Discord terkait. Pertimbangkan enkripsi kolom ini di database (application-level encryption) jika kebutuhan keamanan meningkat di masa depan — untuk MVP, dianggap cukup dilindungi lewat guard endpoint (Admin/Manager only) dan tidak pernah di-expose ke response API.
 
+#### `recently_viewed_issues` (Dilihat Baru-baru Ini)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| user_id | uuid (FK → users) | |
+| issue_id | uuid (FK → issues, `onDelete: cascade`) | Menghapus issue otomatis membersihkan entrinya dari riwayat ini |
+| viewed_at | timestamptz | Di-upsert (bukan insert baru) setiap kali issue yang sama dibuka lagi (FR-134) |
+
+> **Unique constraint** pada `(user_id, issue_id)` — satu baris per kombinasi user+issue, di-`ON CONFLICT DO UPDATE viewed_at` saat dibuka ulang. Dibatasi **maksimal 10 baris per user** (trim baris tertua di luar 10 teratas setiap kali insert/update, lihat §10.18) — disimpan di server (bukan `localStorage`) supaya konsisten lintas device (FR-133).
+
 > **Catatan indexing:** skema didefinisikan & di-migrasi via `drizzle-kit generate`/`drizzle-kit migrate`. Tanpa entitas organisasi, tidak ada kolom `organization_id` yang perlu di-index di tabel manapun — menyederhanakan seluruh query dibanding draft v1.1.
 
 ---
@@ -647,6 +660,12 @@ erDiagram
 | Discord Integration | `/admin/integrations/discord` | GET/POST/DELETE | Webhook **tingkat aplikasi** (event `project_created`) — **Admin only**. Response GET tidak pernah sertakan `webhookUrl` utuh, hanya `{ configured: boolean, events: [] }` (FR-114) |
 | Discord Integration | `/projects/:id/integrations/discord` | GET/POST/DELETE | Webhook **tingkat proyek** — mendukung 2 event independen: `issue_created` dan `issue_status_changed` (FR-116) — Manager/Admin |
 | Discord Integration | `/projects/:id/integrations/discord/test` | POST | Kirim pesan percobaan ke channel yang dikonfigurasi, untuk verifikasi sebelum diandalkan (FR-113) |
+| Dashboard | `/dashboard/summary` | GET | Ringkasan hari ini: total menit kerja hari ini, jumlah tiket overdue milik user, status tracking terkini (FR-130) |
+| Recently Viewed | `/issues/:id/view` | POST | Catat/upsert bahwa issue ini baru dilihat user saat ini — dipanggil otomatis saat detail issue dibuka (FR-132–134) |
+| Recently Viewed | `/issues/recently-viewed` | GET | 10 issue terakhir dilihat user ini, lintas proyek, urut terbaru |
+| Project Progress | `/projects` | GET | **Diperluas** — tiap item disertai `issueStats: { total, completed }` berdasarkan `issue_statuses.is_final` (FR-135–136) |
+| Workload | `/projects/:id/workload` | GET | Distribusi tiket per anggota proyek, dipecah per status + jumlah overdue — Manager proyek terkait atau Admin (FR-137–139) |
+| Activity Ranking | `/reports/activity-ranking?period=week\|month&projectId=` | GET | Peringkat skor aktivitas anggota berbasis Time Book. Admin: lintas proyek; Manager: terbatas ke proyek yang dia kelola (FR-140–142) |
 
 ### 8.1 Contoh Payload — Buat Tiket dari Template Bug (Sebagai Filler Teks)
 
@@ -1225,6 +1244,48 @@ sequenceDiagram
     Note over A: Validasi restricted_to_role identik dengan Kanban per-proyek (§10.10) — tidak ada logic baru
 ```
 
+### 10.18 Alur 5 Fitur Visibilitas — Dashboard, Recently Viewed, Progress Bar, Workload, Activity Ranking
+
+```mermaid
+sequenceDiagram
+    participant U as Pengguna
+    participant M as Manager
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    Note over U: 1. Dashboard Summary
+    U->>A: GET /dashboard/summary
+    A->>PG: SUM durasi time_blocks hari ini WHERE user_id, is_deleted=false
+    A->>PG: COUNT issues WHERE assignee_id, status.is_final=false, due_date < now()
+    A-->>U: { todayMinutes, overdueCount, activeTimerStatus }
+
+    Note over U: 2. Recently Viewed — dipanggil setiap detail issue dibuka
+    U->>A: POST /issues/:id/view
+    A->>PG: INSERT ... ON CONFLICT (user_id, issue_id) DO UPDATE viewed_at=now()
+    A->>PG: Trim baris di luar 10 teratas per user_id (hapus sisanya)
+    U->>A: GET /issues/recently-viewed
+    A-->>U: 10 issue terakhir, urut viewed_at DESC
+
+    Note over U: 3. Progress Bar Proyek — bagian dari response list proyek
+    U->>A: GET /projects
+    A->>PG: JOIN issues+issue_statuses, GROUP BY project_id, hitung total & is_final=true
+    A-->>U: [{ ...project, issueStats: { total, completed } }, ...]
+
+    Note over M: 4. Workload Overview — Manager/Admin only
+    M->>A: GET /projects/:id/workload
+    A->>A: Cek role = manager (proyek ini) ATAU isAdmin
+    A->>PG: SELECT semua project_memberships proyek ini (termasuk yang 0 tiket assigned)
+    A->>PG: LEFT JOIN issues per anggota, GROUP BY user_id, status_id
+    A-->>M: { members: [{ userId, totalAssigned, byStatus, overdueCount }, ...] }
+
+    Note over M: 5. Activity Ranking — Manager/Admin only
+    M->>A: GET /reports/activity-ranking?period=week
+    A->>A: Cek role — Admin: tanpa filter proyek; Manager: WHERE project_id IN (proyek yang dia kelola)
+    A->>PG: JOIN time_blocks+activity_logs WHERE is_deleted=false, GROUP BY user_id
+    A->>A: Hitung activityScore = (high*3+medium*2+low*1)/totalBlocks per user
+    A-->>M: Daftar user terurut activityScore DESC
+```
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -1246,6 +1307,7 @@ sequenceDiagram
 | Moderasi komunikasi | Issue Activity terbuka untuk semua anggota proyek (tanpa batasan role), namun Admin tetap dapat menghapus komentar siapapun untuk moderasi jika terjadi penyalahgunaan |
 | Kredensial webhook eksternal | URL Discord Webhook diperlakukan sebagai kredensial sensitif — tidak pernah dikembalikan utuh ke frontend setelah tersimpan (FR-114), guard endpoint dibatasi Admin (app-level) / Manager-Admin (project-level) |
 | Guard hapus vs edit tiket sengaja dibedakan | Edit (FR-026) melibatkan Assignee karena bersifat reversibel; Hapus (FR-026a) dibatasi ke pembuat/Manager/Admin karena bersifat destruktif — assignee yang bukan pembuat tidak boleh menghapus tiket yang bukan miliknya |
+| Data komparatif antar-karyawan (Workload Overview, Activity Ranking) | Dibatasi ketat: Manager hanya bisa lihat proyek yang dia kelola sendiri (bukan lintas semua proyek), Admin baru bisa lihat lintas proyek. Developer/QA/Reporter tidak punya akses ke kedua fitur ini sama sekali — mencegah kesalahpahaman "semua orang bisa lihat skor semua orang" |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
 ---
@@ -1404,6 +1466,8 @@ flowchart TB
 | Discord API down/rate-limited saat volume pembuatan proyek/tiket tinggi | Diterima sebagai fire-and-forget (§10.16) — kegagalan tidak memengaruhi fungsi inti TrackFlow; tidak ada retry queue di MVP ini (bisa ditambah BullMQ nanti jika keandalan notifikasi jadi kebutuhan kritis) |
 | `/issues/mine?view=kanban` berpotensi N+1 query kalau user tergabung di banyak proyek (query `issue_statuses` per proyek dalam loop) | Diterima untuk skala tim internal (jumlah proyek per user biasanya kecil); optimasi ke satu query `WHERE project_id IN (...)` bisa dilakukan belakangan kalau jumlah proyek per user bertambah signifikan |
 | Menghapus tiket melepas ikatan `time_blocks.issue_id` ke `NULL` — riwayat waktu kerja jadi "Activity" tanpa konteks tiket aslinya | Diterima sebagai trade-off yang disengaja (lebih baik dari kehilangan data payroll sepenuhnya); pertimbangkan menyimpan judul tiket asli sebagai teks di `time_blocks.note` sebelum penghapusan jika jejak konteks dirasa penting nanti |
+| Peringkat Aktivitas Time Book berpotensi disalahgunakan sebagai alat penilaian kompetitif yang tidak sehat untuk moral tim | Ini murni saran penggunaan (bukan pembatasan teknis) — dokumentasikan ke Manager bahwa fitur ini dimaksudkan untuk identifikasi pola kerja/bottleneck, bukan pembanding langsung antar individu tanpa konteks |
+| Progress bar proyek (`GET /projects`) menambah beban query JOIN+GROUP BY di endpoint yang sering diakses (project switcher) | Untuk skala tim internal, dampaknya minor; kalau jumlah proyek/tiket membesar signifikan, pertimbangkan cache hasil agregasi dengan TTL pendek (mis. 60 detik) alih-alih hitung ulang tiap request |
 | Validasi "reply dibatasi 1 tingkat" hanya berarti kalau ditegakkan di backend, bukan cuma disembunyikan di UI | Endpoint POST comments **wajib** cek `parent_comment_id` milik parent yang direferensikan — tolak (400) kalau parent tersebut sendiri sudah punya parent (lihat §10.7) |
 | Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
 | Tanpa code signing (belum ada sertifikat berbayar), karyawan mendapat peringatan Gatekeeper (macOS)/SmartScreen (Windows) saat instalasi pertama | Diterima sebagai trade-off distribusi internal; instruksikan "klik kanan → Buka" (macOS) atau "More info → Run anyway" (Windows) — revisit beli sertifikat kalau tim membesar atau keluhan meningkat |
