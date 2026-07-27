@@ -9,8 +9,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -64,9 +62,9 @@ export default function RecentlyViewedMenu() {
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-border bg-muted/20">
           <div className="flex items-center gap-2">
             <History className="h-3.5 w-3.5 text-muted-foreground" />
-            <DropdownMenuLabel className="text-xs font-semibold p-0 text-foreground">
+            <span className="text-xs font-semibold text-foreground">
               Dilihat Baru-baru Ini
-            </DropdownMenuLabel>
+            </span>
           </div>
           {issues.length > 0 && (
             <span className="text-[10px] text-muted-foreground font-mono">
