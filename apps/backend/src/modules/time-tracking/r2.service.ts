@@ -19,7 +19,12 @@ export class R2Service {
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
     this.bucketName = process.env.R2_BUCKET_NAME || 'trackflow-screenshots';
 
-    if (endpoint && accessKeyId && secretAccessKey && process.env.NODE_ENV !== 'test') {
+    if (
+      endpoint &&
+      accessKeyId &&
+      secretAccessKey &&
+      process.env.NODE_ENV !== 'test'
+    ) {
       this.s3Client = new S3Client({
         endpoint,
         credentials: {
@@ -30,7 +35,9 @@ export class R2Service {
       });
     } else {
       if (process.env.NODE_ENV === 'test') {
-        console.log('ℹ️ Running in Jest test environment. Forcing local Mock R2 mode.');
+        console.log(
+          'ℹ️ Running in Jest test environment. Forcing local Mock R2 mode.',
+        );
       } else {
         console.warn(
           '⚠️ Cloudflare R2 credentials not fully configured. Falling back to Mock mode.',

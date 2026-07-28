@@ -85,7 +85,7 @@ export class TemplatesService {
         .from(issueTemplates)
         .where(eq(issueTemplates.id, id))
         .limit(1);
-      
+
       if (!existing) {
         throw new NotFoundException(`Template with ID ${id} not found`);
       }
@@ -93,7 +93,10 @@ export class TemplatesService {
       const updateData: any = { ...updateTemplateDto };
 
       // If name is updated, rename the linked tracker as well (or link to existing)
-      if (updateTemplateDto.name && updateTemplateDto.name.trim() !== existing.name) {
+      if (
+        updateTemplateDto.name &&
+        updateTemplateDto.name.trim() !== existing.name
+      ) {
         const newName = updateTemplateDto.name.trim();
         // Check if there's another tracker with this name
         const [otherTracker] = await tx

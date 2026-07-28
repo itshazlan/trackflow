@@ -65,7 +65,8 @@ export class DiscordService {
 
   async saveAppWebhook(dto: SaveDiscordWebhookDto, userId: string) {
     try {
-      const events = dto.events && dto.events.length > 0 ? dto.events : ['project_created'];
+      const events =
+        dto.events && dto.events.length > 0 ? dto.events : ['project_created'];
 
       const [existing] = await this.db
         .select()
@@ -112,8 +113,13 @@ export class DiscordService {
         };
       }
     } catch (err: any) {
-      this.logger.error(`Gagal menyimpan app webhook: ${err.message}`, err.stack);
-      throw new BadRequestException(`Gagal menyimpan Discord Webhook: ${err.message}`);
+      this.logger.error(
+        `Gagal menyimpan app webhook: ${err.message}`,
+        err.stack,
+      );
+      throw new BadRequestException(
+        `Gagal menyimpan Discord Webhook: ${err.message}`,
+      );
     }
   }
 
@@ -122,7 +128,10 @@ export class DiscordService {
       .delete(discordWebhooks)
       .where(isNull(discordWebhooks.projectId));
 
-    return { success: true, message: 'App-level Discord webhook configuration deleted' };
+    return {
+      success: true,
+      message: 'App-level Discord webhook configuration deleted',
+    };
   }
 
   async testAppWebhook() {
@@ -133,7 +142,9 @@ export class DiscordService {
       .limit(1);
 
     if (!webhook || !webhook.webhookUrl) {
-      throw new NotFoundException('App-level Discord webhook belum dikonfigurasi');
+      throw new NotFoundException(
+        'App-level Discord webhook belum dikonfigurasi',
+      );
     }
 
     return this.sendTestNotification(webhook.webhookUrl);
@@ -172,7 +183,8 @@ export class DiscordService {
     userId: string,
   ) {
     try {
-      const events = dto.events && dto.events.length > 0 ? dto.events : ['issue_created'];
+      const events =
+        dto.events && dto.events.length > 0 ? dto.events : ['issue_created'];
 
       const [existing] = await this.db
         .select()
@@ -219,8 +231,13 @@ export class DiscordService {
         };
       }
     } catch (err: any) {
-      this.logger.error(`Gagal menyimpan project webhook: ${err.message}`, err.stack);
-      throw new BadRequestException(`Gagal menyimpan Discord Webhook: ${err.message}`);
+      this.logger.error(
+        `Gagal menyimpan project webhook: ${err.message}`,
+        err.stack,
+      );
+      throw new BadRequestException(
+        `Gagal menyimpan Discord Webhook: ${err.message}`,
+      );
     }
   }
 
@@ -229,7 +246,10 @@ export class DiscordService {
       .delete(discordWebhooks)
       .where(eq(discordWebhooks.projectId, projectId));
 
-    return { success: true, message: 'Project Discord webhook configuration deleted' };
+    return {
+      success: true,
+      message: 'Project Discord webhook configuration deleted',
+    };
   }
 
   async testProjectWebhook(projectId: string) {
@@ -240,7 +260,9 @@ export class DiscordService {
       .limit(1);
 
     if (!webhook || !webhook.webhookUrl) {
-      throw new NotFoundException('Discord webhook proyek ini belum dikonfigurasi');
+      throw new NotFoundException(
+        'Discord webhook proyek ini belum dikonfigurasi',
+      );
     }
 
     return this.sendTestNotification(webhook.webhookUrl);
@@ -277,7 +299,9 @@ export class DiscordService {
       };
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
-      throw new BadRequestException(`Gagal kirim pesan test Discord: ${err.message}`);
+      throw new BadRequestException(
+        `Gagal kirim pesan test Discord: ${err.message}`,
+      );
     }
   }
 

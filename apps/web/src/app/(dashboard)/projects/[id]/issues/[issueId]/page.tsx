@@ -16,6 +16,7 @@ import {
   createIssueAttachment,
   deleteIssueAttachment,
   getIssueComments,
+  getIssueActivity,
   createIssueComment,
   uploadCommentImage,
   uploadCommentAttachment,
@@ -30,6 +31,9 @@ import {
   IssueAttachment,
   IssueComment,
   CommentAttachment,
+  ActivityItem,
+  CommentActivityItem,
+  StatusChangeActivityItem,
 } from "@/lib/issues-service";
 import { getProjectDetail, Project } from "@/lib/projects-service";
 import { getSession, UserSession } from "@/lib/auth-service";
@@ -132,6 +136,20 @@ const formatCommentDate = (dateString: string) => {
   return `${date} ${monthStr}, ${hours}:${minutes}`;
 };
 
+const formatRelativeOrDate = (dateString: string) => {
+  if (!dateString) return "";
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  const now = new Date();
+  const diffSeconds = Math.floor((now.getTime() - d.getTime()) / 1000);
+  if (diffSeconds < 60) return "baru saja";
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes} menit lalu`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} jam lalu`;
+  return formatCommentDate(dateString);
+};
+
 export default function IssueDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -148,7 +166,11 @@ export default function IssueDetailPage() {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [trackers, setTrackers] = useState<Tracker[]>([]);
   const [attachments, setAttachments] = useState<IssueAttachment[]>([]);
-  const [comments, setComments] = useState<IssueComment[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+
+  const comments = activity.filter(
+    (item): item is CommentActivityItem => item.type === "comment"
+  );
 
   // Page states
   const [loading, setLoading] = useState(true);
@@ -479,9 +501,9 @@ export default function IssueDetailPage() {
         .finally(() => setAttachmentsLoading(false));
 
       setCommentsLoading(true);
-      getIssueComments(issueId)
-        .then((data) => setComments(data))
-        .catch((err) => console.error("Gagal mengambil komentar:", err))
+      getIssueActivity(issueId)
+        .then((data) => setActivity(data))
+        .catch((err) => console.error("Gagal mengambil aktivitas:", err))
         .finally(() => setCommentsLoading(false));
 
     } catch (err: unknown) {
@@ -514,16 +536,49 @@ export default function IssueDetailPage() {
       socket.emit("joinProject", projectId);
     });
 
-    socket.on("issue.comment_created", (payload: { issueId: string; commentId: string; authorId: string }) => {
+    socket.on("issue.comment_created", (payload: { issueId: string }) => {
       if (payload.issueId === issueId) {
-        getIssueComments(issueId)
-          .then((data) => setComments(data))
-          .catch((err) => console.error("Gagal memperbarui komentar via socket:", err));
+        getIssueActivity(issueId)
+          .then((data) => setActivity(data))
+          .catch((err) => console.error("Gagal memperbarui aktivitas via socket:", err));
+      }
+    });
+
+    socket.on("issue.status_changed", (payload: { issueId: string }) => {
+      if (payload.issueId === issueId) {
+        getIssueActivity(issueId)
+          .then((data) => setActivity(data))
+          .catch((err) => console.error("Gagal memperbarui aktivitas via socket:", err));
+        getIssueDetail(projectId, issueId)
+          .then((data) => {
+            setIssue(data);
+            setEditedTitle(data.title);
+            setEditedDesc(data.description || "");
+          })
+          .catch((err) => console.error("Gagal memperbarui tiket via socket:", err));
+      }
+    });
+
+    socket.on("status_change", (payload: { issueId: string }) => {
+      if (payload.issueId === issueId) {
+        getIssueActivity(issueId)
+          .then((data) => setActivity(data))
+          .catch((err) => console.error("Gagal memperbarui aktivitas via socket:", err));
+        getIssueDetail(projectId, issueId)
+          .then((data) => {
+            setIssue(data);
+            setEditedTitle(data.title);
+            setEditedDesc(data.description || "");
+          })
+          .catch((err) => console.error("Gagal memperbarui tiket via socket:", err));
       }
     });
 
     socket.on("issue.updated", (payload: { id: string }) => {
       if (payload.id === issueId) {
+        getIssueActivity(issueId)
+          .then((data) => setActivity(data))
+          .catch((err) => console.error("Gagal memperbarui aktivitas via socket:", err));
         getIssueDetail(projectId, issueId)
           .then((data) => {
             setIssue(data);
@@ -665,8 +720,8 @@ export default function IssueDetailPage() {
         newComment.commentAttachments = uploadedAttachments;
       }
 
-      const updatedComments = await getIssueComments(issue.id);
-      setComments(updatedComments);
+      const updatedActivity = await getIssueActivity(issue.id);
+      setActivity(updatedActivity);
 
       setNewCommentText("");
       setPendingCommentImages([]);
@@ -688,8 +743,9 @@ export default function IssueDetailPage() {
 
     setCommentsError("");
     try {
-      const updated = await updateIssueComment(issue.id, commentId, editingCommentText);
-      setComments((prev) => prev.map((c) => (c.id === commentId ? updated : c)));
+      await updateIssueComment(issue.id, commentId, editingCommentText);
+      const updatedActivity = await getIssueActivity(issue.id);
+      setActivity(updatedActivity);
       setEditingCommentId(null);
       setEditingCommentText("");
     } catch (err: unknown) {
@@ -710,7 +766,8 @@ export default function IssueDetailPage() {
     setCommentsError("");
     try {
       await deleteIssueComment(issue.id, commentId);
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      const updatedActivity = await getIssueActivity(issue.id);
+      setActivity(updatedActivity);
     } catch (err: unknown) {
       setCommentsError(err instanceof Error ? err.message : "Gagal menghapus komentar.");
     }
@@ -1692,17 +1749,57 @@ export default function IssueDetailPage() {
                 {commentsLoading ? (
                   <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground justify-center">
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    <span>Memuat aktivitas komentar...</span>
+                    <span>Memuat aktivitas...</span>
                   </div>
-                ) : comments.length === 0 ? (
+                ) : activity.length === 0 ? (
                   <div className="text-center py-8 text-xs text-muted-foreground italic border border-dashed border-border/80 rounded-lg bg-muted/5">
-                    Belum ada diskusi untuk tiket ini. Gunakan kolom di atas untuk memulai tanggapan.
+                    Belum ada aktivitas atau diskusi untuk tiket ini. Gunakan kolom di atas untuk memulai tanggapan.
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-4 bg-muted/5 border border-border/50 p-4 rounded-xl">
-                    {comments
-                      .filter((c) => !c.parentCommentId)
-                      .map((comment) => {
+                  <div className="flex flex-col gap-3 bg-muted/5 border border-border/50 p-4 rounded-xl">
+                    {activity
+                      .filter(
+                        (item) =>
+                          item.type === "status_change" ||
+                          (item.type === "comment" && !item.parentCommentId)
+                      )
+                      .map((item) => {
+                        if (item.type === "status_change") {
+                          return (
+                            <div
+                              key={`status-change-${item.id}`}
+                              className="flex items-center gap-2 text-[12px] text-muted-foreground py-1.5 px-3 bg-muted/20 border border-border/40 rounded-lg my-0.5 select-none"
+                            >
+                              <span className="text-xs shrink-0 select-none">🔄</span>
+                              <span className="truncate">
+                                <strong className="font-semibold text-foreground">
+                                  {item.changedBy?.name || "Pengguna"}
+                                </strong>{" "}
+                                mengubah status
+                                {item.oldStatusName ? (
+                                  <>
+                                    {" "}
+                                    dari{" "}
+                                    <span className="font-medium text-foreground">
+                                      {item.oldStatusName}
+                                    </span>
+                                  </>
+                                ) : (
+                                  ""
+                                )}{" "}
+                                ke{" "}
+                                <span className="font-semibold text-primary">
+                                  {item.newStatusName}
+                                </span>
+                              </span>
+                              <span className="text-[10px] text-muted-foreground/70 ml-auto shrink-0 font-medium">
+                                — {formatRelativeOrDate(item.changedAt)}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        const comment = item;
                         const replies = comments.filter((c) => c.parentCommentId === comment.id);
                         return (
                           <div

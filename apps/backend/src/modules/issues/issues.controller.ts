@@ -66,7 +66,6 @@ export class UserIssuesController {
     return this.issuesService.findOne(id);
   }
 
-
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,
@@ -130,6 +129,11 @@ export class UserIssuesController {
     );
   }
 
+  @Get(':id/activity')
+  getActivity(@Param('id') id: string, @Req() req: any) {
+    return this.issuesService.getActivity(id, req.user.id);
+  }
+
   @Get(':id/comments')
   findComments(@Param('id') id: string, @Req() req: any) {
     return this.issuesService.findCommentsForIssue(id, req.user.id);
@@ -141,11 +145,7 @@ export class UserIssuesController {
     @Body() createCommentDto: CreateCommentDto,
     @Req() req: any,
   ) {
-    return this.issuesService.createComment(
-      id,
-      createCommentDto,
-      req.user.id,
-    );
+    return this.issuesService.createComment(id, createCommentDto, req.user.id);
   }
 
   @Patch(':id/comments/:commentId')
@@ -232,7 +232,12 @@ export class UserIssuesController {
     @Body() createImageDto: CreateCommentImageDto,
     @Req() req: any,
   ) {
-    return this.createCommentAttachmentPresignedUrl(id, commentId, createImageDto, req);
+    return this.createCommentAttachmentPresignedUrl(
+      id,
+      commentId,
+      createImageDto,
+      req,
+    );
   }
 
   @Post(':id/comments/:commentId/images/:imageId/confirm')
@@ -243,7 +248,13 @@ export class UserIssuesController {
     @Body() confirmDto: ConfirmCommentImageDto,
     @Req() req: any,
   ) {
-    return this.confirmCommentAttachmentUpload(id, commentId, imageId, confirmDto, req);
+    return this.confirmCommentAttachmentUpload(
+      id,
+      commentId,
+      imageId,
+      confirmDto,
+      req,
+    );
   }
 }
 
@@ -295,11 +306,6 @@ export class IssuesController {
     @Param('id') id: string,
     @Req() req: any,
   ) {
-    return this.issuesService.remove(
-      projectId,
-      id,
-      req.user,
-      req.projectRole,
-    );
+    return this.issuesService.remove(projectId, id, req.user, req.projectRole);
   }
 }

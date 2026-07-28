@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, Matches, IsArray, IsIn, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsUUID,
+  Matches,
+  IsArray,
+  IsIn,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateProjectMemberDto {
@@ -20,7 +29,8 @@ export class CreateProjectDto {
   @IsString()
   @IsNotEmpty()
   @Matches(/^[A-Z][A-Z0-9_-]{1,9}$/, {
-    message: 'Project key must be uppercase, alphanumeric, hyphen or underscore, 2-10 characters, and start with an uppercase letter.',
+    message:
+      'Project key must be uppercase, alphanumeric, hyphen or underscore, 2-10 characters, and start with an uppercase letter.',
   })
   key: string;
 

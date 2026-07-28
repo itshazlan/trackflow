@@ -14,9 +14,7 @@ import { NotificationsService } from './notifications.service';
 @Controller('notifications')
 @UseGuards(AuthGuard)
 export class NotificationsController {
-  constructor(
-    private readonly notificationsService: NotificationsService,
-  ) {}
+  constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
   async getNotifications(

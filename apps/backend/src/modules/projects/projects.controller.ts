@@ -73,10 +73,7 @@ export class ProjectsController {
   @Patch(':id')
   @UseGuards(ProjectRoleGuard)
   @Roles('manager')
-  update(
-    @Param('id') id: string,
-    @Body() updateProjectDto: UpdateProjectDto,
-  ) {
+  update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto) {
     return this.projectsService.update(id, updateProjectDto);
   }
 

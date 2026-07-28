@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.3 (Lean Internal) |
+| **Versi Dokumen** | 3.4 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: penanda status final pada workflow; Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, Peringkat Aktivitas Time Book) |
+| **Tanggal** | 14 Juli 2026 (revisi: log perubahan status tiket tergabung di panel Issue Activity, bersifat permanen dan tidak dapat diedit/dihapus siapapun) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -150,6 +150,7 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-029 | Komentar dapat diedit/dihapus oleh penulisnya sendiri; Admin dapat menghapus komentar siapapun untuk keperluan moderasi |
 | FR-029a | Pengguna dapat **melampirkan file apa saja** pada komentar (diunggah setelah teks komentar tersimpan). File bertipe **gambar** ditampilkan sebagai thumbnail di bawah teks (klik untuk lihat ukuran penuh); tipe file lain ditampilkan sebagai kartu (ikon + nama + ukuran) dengan tombol **unduh** |
 | FR-029b | Pengguna dapat **membalas** komentar yang sudah ada — balasan ditampilkan terindentasi di bawah komentar induknya. **Reply dibatasi 1 tingkat** (tidak bisa membalas balasan) — cukup untuk menjawab komentar spesifik tanpa kompleksitas thread berlapis-lapis |
+| FR-029c | Panel Aktivitas menampilkan **log perubahan status** tiket (mis. "Nama User mengubah status dari New ke In Progress") tergabung secara kronologis dengan komentar — dicatat otomatis setiap kali status tiket berubah, dari tampilan manapun (List/Kanban/Tugas Saya). Log ini bersifat **permanen dan tidak dapat diedit/dihapus oleh siapapun, termasuk Admin** — berbeda dari komentar biasa yang bisa dihapus (FR-029) |
 
 ### 7.4 Issue Template (Preset & Dapat Diperluas — Sebagai Filler Judul & Deskripsi)
 
@@ -367,7 +368,8 @@ Field:
 1. Developer membuka tiket yang sedang dikerjakan, membuka panel "Aktivitas".
 2. Menulis komentar (mis. progres, pertanyaan ke QA), melampirkan tangkapan layar sebagai bukti — komentar beserta gambar langsung terlihat oleh **seluruh anggota proyek**, apapun rolenya.
 3. QA klik "Balas" pada komentar tersebut untuk menjawab spesifik komentar itu (bukan komentar baru terpisah) — balasan tampil terindentasi di bawahnya, tanpa perlu keluar dari halaman tiket, seperti thread forum.
-4. Jika ada komentar yang perlu dihapus (mis. salah kirim), penulisnya sendiri atau Admin dapat menghapusnya.
+4. Developer mengubah status tiket dari Kanban ke "Testing" — baris log otomatis muncul di panel Aktivitas yang sama ("Developer mengubah status dari In Progress ke Testing"), tergabung kronologis dengan komentar-komentar sebelumnya.
+5. Jika ada komentar yang perlu dihapus (mis. salah kirim), penulisnya sendiri atau Admin dapat menghapusnya — baris log status tidak bisa dihapus siapapun.
 
 ### 9.6 Admin Menambahkan Anggota ke Proyek Manapun
 1. Admin membuka proyek milik tim lain (yang Admin sendiri belum terdaftar sebagai member).

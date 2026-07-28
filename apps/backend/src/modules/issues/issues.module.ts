@@ -16,12 +16,7 @@ import { IssuesService } from './issues.service';
 import { UserIssuesController, IssuesController } from './issues.controller';
 
 @Module({
-  imports: [
-    DbModule,
-    TimeTrackingModule,
-    NotificationsModule,
-    DiscordModule,
-  ],
+  imports: [DbModule, TimeTrackingModule, NotificationsModule, DiscordModule],
   controllers: [
     TrackersController,
     StatusesController,

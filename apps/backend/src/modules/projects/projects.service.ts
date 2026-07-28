@@ -33,7 +33,9 @@ export class ProjectsService {
           .limit(1);
 
         if (existing) {
-          throw new BadRequestException(`Project key "${normalizedKey}" is already taken`);
+          throw new BadRequestException(
+            `Project key "${normalizedKey}" is already taken`,
+          );
         }
 
         // 1. Insert project
@@ -71,12 +73,42 @@ export class ProjectsService {
 
         // 3. Seed default issue statuses (FR-022)
         const defaultStatuses = [
-          { name: 'New', orderIndex: 0, restrictedToRole: null, isFinal: false },
-          { name: 'In Progress', orderIndex: 1, restrictedToRole: null, isFinal: false },
-          { name: 'Testing', orderIndex: 2, restrictedToRole: null, isFinal: false },
-          { name: 'Ready to Deploy', orderIndex: 3, restrictedToRole: null, isFinal: false },
-          { name: 'Blocker', orderIndex: 4, restrictedToRole: null, isFinal: false },
-          { name: 'Done', orderIndex: 5, restrictedToRole: 'reporter_qa', isFinal: true },
+          {
+            name: 'New',
+            orderIndex: 0,
+            restrictedToRole: null,
+            isFinal: false,
+          },
+          {
+            name: 'In Progress',
+            orderIndex: 1,
+            restrictedToRole: null,
+            isFinal: false,
+          },
+          {
+            name: 'Testing',
+            orderIndex: 2,
+            restrictedToRole: null,
+            isFinal: false,
+          },
+          {
+            name: 'Ready to Deploy',
+            orderIndex: 3,
+            restrictedToRole: null,
+            isFinal: false,
+          },
+          {
+            name: 'Blocker',
+            orderIndex: 4,
+            restrictedToRole: null,
+            isFinal: false,
+          },
+          {
+            name: 'Done',
+            orderIndex: 5,
+            restrictedToRole: 'reporter_qa',
+            isFinal: true,
+          },
         ];
 
         for (const status of defaultStatuses) {
@@ -187,7 +219,9 @@ export class ProjectsService {
 
   async update(id: string, updateProjectDto: Partial<CreateProjectDto>) {
     if (updateProjectDto.key) {
-      throw new BadRequestException('Project key is immutable and cannot be updated');
+      throw new BadRequestException(
+        'Project key is immutable and cannot be updated',
+      );
     }
 
     const [updated] = await this.db
@@ -289,7 +323,9 @@ export class ProjectsService {
 
     // 3. Aggregate per member
     const members = membersList.map((m: any) => {
-      const assigned = projectIssues.filter((i: any) => i.assigneeId === m.userId);
+      const assigned = projectIssues.filter(
+        (i: any) => i.assigneeId === m.userId,
+      );
 
       const byStatus: Record<string, number> = {};
       let overdueCount = 0;
@@ -328,7 +364,9 @@ export class ProjectsService {
     }
 
     if (project.key !== confirmKey) {
-      throw new BadRequestException('Kode proyek tidak sesuai — hapus dibatalkan');
+      throw new BadRequestException(
+        'Kode proyek tidak sesuai — hapus dibatalkan',
+      );
     }
 
     const [deleted] = await this.db

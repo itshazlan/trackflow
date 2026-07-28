@@ -35,7 +35,7 @@ describe('IssuesService - remove', () => {
 
     service = new IssuesService(
       mockDb,
-      mockRealtimeGateway as any,
+      mockRealtimeGateway,
       mockR2Service,
       mockNotificationsService,
       mockDiscordService,
@@ -239,9 +239,59 @@ describe('IssuesService - remove', () => {
 
     it('should throw NotFoundException if issue does not exist on recordView', async () => {
       mockDb.limit.mockResolvedValueOnce([]);
-      await expect(service.recordView('user-1', 'non-existent')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.recordView('user-1', 'non-existent'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getActivity and status history', () => {
+    it('should aggregate comments and status history chronologically', async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 'issue-1', projectId: 'proj-1' },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: 'user-1', isAdmin: true }]);
+
+      const commentsData = [
+        {
+          id: 'comment-1',
+          issueId: 'issue-1',
+          body: 'Hello',
+          createdAt: new Date('2026-07-28T10:00:00Z'),
+          commentAttachments: [],
+        },
+      ];
+
+      const statusHistoryData = [
+        {
+          id: 'hist-1',
+          issueId: 'issue-1',
+          oldStatusName: null,
+          newStatusName: 'Backlog',
+          changedAt: new Date('2026-07-28T09:00:00Z'),
+          changedBy: { id: 'user-1', name: 'User 1' },
+        },
+      ];
+
+      jest
+        .spyOn(service, 'findCommentsForIssue')
+        .mockResolvedValue(commentsData as any);
+      jest
+        .spyOn(service, 'getStatusHistory')
+        .mockResolvedValue(statusHistoryData as any);
+
+      const result = await service.getActivity('issue-1', 'user-1');
+
+      expect(result.activity).toHaveLength(2);
+      expect(result.activity[0]).toEqual({
+        type: 'status_change',
+        ...statusHistoryData[0],
+      });
+      expect(result.activity[1]).toEqual({
+        type: 'comment',
+        ...commentsData[0],
+        attachments: [],
+      });
     });
   });
 });

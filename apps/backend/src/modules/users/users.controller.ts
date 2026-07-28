@@ -46,7 +46,10 @@ export class UsersController {
       limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
       fileFilter: (_req, file, cb) => {
         if (!file.mimetype.startsWith('image/')) {
-          return cb(new BadRequestException('Berkas harus berupa gambar.'), false);
+          return cb(
+            new BadRequestException('Berkas harus berupa gambar.'),
+            false,
+          );
         }
         cb(null, true);
       },
@@ -56,6 +59,10 @@ export class UsersController {
     if (!file) {
       throw new BadRequestException('File tidak ditemukan dalam request.');
     }
-    return this.usersService.uploadAvatar(req.user.id, file.buffer, file.mimetype);
+    return this.usersService.uploadAvatar(
+      req.user.id,
+      file.buffer,
+      file.mimetype,
+    );
   }
 }

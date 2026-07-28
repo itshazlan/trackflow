@@ -38,8 +38,11 @@ export const documents = pgTable(
       .notNull(),
   },
   (table) => [
-    index('documents_project_id_created_at_idx').on(table.projectId, table.createdAt),
-  ]
+    index('documents_project_id_created_at_idx').on(
+      table.projectId,
+      table.createdAt,
+    ),
+  ],
 );
 
 export const documentFiles = pgTable(
@@ -62,6 +65,9 @@ export const documentFiles = pgTable(
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   },
   (table) => [
-    index('document_files_document_id_uploaded_at_idx').on(table.documentId, table.uploadedAt),
-  ]
+    index('document_files_document_id_uploaded_at_idx').on(
+      table.documentId,
+      table.uploadedAt,
+    ),
+  ],
 );

@@ -55,36 +55,40 @@ export const issuePriorityEnum = pgEnum('issue_priority', [
   'urgent',
 ]);
 
-export const issues = pgTable('issues', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id')
-    .notNull()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  trackerId: uuid('tracker_id')
-    .notNull()
-    .references(() => issueTrackers.id, { onDelete: 'cascade' }),
-  statusId: uuid('status_id')
-    .notNull()
-    .references(() => issueStatuses.id, { onDelete: 'cascade' }),
-  title: varchar('title', { length: 255 }).notNull(),
-  description: text('description'),
-  assigneeId: text('assignee_id').references(() => user.id, {
-    onDelete: 'set null',
-  }),
-  priority: issuePriorityEnum('priority').default('medium').notNull(),
-  startDate: date('start_date', { mode: 'string' }),
-  dueDate: date('due_date', { mode: 'string' }),
-  estimatedHours: numeric('estimated_hours', { precision: 5, scale: 2 }),
-  createdBy: text('created_by')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  number: integer('number').notNull(),
-}, (table) => [
-  unique('unique_project_issue_number').on(table.projectId, table.number),
-]);
+export const issues = pgTable(
+  'issues',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    trackerId: uuid('tracker_id')
+      .notNull()
+      .references(() => issueTrackers.id, { onDelete: 'cascade' }),
+    statusId: uuid('status_id')
+      .notNull()
+      .references(() => issueStatuses.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    assigneeId: text('assignee_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    priority: issuePriorityEnum('priority').default('medium').notNull(),
+    startDate: date('start_date', { mode: 'string' }),
+    dueDate: date('due_date', { mode: 'string' }),
+    estimatedHours: numeric('estimated_hours', { precision: 5, scale: 2 }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    number: integer('number').notNull(),
+  },
+  (table) => [
+    unique('unique_project_issue_number').on(table.projectId, table.number),
+  ],
+);
 
 export const issueAttachments = pgTable('issue_attachments', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -153,3 +157,21 @@ export const recentlyViewedIssues = pgTable(
   ],
 );
 
+export const issueStatusHistory = pgTable('issue_status_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  issueId: uuid('issue_id')
+    .notNull()
+    .references(() => issues.id, { onDelete: 'cascade' }),
+  oldStatusId: uuid('old_status_id').references(() => issueStatuses.id, {
+    onDelete: 'set null',
+  }),
+  newStatusId: uuid('new_status_id')
+    .notNull()
+    .references(() => issueStatuses.id, { onDelete: 'cascade' }),
+  changedBy: text('changed_by')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  changedAt: timestamp('changed_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

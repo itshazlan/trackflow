@@ -77,7 +77,9 @@ describe('DiscordService', () => {
         },
       ]);
 
-      global.fetch = jest.fn().mockRejectedValueOnce(new Error('Network error'));
+      global.fetch = jest
+        .fn()
+        .mockRejectedValueOnce(new Error('Network error'));
 
       await expect(
         service.notifyDiscordProjectCreated({

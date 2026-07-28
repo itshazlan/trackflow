@@ -75,10 +75,7 @@ export class UsersService {
     const publicUrl = `/api/uploads/${objectKey}`;
 
     // 3. Only update DB after upload succeeds
-    await this.db
-      .update(user)
-      .set({ image: publicUrl })
-      .where(eq(user.id, id));
+    await this.db.update(user).set({ image: publicUrl }).where(eq(user.id, id));
 
     return { publicUrl };
   }

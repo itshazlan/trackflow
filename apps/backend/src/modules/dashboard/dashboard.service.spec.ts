@@ -57,7 +57,9 @@ describe('DashboardService', () => {
       from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockResolvedValue([{ id: 'block-1', syncedAt: new Date() }]),
+      limit: jest
+        .fn()
+        .mockResolvedValue([{ id: 'block-1', syncedAt: new Date() }]),
     }));
 
     const result = await service.getDashboardSummary('user-123');

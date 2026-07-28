@@ -139,7 +139,9 @@ export class DocumentsService {
       })
       .from(documents)
       .innerJoin(userTable, eq(documents.createdBy, userTable.id))
-      .where(and(eq(documents.id, documentId), eq(documents.projectId, projectId)))
+      .where(
+        and(eq(documents.id, documentId), eq(documents.projectId, projectId)),
+      )
       .limit(1);
 
     if (!doc) {
@@ -217,7 +219,9 @@ export class DocumentsService {
     const [doc] = await this.db
       .select()
       .from(documents)
-      .where(and(eq(documents.id, documentId), eq(documents.projectId, projectId)))
+      .where(
+        and(eq(documents.id, documentId), eq(documents.projectId, projectId)),
+      )
       .limit(1);
 
     if (!doc) {
@@ -235,7 +239,8 @@ export class DocumentsService {
     const updateValues: any = { updatedAt: new Date() };
     if (dto.title !== undefined) updateValues.title = dto.title;
     if (dto.category !== undefined) updateValues.category = dto.category;
-    if (dto.description !== undefined) updateValues.description = dto.description;
+    if (dto.description !== undefined)
+      updateValues.description = dto.description;
 
     const [updated] = await this.db
       .update(documents)
@@ -252,11 +257,18 @@ export class DocumentsService {
     };
   }
 
-  async remove(projectId: string, documentId: string, user: any, projectRole: string) {
+  async remove(
+    projectId: string,
+    documentId: string,
+    user: any,
+    projectRole: string,
+  ) {
     const [doc] = await this.db
       .select()
       .from(documents)
-      .where(and(eq(documents.id, documentId), eq(documents.projectId, projectId)))
+      .where(
+        and(eq(documents.id, documentId), eq(documents.projectId, projectId)),
+      )
       .limit(1);
 
     if (!doc) {
@@ -309,7 +321,9 @@ export class DocumentsService {
     const [doc] = await this.db
       .select()
       .from(documents)
-      .where(and(eq(documents.id, documentId), eq(documents.projectId, projectId)))
+      .where(
+        and(eq(documents.id, documentId), eq(documents.projectId, projectId)),
+      )
       .limit(1);
 
     if (!doc) {
@@ -319,7 +333,10 @@ export class DocumentsService {
     const fileId = randomUUID();
     const objectKey = `project/${projectId}/documents/${documentId}/${fileId}-${dto.fileName}`;
 
-    const uploadUrl = await this.r2Service.getPresignedUploadUrl(objectKey, dto.mimeType);
+    const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+      objectKey,
+      dto.mimeType,
+    );
 
     // Save initial file metadata in database (unconfirmed status)
     await this.db.insert(documentFiles).values({
@@ -349,7 +366,12 @@ export class DocumentsService {
     const [file] = await this.db
       .select()
       .from(documentFiles)
-      .where(and(eq(documentFiles.id, fileId), eq(documentFiles.documentId, documentId)))
+      .where(
+        and(
+          eq(documentFiles.id, fileId),
+          eq(documentFiles.documentId, documentId),
+        ),
+      )
       .limit(1);
 
     if (!file) {
@@ -376,18 +398,29 @@ export class DocumentsService {
     };
   }
 
-  async getFileDownloadUrl(projectId: string, documentId: string, fileId: string) {
+  async getFileDownloadUrl(
+    projectId: string,
+    documentId: string,
+    fileId: string,
+  ) {
     const [file] = await this.db
       .select()
       .from(documentFiles)
-      .where(and(eq(documentFiles.id, fileId), eq(documentFiles.documentId, documentId)))
+      .where(
+        and(
+          eq(documentFiles.id, fileId),
+          eq(documentFiles.documentId, documentId),
+        ),
+      )
       .limit(1);
 
     if (!file || !file.confirmedAt) {
       throw new NotFoundException('File not found or not confirmed yet');
     }
 
-    const downloadUrl = await this.r2Service.getPresignedDownloadUrl(file.r2ObjectKey);
+    const downloadUrl = await this.r2Service.getPresignedDownloadUrl(
+      file.r2ObjectKey,
+    );
     return {
       downloadUrl,
       expiresIn: 900,
@@ -404,7 +437,12 @@ export class DocumentsService {
     const [file] = await this.db
       .select()
       .from(documentFiles)
-      .where(and(eq(documentFiles.id, fileId), eq(documentFiles.documentId, documentId)))
+      .where(
+        and(
+          eq(documentFiles.id, fileId),
+          eq(documentFiles.documentId, documentId),
+        ),
+      )
       .limit(1);
 
     if (!file) {

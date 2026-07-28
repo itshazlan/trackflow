@@ -11,4 +11,3 @@ import { DiscordModule } from '../discord/discord.module';
   exports: [ProjectsService],
 })
 export class ProjectsModule {}
-

@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsUrl, IsArray, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsUrl,
+  IsArray,
+  IsOptional,
+} from 'class-validator';
 
 export class SaveDiscordWebhookDto {
   @IsString()

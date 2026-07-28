@@ -129,7 +129,10 @@ describe('Users Profile (e2e)', () => {
         .expect(200);
 
       // Verify that fields remain unchanged in database
-      const [dbUser] = await db.select().from(user).where(eq(user.id, mockUser.id));
+      const [dbUser] = await db
+        .select()
+        .from(user)
+        .where(eq(user.id, mockUser.id));
       expect(dbUser.employeeId).toBe(mockUser.employeeId);
       expect(dbUser.isAdmin).toBe(false);
       expect(dbUser.employmentStatus).toBe('active');
@@ -145,10 +148,15 @@ describe('Users Profile (e2e)', () => {
         .expect(201);
 
       expect(res.body).toHaveProperty('publicUrl');
-      expect(res.body.publicUrl).toContain(`/api/uploads/avatars/${mockUser.id}.webp`);
+      expect(res.body.publicUrl).toContain(
+        `/api/uploads/avatars/${mockUser.id}.webp`,
+      );
 
       // Verify that user.image has been updated in database
-      const [dbUser] = await db.select().from(user).where(eq(user.id, mockUser.id));
+      const [dbUser] = await db
+        .select()
+        .from(user)
+        .where(eq(user.id, mockUser.id));
       expect(dbUser.image).toBe(res.body.publicUrl);
     });
   });

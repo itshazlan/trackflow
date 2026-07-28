@@ -209,7 +209,7 @@ describe('Projects and Memberships (e2e)', () => {
           members: [
             { userId: mockUsers.developer.id, role: 'developer' },
             { userId: mockUsers.reporter.id, role: 'reporter_qa' },
-          ]
+          ],
         })
         .expect(201);
 
@@ -219,20 +219,28 @@ describe('Projects and Memberships (e2e)', () => {
         .where(eq(projectMemberships.projectId, res.body.id));
 
       expect(memberships).toHaveLength(3);
-      
-      const creatorMem = memberships.find((m: any) => m.userId === mockUsers.manager.id);
+
+      const creatorMem = memberships.find(
+        (m: any) => m.userId === mockUsers.manager.id,
+      );
       expect(creatorMem).toBeDefined();
       expect(creatorMem.role).toBe('manager');
 
-      const devMem = memberships.find((m: any) => m.userId === mockUsers.developer.id);
+      const devMem = memberships.find(
+        (m: any) => m.userId === mockUsers.developer.id,
+      );
       expect(devMem).toBeDefined();
       expect(devMem.role).toBe('developer');
 
-      const repMem = memberships.find((m: any) => m.userId === mockUsers.reporter.id);
+      const repMem = memberships.find(
+        (m: any) => m.userId === mockUsers.reporter.id,
+      );
       expect(repMem).toBeDefined();
       expect(repMem.role).toBe('reporter_qa');
 
-      await db.delete(projectMemberships).where(eq(projectMemberships.projectId, res.body.id));
+      await db
+        .delete(projectMemberships)
+        .where(eq(projectMemberships.projectId, res.body.id));
       await db.delete(projects).where(eq(projects.id, res.body.id));
     });
 
@@ -244,9 +252,7 @@ describe('Projects and Memberships (e2e)', () => {
           name: 'Creator custom role',
           key: 'CUSTOM',
           description: 'Project with creator listed as developer',
-          members: [
-            { userId: mockUsers.manager.id, role: 'developer' },
-          ]
+          members: [{ userId: mockUsers.manager.id, role: 'developer' }],
         })
         .expect(201);
 
@@ -259,7 +265,9 @@ describe('Projects and Memberships (e2e)', () => {
       expect(memberships[0].userId).toBe(mockUsers.manager.id);
       expect(memberships[0].role).toBe('developer');
 
-      await db.delete(projectMemberships).where(eq(projectMemberships.projectId, res.body.id));
+      await db
+        .delete(projectMemberships)
+        .where(eq(projectMemberships.projectId, res.body.id));
       await db.delete(projects).where(eq(projects.id, res.body.id));
     });
 
@@ -274,7 +282,7 @@ describe('Projects and Memberships (e2e)', () => {
           members: [
             { userId: mockUsers.developer.id, role: 'developer' },
             { userId: mockUsers.developer.id, role: 'manager' },
-          ]
+          ],
         })
         .expect(201);
 
@@ -284,12 +292,16 @@ describe('Projects and Memberships (e2e)', () => {
         .where(eq(projectMemberships.projectId, res.body.id));
 
       expect(memberships).toHaveLength(2);
-      
-      const devMems = memberships.filter((m: any) => m.userId === mockUsers.developer.id);
+
+      const devMems = memberships.filter(
+        (m: any) => m.userId === mockUsers.developer.id,
+      );
       expect(devMems).toHaveLength(1);
       expect(devMems[0].role).toBe('developer');
 
-      await db.delete(projectMemberships).where(eq(projectMemberships.projectId, res.body.id));
+      await db
+        .delete(projectMemberships)
+        .where(eq(projectMemberships.projectId, res.body.id));
       await db.delete(projects).where(eq(projects.id, res.body.id));
     });
   });
@@ -529,7 +541,9 @@ describe('Projects and Memberships (e2e)', () => {
       });
 
       afterEach(async () => {
-        await db.delete(projectMemberships).where(eq(projectMemberships.projectId, tempProjectId));
+        await db
+          .delete(projectMemberships)
+          .where(eq(projectMemberships.projectId, tempProjectId));
         await db.delete(projects).where(eq(projects.id, tempProjectId));
       });
 
@@ -564,7 +578,10 @@ describe('Projects and Memberships (e2e)', () => {
           .patch(`/projects/${tempProjectId}`)
           .set('x-mock-user-id', mockUsers.admin.id)
           .set('x-mock-is-admin', 'true')
-          .send({ name: 'Admin Updated Name', description: 'Admin Updated Description' })
+          .send({
+            name: 'Admin Updated Name',
+            description: 'Admin Updated Description',
+          })
           .expect(200);
 
         expect(res.body.name).toBe('Admin Updated Name');

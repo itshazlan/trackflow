@@ -32,9 +32,15 @@ async function bootstrap() {
       res.setHeader('Access-Control-Allow-Origin', origin);
     }
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With');
-    
+    res.setHeader(
+      'Access-Control-Allow-Methods',
+      'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    );
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Accept, Authorization, X-Requested-With',
+    );
+
     if (req.method === 'OPTIONS') {
       return res.status(204).send();
     }
@@ -48,7 +54,7 @@ async function bootstrap() {
       return toNodeHandler(auth)(req, res);
     }
     next();
-  });  // 2. Apply body parsers globally for all subsequent NestJS routes
+  }); // 2. Apply body parsers globally for all subsequent NestJS routes
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -56,21 +62,23 @@ async function bootstrap() {
   expressInstance.put('/mock-r2/:bucket/*key', (req: any, res: any) => {
     const keyParam = req.params.key || req.params[0];
     const key = Array.isArray(keyParam) ? keyParam.join('/') : keyParam;
-    console.log(`[Mock R2 PUT] Upload request received. keyParam: ${JSON.stringify(keyParam)}, key: ${key}`);
+    console.log(
+      `[Mock R2 PUT] Upload request received. keyParam: ${JSON.stringify(keyParam)}, key: ${key}`,
+    );
     const filePath = join(process.cwd(), 'uploads', key);
-    
+
     try {
       // Ensure parent directory exists
       fs.mkdirSync(join(filePath, '..'), { recursive: true });
-      
+
       const writeStream = fs.createWriteStream(filePath);
       req.pipe(writeStream);
-      
+
       writeStream.on('finish', () => {
         console.log(`[Mock R2 PUT] Upload finished successfully: ${filePath}`);
         res.status(200).json({ success: true, path: `/uploads/${key}` });
       });
-      
+
       writeStream.on('error', (err) => {
         console.error('[Mock R2 PUT Error] writeStream error:', err);
         res.status(500).send('Upload failed');
@@ -115,14 +123,15 @@ async function bootstrap() {
             let contentType = 'application/octet-stream';
             if (ext === 'pdf') contentType = 'application/pdf';
             else if (ext === 'png') contentType = 'image/png';
-            else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
+            else if (ext === 'jpg' || ext === 'jpeg')
+              contentType = 'image/jpeg';
             else if (ext === 'webp') contentType = 'image/webp';
             else if (ext === 'gif') contentType = 'image/gif';
             else if (ext === 'svg') contentType = 'image/svg+xml';
             else if (ext === 'txt') contentType = 'text/plain';
 
             res.setHeader('Content-Type', contentType);
-            return (stream as any).pipe(res);
+            return stream.pipe(res);
           }
         }
       } catch (err) {

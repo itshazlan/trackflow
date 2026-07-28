@@ -7,6 +7,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { eq, and, or, asc, desc, sql, inArray } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { randomUUID } from 'crypto';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import {
@@ -17,6 +18,7 @@ import {
   issueComments,
   commentAttachments,
   recentlyViewedIssues,
+  issueStatusHistory,
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
@@ -108,6 +110,14 @@ export class IssuesService {
           number: updatedProject.issueSequence,
         })
         .returning();
+
+      await tx.insert(issueStatusHistory).values({
+        issueId: insertedIssue.id,
+        oldStatusId: null,
+        newStatusId: targetStatusId,
+        changedBy: userId,
+        changedAt: new Date(),
+      });
 
       return {
         ...insertedIssue,
@@ -576,24 +586,78 @@ export class IssuesService {
     delete updatePayload.id;
 
     // 2. Perform Update
-    const [updated] = await this.db
-      .update(issues)
-      .set(updatePayload)
-      .where(and(eq(issues.id, id), eq(issues.projectId, projectId)))
-      .returning();
+    const isStatusChanged =
+      updateIssueDto.statusId &&
+      updateIssueDto.statusId !== existingIssue.statusId;
+    const now = new Date();
+
+    const updated = await this.db.transaction(async (tx: any) => {
+      const [updatedIssue] = await tx
+        .update(issues)
+        .set(updatePayload)
+        .where(and(eq(issues.id, id), eq(issues.projectId, projectId)))
+        .returning();
+
+      if (isStatusChanged) {
+        await tx.insert(issueStatusHistory).values({
+          issueId: id,
+          oldStatusId: existingIssue.statusId,
+          newStatusId: updateIssueDto.statusId,
+          changedBy: userId,
+          changedAt: now,
+        });
+      }
+
+      return updatedIssue;
+    });
 
     if (updated) {
       this.realtimeGateway.emitIssueUpdated(projectId, updated);
 
-      if (
-        updateIssueDto.statusId &&
-        updateIssueDto.statusId !== existingIssue.statusId
-      ) {
+      if (isStatusChanged && updateIssueDto.statusId) {
+        const newStatusId = updateIssueDto.statusId;
+        const [oldStatusObj] = await this.db
+          .select({ name: issueStatuses.name })
+          .from(issueStatuses)
+          .where(eq(issueStatuses.id, existingIssue.statusId))
+          .limit(1);
+
+        const [newStatusObj] = await this.db
+          .select({ name: issueStatuses.name })
+          .from(issueStatuses)
+          .where(eq(issueStatuses.id, newStatusId))
+          .limit(1);
+
+        const [actor] = await this.db
+          .select({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+          })
+          .from(user)
+          .where(eq(user.id, userId))
+          .limit(1);
+
+        this.realtimeGateway.emitStatusChanged(projectId, {
+          issueId: id,
+          type: 'status_change',
+          oldStatusName: oldStatusObj?.name || null,
+          newStatusName: newStatusObj?.name || '',
+          changedBy: actor || {
+            id: userId,
+            name: 'Pengguna',
+            email: '',
+            image: null,
+          },
+          changedAt: now,
+        });
+
         // Fire-and-forget notification to Discord
         this.sendDiscordStatusChangedNotification(
           existingIssue,
           existingIssue.statusId,
-          updateIssueDto.statusId,
+          newStatusId,
           userId,
         );
       }
@@ -661,18 +725,71 @@ export class IssuesService {
     }
 
     const oldStatusId = issue.statusId;
+    const isStatusChanged = oldStatusId !== statusId;
+    const now = new Date();
 
-    // 5. Perform Update
-    const [updated] = await this.db
-      .update(issues)
-      .set({ statusId })
-      .where(eq(issues.id, issueId))
-      .returning();
+    // 5. Perform Update & Insert Status History in Transaction
+    const updated = await this.db.transaction(async (tx: any) => {
+      const [updatedIssue] = await tx
+        .update(issues)
+        .set({ statusId })
+        .where(eq(issues.id, issueId))
+        .returning();
+
+      if (isStatusChanged) {
+        await tx.insert(issueStatusHistory).values({
+          issueId,
+          oldStatusId,
+          newStatusId: statusId,
+          changedBy: userId,
+          changedAt: now,
+        });
+      }
+
+      return updatedIssue;
+    });
 
     if (updated) {
       this.realtimeGateway.emitIssueUpdated(projectId, updated);
 
-      if (oldStatusId !== statusId) {
+      if (isStatusChanged) {
+        const [oldStatusObj] = await this.db
+          .select({ name: issueStatuses.name })
+          .from(issueStatuses)
+          .where(eq(issueStatuses.id, oldStatusId))
+          .limit(1);
+
+        const [newStatusObj] = await this.db
+          .select({ name: issueStatuses.name })
+          .from(issueStatuses)
+          .where(eq(issueStatuses.id, statusId))
+          .limit(1);
+
+        const [actor] = await this.db
+          .select({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+          })
+          .from(user)
+          .where(eq(user.id, userId))
+          .limit(1);
+
+        this.realtimeGateway.emitStatusChanged(projectId, {
+          issueId,
+          type: 'status_change',
+          oldStatusName: oldStatusObj?.name || null,
+          newStatusName: newStatusObj?.name || '',
+          changedBy: actor || {
+            id: userId,
+            name: 'Pengguna',
+            email: '',
+            image: null,
+          },
+          changedAt: now,
+        });
+
         this.sendDiscordStatusChangedNotification(
           issue,
           oldStatusId,
@@ -750,7 +867,8 @@ export class IssuesService {
     }
 
     const isCreator = issue.createdBy === currentUser.id;
-    const isManagerOrAdmin = projectRole === 'manager' || !!currentUser?.isAdmin;
+    const isManagerOrAdmin =
+      projectRole === 'manager' || !!currentUser?.isAdmin;
 
     if (!isCreator && !isManagerOrAdmin) {
       throw new ForbiddenException(
@@ -979,7 +1097,7 @@ export class IssuesService {
       .orderBy(desc(issueComments.createdAt));
 
     const commentIds = allComments.map((c: any) => c.id);
-    let attachmentsMap: Record<string, any[]> = {};
+    const attachmentsMap: Record<string, any[]> = {};
 
     if (commentIds.length > 0) {
       const attachmentsList = await this.db
@@ -1006,7 +1124,10 @@ export class IssuesService {
     createCommentDto: CreateCommentDto,
     userId: string,
   ) {
-    const { issue, currentUser } = await this.getIssueWithMemberAccess(issueId, userId);
+    const { issue, currentUser } = await this.getIssueWithMemberAccess(
+      issueId,
+      userId,
+    );
 
     // Validate parentCommentId guards if provided
     if (createCommentDto.parentCommentId) {
@@ -1127,7 +1248,12 @@ export class IssuesService {
     const [comment] = await this.db
       .select()
       .from(issueComments)
-      .where(and(eq(issueComments.id, commentId), eq(issueComments.issueId, issueId)))
+      .where(
+        and(
+          eq(issueComments.id, commentId),
+          eq(issueComments.issueId, issueId),
+        ),
+      )
       .limit(1);
 
     if (!comment) {
@@ -1173,7 +1299,12 @@ export class IssuesService {
     const [comment] = await this.db
       .select()
       .from(issueComments)
-      .where(and(eq(issueComments.id, commentId), eq(issueComments.issueId, issueId)))
+      .where(
+        and(
+          eq(issueComments.id, commentId),
+          eq(issueComments.issueId, issueId),
+        ),
+      )
       .limit(1);
 
     if (!comment) {
@@ -1215,7 +1346,12 @@ export class IssuesService {
     const [attachment] = await this.db
       .select()
       .from(commentAttachments)
-      .where(and(eq(commentAttachments.id, attachmentId), eq(commentAttachments.commentId, commentId)))
+      .where(
+        and(
+          eq(commentAttachments.id, attachmentId),
+          eq(commentAttachments.commentId, commentId),
+        ),
+      )
       .limit(1);
 
     if (!attachment) {
@@ -1224,7 +1360,9 @@ export class IssuesService {
       );
     }
 
-    const downloadUrl = await this.r2Service.getPresignedDownloadUrl(attachment.r2ObjectKey);
+    const downloadUrl = await this.r2Service.getPresignedDownloadUrl(
+      attachment.r2ObjectKey,
+    );
 
     return {
       downloadUrl,
@@ -1238,7 +1376,12 @@ export class IssuesService {
     createImageDto: CreateCommentImageDto,
     userId: string,
   ) {
-    return this.createCommentAttachmentPresignedUrl(issueId, commentId, createImageDto, userId);
+    return this.createCommentAttachmentPresignedUrl(
+      issueId,
+      commentId,
+      createImageDto,
+      userId,
+    );
   }
 
   async confirmCommentImageUpload(
@@ -1248,7 +1391,13 @@ export class IssuesService {
     confirmDto: ConfirmCommentImageDto,
     userId: string,
   ) {
-    return this.confirmCommentAttachmentUpload(issueId, commentId, imageId, confirmDto, userId);
+    return this.confirmCommentAttachmentUpload(
+      issueId,
+      commentId,
+      imageId,
+      confirmDto,
+      userId,
+    );
   }
 
   async updateComment(
@@ -1342,5 +1491,62 @@ export class IssuesService {
     await this.db.delete(issueComments).where(eq(issueComments.id, commentId));
 
     return { success: true };
+  }
+
+  async getStatusHistory(issueId: string) {
+    const oldStatus = alias(issueStatuses, 'oldStatus');
+    const newStatus = alias(issueStatuses, 'newStatus');
+
+    const history = await this.db
+      .select({
+        id: issueStatusHistory.id,
+        issueId: issueStatusHistory.issueId,
+        oldStatusId: issueStatusHistory.oldStatusId,
+        oldStatusName: oldStatus.name,
+        newStatusId: issueStatusHistory.newStatusId,
+        newStatusName: newStatus.name,
+        changedAt: issueStatusHistory.changedAt,
+        changedBy: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        },
+      })
+      .from(issueStatusHistory)
+      .leftJoin(oldStatus, eq(issueStatusHistory.oldStatusId, oldStatus.id))
+      .innerJoin(newStatus, eq(issueStatusHistory.newStatusId, newStatus.id))
+      .innerJoin(user, eq(issueStatusHistory.changedBy, user.id))
+      .where(eq(issueStatusHistory.issueId, issueId))
+      .orderBy(asc(issueStatusHistory.changedAt));
+
+    return history;
+  }
+
+  async getActivity(issueId: string, userId: string) {
+    await this.getIssueWithMemberAccess(issueId, userId);
+
+    const [comments, statusChanges] = await Promise.all([
+      this.findCommentsForIssue(issueId, userId),
+      this.getStatusHistory(issueId),
+    ]);
+
+    const activity = [
+      ...comments.map((c: any) => ({
+        type: 'comment',
+        ...c,
+        attachments: c.commentAttachments || [],
+      })),
+      ...statusChanges.map((s: any) => ({
+        type: 'status_change',
+        ...s,
+      })),
+    ].sort(
+      (a: any, b: any) =>
+        new Date(a.createdAt ?? a.changedAt).getTime() -
+        new Date(b.createdAt ?? b.changedAt).getTime(),
+    );
+
+    return { activity };
   }
 }

@@ -63,7 +63,13 @@ export class DocumentsController {
     @Body() dto: UpdateContainerDto,
     @Req() req: any,
   ) {
-    return this.documentsService.update(projectId, documentId, dto, req.user, req.projectRole);
+    return this.documentsService.update(
+      projectId,
+      documentId,
+      dto,
+      req.user,
+      req.projectRole,
+    );
   }
 
   // 5. DELETE /projects/:projectId/documents/:documentId (Delete container + R2 objects cascade)
@@ -73,7 +79,12 @@ export class DocumentsController {
     @Param('documentId') documentId: string,
     @Req() req: any,
   ) {
-    return this.documentsService.remove(projectId, documentId, req.user, req.projectRole);
+    return this.documentsService.remove(
+      projectId,
+      documentId,
+      req.user,
+      req.projectRole,
+    );
   }
 
   // 6. POST /projects/:projectId/documents/:documentId/files (Request pre-signed upload URL)
@@ -84,7 +95,12 @@ export class DocumentsController {
     @Body() dto: RequestFileUploadDto,
     @Req() req: any,
   ) {
-    return this.documentsService.requestFileUpload(projectId, documentId, dto, req.user);
+    return this.documentsService.requestFileUpload(
+      projectId,
+      documentId,
+      dto,
+      req.user,
+    );
   }
 
   // 7. POST /projects/:projectId/documents/:documentId/files/:fileId/confirm (Confirm file upload)
@@ -96,7 +112,12 @@ export class DocumentsController {
     @Param('fileId') fileId: string,
     @Req() req: any,
   ) {
-    return this.documentsService.confirmFileUpload(projectId, documentId, fileId, req.user);
+    return this.documentsService.confirmFileUpload(
+      projectId,
+      documentId,
+      fileId,
+      req.user,
+    );
   }
 
   // 8. GET /projects/:projectId/documents/:documentId/files/:fileId/download (Get download URL)
@@ -106,7 +127,11 @@ export class DocumentsController {
     @Param('documentId') documentId: string,
     @Param('fileId') fileId: string,
   ) {
-    return this.documentsService.getFileDownloadUrl(projectId, documentId, fileId);
+    return this.documentsService.getFileDownloadUrl(
+      projectId,
+      documentId,
+      fileId,
+    );
   }
 
   // 9. DELETE /projects/:projectId/documents/:documentId/files/:fileId (Delete single file + R2 object)
@@ -117,6 +142,12 @@ export class DocumentsController {
     @Param('fileId') fileId: string,
     @Req() req: any,
   ) {
-    return this.documentsService.removeFile(projectId, documentId, fileId, req.user, req.projectRole);
+    return this.documentsService.removeFile(
+      projectId,
+      documentId,
+      fileId,
+      req.user,
+      req.projectRole,
+    );
   }
 }

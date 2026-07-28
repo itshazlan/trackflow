@@ -78,7 +78,6 @@ export class MembershipsService {
     return newMembership;
   }
 
-
   async getMembers(projectId: string) {
     return this.db
       .select({

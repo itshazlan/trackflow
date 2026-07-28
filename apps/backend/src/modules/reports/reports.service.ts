@@ -84,10 +84,18 @@ export class ReportsService {
         userUsername: user.username,
         userAvatar: user.image,
         totalMinutes: sql<number>`COALESCE(SUM(EXTRACT(EPOCH FROM (${timeBlocks.blockEnd} - ${timeBlocks.blockStart})) / 60), 0)::int`,
-        none: count(sql`CASE WHEN ${activityLogs.activityLevel} = 'none' THEN 1 END`),
-        low: count(sql`CASE WHEN ${activityLogs.activityLevel} = 'low' THEN 1 END`),
-        medium: count(sql`CASE WHEN ${activityLogs.activityLevel} = 'medium' THEN 1 END`),
-        high: count(sql`CASE WHEN ${activityLogs.activityLevel} = 'high' THEN 1 END`),
+        none: count(
+          sql`CASE WHEN ${activityLogs.activityLevel} = 'none' THEN 1 END`,
+        ),
+        low: count(
+          sql`CASE WHEN ${activityLogs.activityLevel} = 'low' THEN 1 END`,
+        ),
+        medium: count(
+          sql`CASE WHEN ${activityLogs.activityLevel} = 'medium' THEN 1 END`,
+        ),
+        high: count(
+          sql`CASE WHEN ${activityLogs.activityLevel} = 'high' THEN 1 END`,
+        ),
         totalBlocks: count(),
       })
       .from(timeBlocks)
@@ -217,7 +225,11 @@ export class ReportsService {
         date: this.formatDateString(new Date(b.blockStart)),
         user: `${b.userName} (${b.userEmail})`,
         project: b.projectName,
-        issue: b.issueTitle ? b.issueTitle : (b.note ? `Activity: ${b.note}` : 'Activity'),
+        issue: b.issueTitle
+          ? b.issueTitle
+          : b.note
+            ? `Activity: ${b.note}`
+            : 'Activity',
         type: 'Automatic',
         durationMins: minutes,
         status: b.isPaid ? 'Paid' : 'Unpaid',
@@ -230,7 +242,11 @@ export class ReportsService {
         date: m.entryDate,
         user: `${m.userName} (${m.userEmail})`,
         project: m.projectName,
-        issue: m.issueTitle ? m.issueTitle : (m.description ? `Activity: ${m.description}` : 'Activity'),
+        issue: m.issueTitle
+          ? m.issueTitle
+          : m.description
+            ? `Activity: ${m.description}`
+            : 'Activity',
         type: 'Manual',
         durationMins: m.durationMinutes,
         status: m.approvalStatus.toUpperCase(),

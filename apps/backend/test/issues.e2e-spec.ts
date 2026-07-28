@@ -248,7 +248,8 @@ describe('Issues and Workflow Statuses (e2e)', () => {
         .send({
           trackerId: bugTrackerId,
           title: '[BUG] Authentication - Crash on login',
-          description: 'Role User: Reporter\nCurrent Condition: App crash\nEnvironment: Staging iOS App',
+          description:
+            'Role User: Reporter\nCurrent Condition: App crash\nEnvironment: Staging iOS App',
         })
         .expect(201);
 
@@ -449,7 +450,7 @@ describe('Issues and Workflow Statuses (e2e)', () => {
       expect(res.body.author.id).toBe(mockUsers.developer.id);
       expect(res.body.author.name).toBe(mockUsers.developer.name);
       expect(res.body.updatedAt).toBeNull();
-      
+
       commentId = res.body.id;
     });
 

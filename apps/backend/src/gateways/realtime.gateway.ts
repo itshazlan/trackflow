@@ -87,6 +87,26 @@ export class RealtimeGateway
     this.server.emit('issue.comment_created', payload);
   }
 
+  emitStatusChanged(
+    projectId: string,
+    payload: {
+      issueId: string;
+      type: 'status_change';
+      oldStatusName: string | null;
+      newStatusName: string;
+      changedBy: any;
+      changedAt: Date | string;
+    },
+  ) {
+    this.server
+      .to(`project:${projectId}`)
+      .emit('issue.status_changed', payload);
+    this.server.to(`project:${projectId}`).emit('status_change', payload);
+    // Also emit globally
+    this.server.emit('issue.status_changed', payload);
+    this.server.emit('status_change', payload);
+  }
+
   emitTimeBlockSynced(userId: string, projectId: string, payload: any) {
     this.server.to(`project:${projectId}`).emit('timeblock.synced', payload);
     this.server.to(`user:${userId}`).emit('timeblock.synced', payload);

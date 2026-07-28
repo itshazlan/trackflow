@@ -146,7 +146,9 @@ export class AdminService {
 
   async hardDelete(userId: string, force: boolean) {
     if (!force) {
-      throw new BadRequestException('Gunakan deactivate() untuk penghapusan standar');
+      throw new BadRequestException(
+        'Gunakan deactivate() untuk penghapusan standar',
+      );
     }
 
     const [issueCount] = await this.db
@@ -164,7 +166,10 @@ export class AdminService {
       .from(issueComments)
       .where(eq(issueComments.authorId, userId));
 
-    const totalHistory = (issueCount?.count || 0) + (timeBlockCount?.count || 0) + (commentCount?.count || 0);
+    const totalHistory =
+      (issueCount?.count || 0) +
+      (timeBlockCount?.count || 0) +
+      (commentCount?.count || 0);
 
     if (totalHistory > 0) {
       throw new BadRequestException(

@@ -642,6 +642,47 @@ export async function getIssueComments(issueId: string): Promise<IssueComment[]>
   return res.json();
 }
 
+export interface StatusChangeActivityItem {
+  type: 'status_change';
+  id: string;
+  issueId: string;
+  oldStatusId: string | null;
+  oldStatusName: string | null;
+  newStatusId: string;
+  newStatusName: string;
+  changedBy: {
+    id: string;
+    name: string;
+    email: string;
+    image?: string | null;
+  };
+  changedAt: string;
+}
+
+export interface CommentActivityItem extends IssueComment {
+  type: 'comment';
+  attachments?: CommentAttachment[];
+}
+
+export type ActivityItem = CommentActivityItem | StatusChangeActivityItem;
+
+export async function getIssueActivity(issueId: string): Promise<ActivityItem[]> {
+  const res = await fetch(`/api/issues/${issueId}/activity`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Failed to fetch issue activity");
+  }
+
+  const data = await res.json();
+  return data.activity || [];
+}
+
 export async function createIssueComment(
   issueId: string,
   body: string,

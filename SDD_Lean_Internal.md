@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.5 (Lean Internal) |
+| **Versi Dokumen** | 3.6 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: kolom `issue_statuses.is_final`; tabel `recently_viewed_issues`; endpoint Dashboard Summary, Recently Viewed, Project Progress, Workload Overview, Activity Ranking) |
+| **Tanggal** | 14 Juli 2026 (revisi: tabel `issue_status_history` immutable, endpoint agregasi `/issues/:id/activity` menggabung komentar + log status, event realtime `issue.status_logged`) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -241,6 +241,8 @@ erDiagram
     USERS ||--o{ ISSUE_COMMENTS : authors
     ISSUE_COMMENTS ||--o{ ISSUE_COMMENTS : "replies to"
     ISSUE_COMMENTS ||--o{ COMMENT_ATTACHMENTS : has
+    ISSUES ||--o{ ISSUE_STATUS_HISTORY : "logged in"
+    ISSUE_STATUSES ||--o{ ISSUE_STATUS_HISTORY : "referenced by"
     USERS ||--o{ TIME_BLOCKS : logs
     ISSUES ||--o{ TIME_BLOCKS : "tracked against"
     TIME_BLOCKS ||--o| SCREENSHOTS : has
@@ -477,6 +479,18 @@ erDiagram
 
 > **Keputusan scope:** hapus attachment individual tidak disediakan endpoint terpisah — attachment ikut terhapus (cascade) hanya saat komentar induknya dihapus.
 
+#### `issue_status_history` (Log Perubahan Status — Immutable)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| issue_id | uuid (FK → issues, `onDelete: cascade`) | |
+| old_status_id | uuid (FK → issue_statuses, nullable) | `NULL` = ini transisi pertama saat issue dibuat (belum ada status sebelumnya) |
+| new_status_id | uuid (FK → issue_statuses) | |
+| changed_by | uuid (FK → users) | |
+| changed_at | timestamptz | |
+
+> **Immutable by design (FR-029c):** tabel ini **tidak punya endpoint PATCH/DELETE sama sekali** — tidak untuk penulis, tidak untuk Admin. Ini murni audit trail perubahan status, berbeda dari `issue_comments` yang bisa diedit/dihapus. Diisi otomatis oleh service `updateIssueStatus()` yang sama dipakai List/Kanban/Tugas Saya — satu titik trigger, bukan diduplikasi di tiap tempat.
+
 #### `time_blocks`
 > Tabel PostgreSQL biasa dengan composite index `(user_id, block_start)` dan `(project_id, block_start)`.
 
@@ -628,10 +642,11 @@ erDiagram
 | Issues | `/issues/:id` | GET/PATCH | Detail & edit tiket — edit oleh Assignee, Manager proyek terkait, atau Admin (FR-026) |
 | Issues | `/issues/:id` | DELETE | Hapus tiket — **guard lebih ketat dari edit**: hanya pembuat tiket (`createdBy === currentUser`, peran apapun), Manager proyek terkait, atau Admin. Assignee yang bukan pembuat **ditolak** (403) (FR-026a). `time_blocks.issue_id` milik tiket yang dihapus di-set `NULL` (jadi kategori "Activity"), **bukan** ikut dihapus — data payroll tetap utuh |
 | Issues | `/issues/mine?view=list\|kanban\|calendar` | GET | **Baru** — agregasi tiket assigned ke user saat ini lintas semua proyek yang diikuti. Response dikelompokkan per proyek (`list`/`kanban`) atau flat lintas-proyek (`calendar`) — lihat §10.17 untuk struktur detail (FR-120–125) |
-| Issues | `/issues/:id/status` | PATCH | Ubah status (dicek terhadap `restricted_to_role`) |
+| Issues | `/issues/:id/status` | PATCH | Ubah status (dicek terhadap `restricted_to_role`) — **otomatis mencatat baris ke `issue_status_history`** dalam transaksi yang sama (FR-029c) |
 | Issue Attachments | `/issues/:id/attachments` | GET/POST | List & upload lampiran (presigned URL R2) |
 | Issue Attachments | `/issues/:id/attachments/:attachmentId` | DELETE | Hapus lampiran (uploader atau Admin) |
 | Issue Comments | `/issues/:id/comments` | GET/POST | List & tambah komentar — **anggota proyek peran manapun** boleh akses. Body POST: `{ body, parentCommentId? }` — kalau `parentCommentId` diisi, backend validasi comment tersebut milik issue yang sama **dan** `parent_comment_id`-nya sendiri `NULL` (cegah reply-ke-reply, FR-029b) |
+| Issue Activity | `/issues/:id/activity` | GET | **Baru** — agregasi komentar (`issue_comments`) + log status (`issue_status_history`) dalam satu response, diurutkan kronologis. Dipakai frontend untuk render panel Aktivitas penuh (menggantikan pemakaian langsung endpoint `/comments` di UI) — lihat §10.19 |
 | Issue Comments | `/issues/:id/comments/:commentId` | PATCH/DELETE | Edit (penulis saja) / Hapus (penulis atau Admin untuk moderasi) |
 | Comment Attachments | `/issues/:id/comments/:commentId/attachments` | POST | Presigned upload URL untuk lampiran (file apa saja). Body: `{ fileName, mimeType, fileSizeBytes }` — validasi hanya `fileSizeBytes <= 50MB`, **tidak** membatasi `mimeType` tertentu (FR-029a) |
 | Comment Attachments | `/issues/:id/comments/:commentId/attachments/:attachmentId/confirm` | POST | Konfirmasi upload lampiran selesai |
@@ -750,6 +765,7 @@ POST /time-blocks/sync
 | `timesheet.approved` | Server → Web | `{timesheetId, status}` | Notifikasi ke Developer |
 | `timeblock.overridden` | Server → Web | `{timeBlockId, actorId, targetUserId, action, reason}` | Notifikasi ke pekerja terdampak saat Admin override |
 | `issue.comment_created` | Server → Web | `{issueId, commentId, authorId, bodyPreview, parentCommentId, hasImages}` | Update panel Aktivitas/Komentar secara realtime tanpa refresh — `parentCommentId` dipakai frontend untuk menyisipkan reply ke bawah komentar induk yang tepat, bukan di akhir list |
+| `issue.status_logged` | Server → Web | `{issueId, oldStatusName, newStatusName, changedBy, changedAt}` | Baris log status baru muncul realtime di panel Aktivitas siapapun yang sedang membuka issue tersebut, terlepas dari tampilan mana yang memicu perubahan (List/Kanban/Tugas Saya) |
 | `notification.created` | Server → Web | `{id, type, title, body, entityType, entityId}` | Notifikasi baru (FR-100–104) — dikirim **hanya ke room pribadi penerima** (`user:{userId}`), bukan broadcast ke semua |
 
 **Room per-user untuk notifikasi:** setiap koneksi Socket.io otomatis `socket.join('user:' + userId)` saat connect (identitas dari sesi Better Auth). Event `notification.created` di-emit ke room spesifik ini — memastikan notifikasi hanya sampai ke penerima yang dituju, bukan seluruh pengguna yang sedang online.
@@ -1286,6 +1302,35 @@ sequenceDiagram
     A-->>M: Daftar user terurut activityScore DESC
 ```
 
+### 10.19 Alur Log Perubahan Status Tergabung di Issue Activity (Immutable)
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer (dari Kanban/List/Tugas Saya)
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant WS as Socket.io Gateway
+    participant QA as QA (via WS, sedang buka panel Aktivitas)
+
+    Dev->>A: PATCH /issues/:id/status {statusId: newStatusId}
+    A->>A: Validasi restricted_to_role (§10.3/§10.10) — TIDAK BERUBAH dari sebelumnya
+    A->>PG: BEGIN TRANSACTION
+    A->>PG: UPDATE issues SET status_id=newStatusId
+    A->>PG: INSERT issue_status_history (old_status_id, new_status_id, changed_by, changed_at)
+    A->>PG: COMMIT
+    A-->>Dev: 200 OK
+    A->>WS: emit issue.status_logged {oldStatusName, newStatusName, changedBy, changedAt}
+    WS->>QA: Baris log realtime tersisip di panel Aktivitas, kronologis di antara komentar yang ada
+
+    Note over QA: Kapan saja setelahnya
+    QA->>A: GET /issues/:id/activity
+    A->>PG: Query issue_comments + issue_status_history untuk issue ini
+    A->>A: Gabung kedua hasil, urutkan berdasarkan created_at/changed_at
+    A-->>QA: [{ type: comment, ... }, { type: status_change, ... }, ...] — kronologis
+
+    Note over A: Tidak ada endpoint PATCH/DELETE untuk issue_status_history — permanen untuk siapapun, termasuk Admin
+```
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -1308,6 +1353,7 @@ sequenceDiagram
 | Kredensial webhook eksternal | URL Discord Webhook diperlakukan sebagai kredensial sensitif — tidak pernah dikembalikan utuh ke frontend setelah tersimpan (FR-114), guard endpoint dibatasi Admin (app-level) / Manager-Admin (project-level) |
 | Guard hapus vs edit tiket sengaja dibedakan | Edit (FR-026) melibatkan Assignee karena bersifat reversibel; Hapus (FR-026a) dibatasi ke pembuat/Manager/Admin karena bersifat destruktif — assignee yang bukan pembuat tidak boleh menghapus tiket yang bukan miliknya |
 | Data komparatif antar-karyawan (Workload Overview, Activity Ranking) | Dibatasi ketat: Manager hanya bisa lihat proyek yang dia kelola sendiri (bukan lintas semua proyek), Admin baru bisa lihat lintas proyek. Developer/QA/Reporter tidak punya akses ke kedua fitur ini sama sekali — mencegah kesalahpahaman "semua orang bisa lihat skor semua orang" |
+| Integritas audit trail status tiket | `issue_status_history` sengaja tidak memiliki endpoint PATCH/DELETE sama sekali (FR-029c) — berbeda dari `issue_comments` yang bisa diedit/dihapus penulis/Admin. Ini memastikan riwayat perubahan status tidak bisa dimanipulasi oleh siapapun, termasuk Admin |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
 ---

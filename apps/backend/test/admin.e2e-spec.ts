@@ -41,7 +41,12 @@ import { DRIZZLE } from './../src/db/drizzle.provider';
 import { user, session, account } from './../src/db/schema/auth';
 import { appSettings } from './../src/db/schema/settings';
 import { projects } from './../src/db/schema/projects';
-import { issues, issueComments, issueTrackers, issueStatuses } from './../src/db/schema/issues';
+import {
+  issues,
+  issueComments,
+  issueTrackers,
+  issueStatuses,
+} from './../src/db/schema/issues';
 import { timeBlocks } from './../src/db/schema/time-tracking';
 import { AuthGuard } from './../src/common/guards/auth.guard';
 import { eq, or } from 'drizzle-orm';
@@ -304,8 +309,17 @@ describe('Administration (e2e)', () => {
 
       afterEach(async () => {
         await db.delete(timeBlocks).where(eq(timeBlocks.userId, testUserId));
-        await db.delete(issueComments).where(eq(issueComments.authorId, testUserId));
-        await db.delete(issues).where(or(eq(issues.createdBy, testUserId), eq(issues.assigneeId, testUserId)));
+        await db
+          .delete(issueComments)
+          .where(eq(issueComments.authorId, testUserId));
+        await db
+          .delete(issues)
+          .where(
+            or(
+              eq(issues.createdBy, testUserId),
+              eq(issues.assigneeId, testUserId),
+            ),
+          );
         await db.delete(session).where(eq(session.userId, testUserId));
         await db.delete(account).where(eq(account.userId, testUserId));
         await db.delete(user).where(eq(user.id, testUserId));
@@ -327,7 +341,10 @@ describe('Administration (e2e)', () => {
 
         expect(res.body.employmentStatus).toBe('inactive');
 
-        const sessions = await db.select().from(session).where(eq(session.userId, testUserId));
+        const sessions = await db
+          .select()
+          .from(session)
+          .where(eq(session.userId, testUserId));
         expect(sessions.length).toBe(0);
       });
 
@@ -348,7 +365,10 @@ describe('Administration (e2e)', () => {
 
         expect(res.body.success).toBe(true);
 
-        const users = await db.select().from(user).where(eq(user.id, testUserId));
+        const users = await db
+          .select()
+          .from(user)
+          .where(eq(user.id, testUserId));
         expect(users.length).toBe(0);
       });
 
@@ -359,15 +379,26 @@ describe('Administration (e2e)', () => {
         const issueId = '5f3d1c1a-2b3b-4c5c-8d9e-0f1a2b3c4d5e';
 
         await db.delete(timeBlocks).where(eq(timeBlocks.userId, testUserId));
-        await db.delete(issueComments).where(eq(issueComments.authorId, testUserId));
+        await db
+          .delete(issueComments)
+          .where(eq(issueComments.authorId, testUserId));
         await db.delete(issues).where(eq(issues.id, issueId));
         await db.delete(issueStatuses).where(eq(issueStatuses.id, statusId));
         await db.delete(projects).where(eq(projects.id, projectId));
         await db.delete(issueTrackers).where(eq(issueTrackers.id, trackerId));
 
-        await db.insert(issueTrackers).values({ id: trackerId, name: `Del Tracker ${Date.now()}` });
-        await db.insert(projects).values({ id: projectId, name: 'Del Project', key: 'DEL', createdBy: mockUsers.admin.id });
-        await db.insert(issueStatuses).values({ id: statusId, projectId, name: 'Backlog', orderIndex: 0 });
+        await db
+          .insert(issueTrackers)
+          .values({ id: trackerId, name: `Del Tracker ${Date.now()}` });
+        await db.insert(projects).values({
+          id: projectId,
+          name: 'Del Project',
+          key: 'DEL',
+          createdBy: mockUsers.admin.id,
+        });
+        await db
+          .insert(issueStatuses)
+          .values({ id: statusId, projectId, name: 'Backlog', orderIndex: 0 });
         await db.insert(issues).values({
           id: issueId,
           projectId,

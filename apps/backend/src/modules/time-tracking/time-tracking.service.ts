@@ -388,7 +388,8 @@ export class TimeTrackingService {
           .where(eq(user.id, actorId))
           .limit(1);
 
-        const actionText = action === 'delete' ? 'dihapus' : 'ditandai tidak dibayar';
+        const actionText =
+          action === 'delete' ? 'dihapus' : 'ditandai tidak dibayar';
         await this.notificationsService.createNotification({
           userId: existing.userId,
           type: 'timeblock_overridden',
