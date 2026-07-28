@@ -53,11 +53,19 @@ describe('DashboardService', () => {
       where: jest.fn().mockResolvedValue(mockOverdueIssues),
     }));
 
+    mockDb.select.mockImplementationOnce(() => ({
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue([{ id: 'block-1', syncedAt: new Date() }]),
+    }));
+
     const result = await service.getDashboardSummary('user-123');
 
     expect(result).toHaveProperty('todayMinutes');
     expect(result).toHaveProperty('overdueCount', 2);
-    expect(result).toHaveProperty('activeTimerStatus', null);
+    expect(result).toHaveProperty('activeTimerStatus');
+    expect(result.activeTimerStatus?.isTracking).toBe(true);
     expect(result.todayMinutes).toBeGreaterThanOrEqual(59);
   });
 });

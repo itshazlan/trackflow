@@ -354,6 +354,16 @@ export class DiscordService {
 
       const baseUrl = this.getAppBaseUrl();
 
+      const maxLen = 150;
+      let shortDesc = issue.description
+        ? issue.description.replace(/\s+/g, ' ').trim()
+        : '';
+      if (shortDesc.length > maxLen) {
+        shortDesc =
+          shortDesc.substring(0, maxLen) +
+          '... *(lihat selengkapnya di TrackFlow)*';
+      }
+
       await fetch(webhook.webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -361,7 +371,7 @@ export class DiscordService {
           embeds: [
             {
               title: `📌 Issue Baru: [${project.key}-${issue.number}] ${issue.title}`,
-              description: issue.description || 'Tidak ada deskripsi',
+              description: shortDesc || 'Tidak ada deskripsi',
               color: 0x4f46e5,
               url: `${baseUrl}/projects/${project.id}/issues/${issue.id}`,
             },

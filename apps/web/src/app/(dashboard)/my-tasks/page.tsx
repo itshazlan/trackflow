@@ -378,7 +378,7 @@ function MyTasksContent() {
   );
 
   return (
-    <div className="flex flex-col h-full w-full max-w-[1400px] mx-auto p-6 gap-6">
+    <div className="flex flex-col h-full w-full max-w-[1400px] mx-auto p-6 gap-6 pb-16">
       {/* Header & View Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div>

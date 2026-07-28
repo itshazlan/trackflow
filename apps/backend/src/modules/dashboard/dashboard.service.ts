@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, gte, lte, lt } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, desc } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { timeBlocks } from '../../db/schema/time-tracking';
 import { issues, issueStatuses } from '../../db/schema/issues';
@@ -73,8 +73,30 @@ export class DashboardService {
 
     const overdueCount = overdueList.length;
 
-    // 3. Active timer status (optional)
-    const activeTimerStatus = null;
+    // 3. Active timer status (desktop client tracker sync within last 15 minutes)
+    const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
+
+    const [latestBlock] = await this.db
+      .select({
+        id: timeBlocks.id,
+        syncedAt: timeBlocks.syncedAt,
+        blockEnd: timeBlocks.blockEnd,
+      })
+      .from(timeBlocks)
+      .where(
+        and(
+          eq(timeBlocks.userId, userId),
+          eq(timeBlocks.isDeleted, false),
+          gte(timeBlocks.syncedAt, fifteenMinsAgo),
+        ),
+      )
+      .orderBy(desc(timeBlocks.syncedAt))
+      .limit(1);
+
+    const activeTimerStatus = {
+      isTracking: !!latestBlock,
+      lastActiveAt: latestBlock ? latestBlock.syncedAt : null,
+    };
 
     return {
       todayMinutes,
