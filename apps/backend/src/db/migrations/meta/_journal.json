@@ -127,6 +127,41 @@
       "when": 1784567606165,
       "tag": "0017_lovely_marvex",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784568000000,
+      "tag": "0018_comment_images_and_replies",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784569000000,
+      "tag": "0019_discord_webhooks",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784570000000,
+      "tag": "0020_add_is_final_to_issue_statuses",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784571000000,
+      "tag": "0021_issue_status_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784572000000,
+      "tag": "0022_push_subscriptions",
+      "breakpoints": true
     }
   ]
 }
