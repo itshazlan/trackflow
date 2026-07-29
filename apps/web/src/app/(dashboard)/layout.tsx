@@ -48,8 +48,9 @@ import {
   FolderOpen,
   ListTodo,
   LayoutDashboard,
-  Trophy,
+  Activity,
 } from "lucide-react";
+
 
 export default function DashboardLayout({
   children,
@@ -192,12 +193,13 @@ export default function DashboardLayout({
       ? [
           {
             id: "activity-ranking",
-            label: "Peringkat Aktivitas",
-            icon: Trophy,
+            label: "Live Status User",
+            icon: Activity,
             href: "/reports/activity-ranking",
           },
         ]
       : []),
+
     {
       id: "settings",
       label: "Settings",
