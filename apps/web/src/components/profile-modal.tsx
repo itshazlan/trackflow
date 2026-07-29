@@ -404,9 +404,10 @@ export default function ProfileModal({ open, onOpenChange, onSuccess }: ProfileM
               )}
               {pushPermission === "denied" && (
                 <p className="text-[10.5px] text-destructive leading-normal pt-1 border-t border-border/50">
-                  Izin notifikasi diblokir oleh browser. Harap izinkan notifikasi di pengaturan browser Anda.
+                  Notifikasi diblokir di browser Anda. Aktifkan lewat pengaturan situs browser untuk mengubahnya.
                 </p>
               )}
+
             </div>
 
             {/* Read-only Employment Section (FR-006 / FR-007) */}

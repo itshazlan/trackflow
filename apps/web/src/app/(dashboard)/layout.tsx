@@ -10,6 +10,8 @@ import ProjectSwitcher from "@/components/project/project-switcher";
 import ProfileModal from "@/components/profile-modal";
 import NotificationBell from "@/components/notification-bell";
 import RecentlyViewedMenu from "@/components/recently-viewed-menu";
+import { PushNotificationBanner } from "@/components/push-notification-banner";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -528,6 +530,10 @@ export default function DashboardLayout({
         onOpenChange={setIsProfileOpen}
         onSuccess={reloadSession}
       />
+
+      {/* Web Push Soft Prompt Banner */}
+      <PushNotificationBanner />
     </div>
   );
 }
+

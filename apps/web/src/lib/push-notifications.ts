@@ -44,14 +44,14 @@ export async function getPushSubscriptionState(): Promise<{
   };
 }
 
-export async function enablePushNotifications(): Promise<PushSubscription> {
+export async function enablePushNotifications(): Promise<boolean> {
   if (!(await isPushSupported())) {
-    throw new Error('Web Push Notification tidak didukung oleh browser ini.');
+    return false;
   }
 
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    throw new Error('Izin notifikasi ditolak oleh pengguna atau browser.');
+    return false;
   }
 
   // Get VAPID public key
@@ -92,7 +92,7 @@ export async function enablePushNotifications(): Promise<PushSubscription> {
   } catch (err: any) {
     console.error('[Web Push Subscribe Error]:', err);
     if (err.name === 'NotAllowedError') {
-      throw new Error('Izin notifikasi ditolak oleh browser.');
+      return false;
     }
 
     const isBrave =
@@ -122,8 +122,9 @@ export async function enablePushNotifications(): Promise<PushSubscription> {
     throw new Error('Gagal menyimpan subscription ke backend.');
   }
 
-  return subscription;
+  return true;
 }
+
 
 
 
