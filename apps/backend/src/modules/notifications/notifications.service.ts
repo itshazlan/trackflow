@@ -3,17 +3,22 @@ import {
   Inject,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { notifications } from '../../db/schema/notifications';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
+import { PushService } from '../push/push.service';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly pushService: PushService,
   ) {}
 
   async createNotification(payload: {
@@ -46,10 +51,18 @@ export class NotificationsService {
       this.realtimeGateway.server
         .to(`user:${payload.userId}`)
         .emit('notification.created', newNotification);
+
+      // BARU — kirim juga sebagai push, best-effort (fire-and-forget, sama prinsip dengan Discord)
+      this.pushService
+        .sendPushToUser(payload.userId, newNotification)
+        .catch((err) =>
+          this.logger.warn(`Push gagal terkirim: ${err.message}`),
+        );
     }
 
     return newNotification;
   }
+
 
   async getNotifications(
     userId: string,

@@ -16,6 +16,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { DocumentsModule } from './modules/documents/documents.module';
 import { DiscordModule } from './modules/discord/discord.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { PushModule } from './modules/push/push.module';
 
 @Module({
   imports: [
@@ -34,7 +35,9 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     DocumentsModule,
     DiscordModule,
     DashboardModule,
+    PushModule,
   ],
+
 
   controllers: [AppController],
   providers: [AppService],

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.4 (Lean Internal) |
+| **Versi Dokumen** | 3.5 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: log perubahan status tiket tergabung di panel Issue Activity, bersifat permanen dan tidak dapat diedit/dihapus siapapun) |
+| **Tanggal** | 14 Juli 2026 (revisi: Web Push Notification — opt-in per perangkat, terintegrasi ke sistem notifikasi esensial yang sudah ada, catatan batasan Safari iOS) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -258,6 +258,10 @@ Field:
 | FR-104 | Pekerja menerima notifikasi saat blok waktunya **di-override** oleh Admin |
 | FR-105 | Notifikasi tampil di ikon lonceng pada topbar dengan indikator jumlah belum dibaca, diperbarui **real-time** tanpa perlu refresh halaman |
 | FR-106 | Klik notifikasi menandainya sebagai telah dibaca dan mengarahkan pengguna langsung ke halaman/entitas terkait (proyek, tiket, timesheet, atau blok waktu yang dimaksud) |
+| FR-106a | Pengguna dapat mengaktifkan **Push Notification** secara opt-in lewat toggle di halaman Profil — browser meminta izin native saat diaktifkan, **bukan** otomatis meminta izin saat login/buka aplikasi |
+| FR-106b | Push notification tetap sampai ke pengguna meski tab/browser TrackFlow **sepenuhnya tertutup** — mencakup event notifikasi esensial yang sama seperti FR-100–104 |
+| FR-106c | Satu pengguna dapat mengaktifkan push di **lebih dari satu perangkat/browser sekaligus** (mis. laptop kantor dan laptop rumah) — semuanya menerima notifikasi secara paralel |
+| FR-106d | Push notification **tidak berfungsi di Safari iOS** kecuali aplikasi sudah ditambahkan ke Home Screen terlebih dahulu — batasan ini ditampilkan sebagai catatan informatif di halaman Profil, bukan dianggap sebagai bug |
 
 ### 7.11 Integrasi Pihak Ketiga (Discord Webhook)
 
@@ -458,6 +462,13 @@ Field:
 2. Melihat anggota terurut berdasarkan skor aktivitas — dipakai sebagai bahan diskusi 1-on-1, bukan penilaian otomatis semata.
 3. Menyadari satu anggota punya skor rendah karena banyak blok waktu ber-level "Tidak Ada Aktivitas" — jadi bahan follow-up personal, bukan teguran otomatis dari sistem.
 
+### 9.21 Mengaktifkan Push Notification
+1. Developer membuka halaman Profil, menemukan toggle "Aktifkan Notifikasi Push".
+2. Mengaktifkan toggle — browser menampilkan prompt izin notifikasi native, Developer klik "Izinkan".
+3. Menutup seluruh tab TrackFlow, lanjut bekerja di aplikasi lain.
+4. QA me-mention Developer tersebut di komentar sebuah tiket — notifikasi push muncul di notification tray OS meski TrackFlow sedang tidak terbuka sama sekali.
+5. Klik notifikasi push tersebut → browser terbuka langsung menuju tiket dan komentar yang dimaksud.
+
 ---
 
 ## 10. Metrik Keberhasilan
@@ -486,8 +497,8 @@ Field:
 | Fase | Cakupan |
 |---|---|
 | **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view) + guard hapus tiket khusus pembuat, Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Halaman Tugas Saya (agregasi lintas proyek), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
-| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, Peringkat Aktivitas Time Book |
-| **Fase 3** | Notifikasi lanjutan (email/push), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan |
+| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, Peringkat Aktivitas Time Book, **Web Push Notification** |
+| **Fase 3** | Notifikasi lanjutan (email), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan |
 
 ---
 

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.6 (Lean Internal) |
+| **Versi Dokumen** | 3.7 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: tabel `issue_status_history` immutable, endpoint agregasi `/issues/:id/activity` menggabung komentar + log status, event realtime `issue.status_logged`) |
+| **Tanggal** | 14 Juli 2026 (revisi: Web Push Notification — tabel `push_subscriptions`, VAPID, endpoint subscribe/unsubscribe, integrasi ke fungsi createNotification yang sudah ada) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -252,6 +252,7 @@ erDiagram
     USERS ||--o{ TIMESHEETS : has
     TIMESHEETS ||--o{ TIMESHEET_APPROVALS : "reviewed via"
     USERS ||--o{ NOTIFICATIONS : receives
+    USERS ||--o{ PUSH_SUBSCRIPTIONS : registers
     PROJECTS ||--o{ DISCORD_WEBHOOKS : "configured for"
     USERS ||--o{ RECENTLY_VIEWED_ISSUES : views
     ISSUES ||--o{ RECENTLY_VIEWED_ISSUES : "viewed via"
@@ -590,6 +591,19 @@ erDiagram
 
 > Composite index pada `(user_id, is_read, created_at)` — query paling sering adalah "notifikasi belum dibaca milik user ini, urut terbaru" untuk badge counter & panel notifikasi.
 
+#### `push_subscriptions` (Web Push — satu user bisa punya banyak baris)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| user_id | uuid (FK → users) | |
+| endpoint | varchar | URL unik dari push service browser (FCM/Mozilla/dst) |
+| p256dh_key | varchar | Dari `PushSubscription.toJSON().keys` |
+| auth_key | varchar | |
+| user_agent | varchar (nullable) | Opsional, untuk user bisa lihat "device mana saja yang subscribe" di halaman Profil |
+| created_at | timestamptz | |
+
+> **Multi-device by design (FR-106c):** satu user bisa punya banyak baris (laptop kantor, laptop rumah, browser berbeda) — semuanya menerima push secara paralel, tidak saling menggantikan. Baris dihapus otomatis kalau push service mengembalikan status `410 Gone`/`404` saat pengiriman (subscription sudah tidak valid — browser uninstall, cache cleared, dst), lihat §10.20.
+
 #### `discord_webhooks` (Integrasi Discord — level aplikasi & level proyek)
 | Kolom | Tipe | Keterangan |
 |---|---|---|
@@ -672,6 +686,9 @@ erDiagram
 | Notifications | `/notifications` | GET | List notifikasi milik user sendiri, paginated, filter `?unread=true` |
 | Notifications | `/notifications/:id/read` | PATCH | Tandai satu notifikasi sebagai telah dibaca |
 | Notifications | `/notifications/read-all` | PATCH | Tandai seluruh notifikasi milik user sebagai telah dibaca |
+| Web Push | `/push/vapid-public-key` | GET | Kirim VAPID public key ke frontend, dipakai saat proses subscribe (FR-107) |
+| Web Push | `/push/subscribe` | POST | Simpan `PushSubscription` object (endpoint + keys) dari browser — dipanggil setelah user aktifkan toggle & izin browser diberikan |
+| Web Push | `/push/unsubscribe` | DELETE | Hapus subscription — dipanggil saat user matikan toggle, atau saat logout |
 | Discord Integration | `/admin/integrations/discord` | GET/POST/DELETE | Webhook **tingkat aplikasi** (event `project_created`) — **Admin only**. Response GET tidak pernah sertakan `webhookUrl` utuh, hanya `{ configured: boolean, events: [] }` (FR-114) |
 | Discord Integration | `/projects/:id/integrations/discord` | GET/POST/DELETE | Webhook **tingkat proyek** — mendukung 2 event independen: `issue_created` dan `issue_status_changed` (FR-116) — Manager/Admin |
 | Discord Integration | `/projects/:id/integrations/discord/test` | POST | Kirim pesan percobaan ke channel yang dikonfigurasi, untuk verifikasi sebelum diandalkan (FR-113) |
@@ -1331,6 +1348,46 @@ sequenceDiagram
     Note over A: Tidak ada endpoint PATCH/DELETE untuk issue_status_history — permanen untuk siapapun, termasuk Admin
 ```
 
+### 10.20 Alur Web Push Notification — Subscribe & Pengiriman (Best-Effort)
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant SW as Service Worker (browser)
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant PS as Push Service (FCM/Mozilla/dst)
+    participant QA as QA (pemicu notifikasi)
+
+    Note over Dev: Aktivasi — opt-in dari halaman Profil, BUKAN otomatis saat login
+    Dev->>SW: Toggle "Aktifkan Push" → register('/sw.js')
+    Dev->>Dev: Browser prompt izin native → user klik "Izinkan"
+    Dev->>A: GET /push/vapid-public-key
+    A-->>Dev: publicKey
+    Dev->>SW: pushManager.subscribe({applicationServerKey: publicKey})
+    SW-->>Dev: PushSubscription {endpoint, keys}
+    Dev->>A: POST /push/subscribe {endpoint, keys}
+    A->>PG: Insert push_subscriptions
+
+    Note over Dev: Developer menutup SEMUA tab TrackFlow
+    QA->>A: POST /issues/:id/comments {body: "@developer1 ..."}
+    A->>PG: Insert notifications (proses yang sudah ada, TIDAK berubah)
+    A->>PG: Query push_subscriptions WHERE user_id = developer1.id
+    loop Tiap subscription milik Developer (bisa lebih dari satu device)
+        A->>PS: sendNotification(endpoint, {title, body, url}) — fire-and-forget
+        alt Push berhasil
+            PS->>SW: Deliver push event (meski browser/tab tertutup)
+            SW->>Dev: showNotification() — muncul di OS notification tray
+        else Push gagal (410/404 — subscription tidak valid lagi)
+            A->>PG: DELETE push_subscriptions (bersihkan otomatis)
+        end
+    end
+    Dev->>SW: Klik notifikasi
+    SW->>Dev: clients.openWindow(url) — browser terbuka langsung ke issue terkait
+```
+
+**Prinsip penting (konsisten dengan integrasi Discord §10.16):** kegagalan pengiriman push **tidak boleh** menggagalkan proses insert `notifications`/`issue_comments` itu sendiri — notification bell & data utama tetap berfungsi normal terlepas dari status push.
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -1354,6 +1411,7 @@ sequenceDiagram
 | Guard hapus vs edit tiket sengaja dibedakan | Edit (FR-026) melibatkan Assignee karena bersifat reversibel; Hapus (FR-026a) dibatasi ke pembuat/Manager/Admin karena bersifat destruktif — assignee yang bukan pembuat tidak boleh menghapus tiket yang bukan miliknya |
 | Data komparatif antar-karyawan (Workload Overview, Activity Ranking) | Dibatasi ketat: Manager hanya bisa lihat proyek yang dia kelola sendiri (bukan lintas semua proyek), Admin baru bisa lihat lintas proyek. Developer/QA/Reporter tidak punya akses ke kedua fitur ini sama sekali — mencegah kesalahpahaman "semua orang bisa lihat skor semua orang" |
 | Integritas audit trail status tiket | `issue_status_history` sengaja tidak memiliki endpoint PATCH/DELETE sama sekali (FR-029c) — berbeda dari `issue_comments` yang bisa diedit/dihapus penulis/Admin. Ini memastikan riwayat perubahan status tidak bisa dimanipulasi oleh siapapun, termasuk Admin |
+| Push notification bersifat opt-in eksplisit | Tidak ada auto-prompt izin browser saat login (FR-107) — mencegah pola UX "spam permintaan izin" dan memastikan user sadar & menyetujui sebelum device-nya terdaftar untuk menerima push |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
 ---
@@ -1514,6 +1572,8 @@ flowchart TB
 | Menghapus tiket melepas ikatan `time_blocks.issue_id` ke `NULL` — riwayat waktu kerja jadi "Activity" tanpa konteks tiket aslinya | Diterima sebagai trade-off yang disengaja (lebih baik dari kehilangan data payroll sepenuhnya); pertimbangkan menyimpan judul tiket asli sebagai teks di `time_blocks.note` sebelum penghapusan jika jejak konteks dirasa penting nanti |
 | Peringkat Aktivitas Time Book berpotensi disalahgunakan sebagai alat penilaian kompetitif yang tidak sehat untuk moral tim | Ini murni saran penggunaan (bukan pembatasan teknis) — dokumentasikan ke Manager bahwa fitur ini dimaksudkan untuk identifikasi pola kerja/bottleneck, bukan pembanding langsung antar individu tanpa konteks |
 | Progress bar proyek (`GET /projects`) menambah beban query JOIN+GROUP BY di endpoint yang sering diakses (project switcher) | Untuk skala tim internal, dampaknya minor; kalau jumlah proyek/tiket membesar signifikan, pertimbangkan cache hasil agregasi dengan TTL pendek (mis. 60 detik) alih-alih hitung ulang tiap request |
+| Push notification tidak berfungsi di Safari iOS kecuali app di-"Add to Home Screen" (FR-106d) | Diterima sebagai keterbatasan platform (bukan bug); ditampilkan sebagai catatan informatif di halaman Profil supaya user paham, bukan mengira fitur rusak |
+| `push_subscriptions` bisa menumpuk baris basi kalau device di-uninstall/browser di-reset tanpa sempat unsubscribe | Dibersihkan otomatis saat pengiriman gagal dengan status 410/404 (§10.20) — tidak perlu job pembersihan terjadwal terpisah untuk MVP |
 | Validasi "reply dibatasi 1 tingkat" hanya berarti kalau ditegakkan di backend, bukan cuma disembunyikan di UI | Endpoint POST comments **wajib** cek `parent_comment_id` milik parent yang direferensikan — tolak (400) kalau parent tersebut sendiri sudah punya parent (lihat §10.7) |
 | Permission OS untuk Tray Icon & Floating Widget (mis. window always-on-top, skip taskbar) berbeda perilaku antar OS | Uji eksplisit di minimal 2 OS (sudah jadi bagian kriteria selesai Slice 23); siapkan fallback UI sederhana jika API tray tidak tersedia di suatu platform |
 | Tanpa code signing (belum ada sertifikat berbayar), karyawan mendapat peringatan Gatekeeper (macOS)/SmartScreen (Windows) saat instalasi pertama | Diterima sebagai trade-off distribusi internal; instruksikan "klik kanan → Buka" (macOS) atau "More info → Run anyway" (Windows) — revisit beli sertifikat kalau tim membesar atau keluhan meningkat |
