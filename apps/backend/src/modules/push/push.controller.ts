@@ -14,7 +14,6 @@ import { PushService } from './push.service';
 import { SubscribePushDto, UnsubscribePushDto } from './dto/push.dto';
 
 @Controller('push')
-@UseGuards(AuthGuard)
 export class PushController {
   constructor(private readonly pushService: PushService) {}
 
@@ -24,14 +23,17 @@ export class PushController {
   }
 
   @Post('subscribe')
+  @UseGuards(AuthGuard)
   async subscribe(@Req() req: any, @Body() dto: SubscribePushDto) {
     const userAgentHeader = req.headers['user-agent'];
     return this.pushService.subscribe(req.user.id, dto, userAgentHeader);
   }
 
   @Delete('unsubscribe')
+  @UseGuards(AuthGuard)
   @HttpCode(HttpStatus.OK)
   async unsubscribe(@Req() req: any, @Body() dto: UnsubscribePushDto) {
     return this.pushService.unsubscribe(req.user.id, dto.endpoint);
   }
 }
+

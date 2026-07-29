@@ -24,7 +24,14 @@ import {
   Mail,
   User,
   Hash,
+  Bell,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import {
+  getPushSubscriptionState,
+  enablePushNotifications,
+  disablePushNotifications,
+} from "@/lib/push-notifications";
 
 interface ProfileData {
   id: string;
@@ -54,6 +61,12 @@ export default function ProfileModal({ open, onOpenChange, onSuccess }: ProfileM
   const [uploadLoading, setUploadLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  // Push notifications state
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
 
   // Editable Form fields
   const [name, setName] = useState("");
@@ -85,6 +98,12 @@ export default function ProfileModal({ open, onOpenChange, onSuccess }: ProfileM
         setPosition(data.position || "");
         setDepartment(data.department || "");
         setImage(data.image);
+
+        // Check push notification state
+        const pushState = await getPushSubscriptionState();
+        setPushSupported(pushState.supported);
+        setPushSubscribed(pushState.subscribed);
+        setPushPermission(pushState.permission);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Terjadi kesalahan saat memuat profil.");
       } finally {
@@ -94,6 +113,34 @@ export default function ProfileModal({ open, onOpenChange, onSuccess }: ProfileM
 
     fetchProfile();
   }, [open]);
+
+  // Handle Push Toggle
+  const handlePushToggle = async (checked: boolean) => {
+    try {
+      setPushLoading(true);
+      setError("");
+      setSuccessMsg("");
+
+      if (checked) {
+        await enablePushNotifications();
+        setPushSubscribed(true);
+        if (typeof Notification !== "undefined") {
+          setPushPermission(Notification.permission);
+        }
+        setSuccessMsg("Notifikasi push berhasil diaktifkan!");
+      } else {
+        await disablePushNotifications();
+        setPushSubscribed(false);
+        setSuccessMsg("Notifikasi push telah dimatikan.");
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Gagal mengubah pengaturan notifikasi push.");
+      setPushSubscribed(!checked);
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
 
   // Handle avatar upload flow
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -325,7 +372,45 @@ export default function ProfileModal({ open, onOpenChange, onSuccess }: ProfileM
               </div>
             </div>
 
+            {/* Web Push Notification Settings */}
+            <div className="rounded-lg border border-border/80 bg-muted/20 p-3 mt-1 space-y-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <Bell className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-[11.5px] font-semibold text-foreground block">
+                      Notifikasi Push Web
+                    </span>
+                    <span className="text-[10.5px] text-muted-foreground block leading-tight">
+                      Terima notifikasi di perangkat ini meskipun browser/tab ditutup.
+                    </span>
+                  </div>
+                </div>
+                {pushLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+                ) : (
+                  <Switch
+                    id="push-toggle"
+                    checked={pushSubscribed}
+                    disabled={!pushSupported || pushLoading || pushPermission === "denied"}
+                    onCheckedChange={handlePushToggle}
+                  />
+                )}
+              </div>
+              {!pushSupported && (
+                <p className="text-[10.5px] text-amber-500 leading-normal pt-1 border-t border-border/50">
+                  Browser ini tidak mendukung Web Push Notification.
+                </p>
+              )}
+              {pushPermission === "denied" && (
+                <p className="text-[10.5px] text-destructive leading-normal pt-1 border-t border-border/50">
+                  Izin notifikasi diblokir oleh browser. Harap izinkan notifikasi di pengaturan browser Anda.
+                </p>
+              )}
+            </div>
+
             {/* Read-only Employment Section (FR-006 / FR-007) */}
+
             <div className="rounded-lg border border-border/80 bg-muted/20 p-3 mt-1 space-y-2">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                 Data Kepegawaian Internal

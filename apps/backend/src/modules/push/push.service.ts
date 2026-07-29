@@ -3,6 +3,7 @@ import * as webpush from 'web-push';
 import { eq, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import { pushSubscriptions } from '../../db/schema/push-subscriptions';
+import { issues } from '../../db/schema/issues';
 import { SubscribePushDto } from './dto/push.dto';
 
 @Injectable()
@@ -95,6 +96,22 @@ export class PushService {
     let url = `/issues/${notification.entityId}`;
     if (notification.entityType === 'project') {
       url = `/projects/${notification.entityId}`;
+    } else if (notification.entityType === 'issue') {
+      try {
+        const [targetIssue] = await this.db
+          .select({ projectId: issues.projectId })
+          .from(issues)
+          .where(eq(issues.id, notification.entityId))
+          .limit(1);
+
+        if (targetIssue?.projectId) {
+          url = `/projects/${targetIssue.projectId}/issues/${notification.entityId}`;
+        } else {
+          url = `/issues/${notification.entityId}`;
+        }
+      } catch (err) {
+        url = `/issues/${notification.entityId}`;
+      }
     } else if (notification.entityType === 'timesheet') {
       url = `/timesheets/${notification.entityId}`;
     } else if (notification.entityType === 'time_block') {
@@ -106,6 +123,7 @@ export class PushService {
       body: notification.body,
       url,
     });
+
 
     await Promise.allSettled(
       subscriptions.map(async (sub: any) => {
