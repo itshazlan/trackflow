@@ -10,8 +10,10 @@ import { DRIZZLE } from '../../db/drizzle.provider';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { issues, issueStatuses } from '../../db/schema/issues';
 import { user } from '../../db/schema/auth';
+import { userLiveStatus } from '../../db/schema/time-tracking';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { DiscordService } from '../discord/discord.service';
+
 
 @Injectable()
 export class ProjectsService {
@@ -351,6 +353,102 @@ export class ProjectsService {
 
     return { members };
   }
+
+  async getLiveStatus(projectId: string) {
+    const [project] = await this.db
+      .select({ id: projects.id, key: projects.key })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+
+    if (!project) {
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
+    }
+
+    const membersList = await this.db
+      .select({
+        userId: user.id,
+        name: user.name,
+        avatar: user.image,
+        rawStatus: userLiveStatus.status,
+        liveProjectId: userLiveStatus.projectId,
+        liveIssueId: userLiveStatus.issueId,
+        lastHeartbeatAt: userLiveStatus.lastHeartbeatAt,
+      })
+      .from(projectMemberships)
+      .innerJoin(user, eq(projectMemberships.userId, user.id))
+      .leftJoin(userLiveStatus, eq(user.id, userLiveStatus.userId))
+      .where(eq(projectMemberships.projectId, projectId));
+
+    const activeIssueIds = membersList
+      .map((m: any) => m.liveIssueId)
+      .filter((id: string | null) => id != null) as string[];
+
+    const issuesMap = new Map<string, { issueKey: string; title: string }>();
+    if (activeIssueIds.length > 0) {
+      const activeIssues = await this.db
+        .select({
+          id: issues.id,
+          title: issues.title,
+          number: issues.number,
+        })
+        .from(issues)
+        .where(inArray(issues.id, activeIssueIds));
+
+      for (const iss of activeIssues) {
+        issuesMap.set(iss.id, {
+          issueKey: `${project.key}-${iss.number}`,
+          title: iss.title,
+        });
+      }
+    }
+
+    const STALE_THRESHOLD_MS = 3 * 60 * 1000;
+    const now = new Date().getTime();
+
+    const members = membersList.map((m: any) => {
+      let status: 'active' | 'idle' | 'offline' = m.rawStatus || 'offline';
+      const lastHeartbeat = m.lastHeartbeatAt
+        ? new Date(m.lastHeartbeatAt).getTime()
+        : 0;
+
+      if (
+        status !== 'offline' &&
+        (!m.lastHeartbeatAt || now - lastHeartbeat > STALE_THRESHOLD_MS)
+      ) {
+        status = 'offline';
+      }
+
+      let currentTask:
+        | { issueKey: string; title: string }
+        | 'Activity'
+        | null = null;
+
+      if (status !== 'offline') {
+        if (m.liveIssueId && issuesMap.has(m.liveIssueId)) {
+          const iss = issuesMap.get(m.liveIssueId)!;
+          currentTask = {
+            issueKey: iss.issueKey,
+            title: iss.title,
+          };
+        } else {
+          currentTask = 'Activity';
+        }
+      }
+
+      return {
+        userId: m.userId,
+        name: m.name,
+        avatar: m.avatar || null,
+        status,
+        currentTask,
+        lastHeartbeatAt: m.lastHeartbeatAt || null,
+      };
+    });
+
+    return { members };
+  }
+
 
   async hardDelete(projectId: string, confirmKey: string) {
     const [project] = await this.db

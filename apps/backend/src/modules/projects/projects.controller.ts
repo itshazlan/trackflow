@@ -52,6 +52,14 @@ export class ProjectsController {
     return this.projectsService.getWorkload(id);
   }
 
+  @Get(':id/live-status')
+  @UseGuards(ProjectRoleGuard)
+  @Roles('manager')
+  getLiveStatus(@Param('id') id: string) {
+    return this.projectsService.getLiveStatus(id);
+  }
+
+
   @Get([':id/subprojects', ':id/sub-projects'])
   @UseGuards(ProjectRoleGuard)
   findSubProjects(@Param('id') id: string) {

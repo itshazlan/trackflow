@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DbModule } from './db/db.module';
@@ -20,6 +21,7 @@ import { PushModule } from './modules/push/push.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     DbModule,
     AuthModule,
     ProjectsModule,
@@ -37,8 +39,6 @@ import { PushModule } from './modules/push/push.module';
     DashboardModule,
     PushModule,
   ],
-
-
   controllers: [AppController],
   providers: [AppService],
 })

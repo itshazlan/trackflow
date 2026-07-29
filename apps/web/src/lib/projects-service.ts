@@ -46,6 +46,35 @@ export async function getProjectWorkload(projectId: string): Promise<ProjectWork
   return res.json();
 }
 
+export interface ProjectLiveStatusMember {
+  userId: string;
+  name: string;
+  avatar?: string | null;
+  status: "active" | "idle" | "offline";
+  currentTask: { issueKey: string; title: string } | "Activity" | null;
+  lastHeartbeatAt?: string | null;
+}
+
+export interface ProjectLiveStatusResponse {
+  members: ProjectLiveStatusMember[];
+}
+
+export async function getProjectLiveStatus(projectId: string): Promise<ProjectLiveStatusResponse> {
+  const res = await fetch(`/api/projects/${projectId}/live-status`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch project live status");
+  }
+
+  return res.json();
+}
+
+
 export async function getProjects(): Promise<Project[]> {
   const res = await fetch("/api/projects", {
     method: "GET",

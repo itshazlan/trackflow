@@ -28,6 +28,20 @@ export class TimeTrackingController {
     return this.timeTrackingService.sync(syncTimeBlockDto, req.user);
   }
 
+  @Post('heartbeat')
+  heartbeat(
+    @Body()
+    dto: {
+      status?: 'active' | 'idle' | 'offline';
+      projectId?: string;
+      issueId?: string;
+    },
+    @Req() req: any,
+  ) {
+    return this.timeTrackingService.handleHeartbeat(req.user.id, dto);
+  }
+
+
   @Post(':id/screenshot')
   uploadScreenshot(@Param('id') id: string) {
     return this.timeTrackingService.getScreenshotUploadUrl(id);

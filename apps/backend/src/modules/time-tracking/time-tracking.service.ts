@@ -5,13 +5,15 @@ import {
   ForbiddenException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { eq, and, gte, lte } from 'drizzle-orm';
+import { Cron } from '@nestjs/schedule';
+import { eq, and, gte, lte, lt, ne } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import {
   timeBlocks,
   activityLogs,
   screenshots,
   timeBlockAuditLogs,
+  userLiveStatus,
 } from '../../db/schema/time-tracking';
 import { appSettings } from '../../db/schema/settings';
 import { projectMemberships } from '../../db/schema/projects';
@@ -22,6 +24,8 @@ import { randomUUID } from 'crypto';
 import { RealtimeGateway } from '../../gateways/realtime.gateway';
 import { user } from '../../db/schema/auth';
 import { NotificationsService } from '../notifications/notifications.service';
+
+
 
 @Injectable()
 export class TimeTrackingService {
@@ -403,4 +407,75 @@ export class TimeTrackingService {
       return updated;
     });
   }
+
+  async handleHeartbeat(
+    userId: string,
+    dto: {
+      status?: 'active' | 'idle' | 'offline';
+      projectId?: string | null;
+      issueId?: string | null;
+    },
+  ) {
+    const status =
+      dto.status === 'idle'
+        ? 'idle'
+        : dto.status === 'offline'
+        ? 'offline'
+        : 'active';
+    const projectId = dto.projectId || null;
+    const issueId = dto.issueId || null;
+    const lastHeartbeatAt = new Date();
+
+    await this.db
+      .insert(userLiveStatus)
+      .values({
+        userId,
+        status,
+        projectId,
+        issueId,
+        lastHeartbeatAt,
+      })
+      .onConflictDoUpdate({
+        target: userLiveStatus.userId,
+        set: {
+          status,
+          projectId: status === 'offline' ? null : projectId,
+          issueId: status === 'offline' ? null : issueId,
+          lastHeartbeatAt,
+        },
+      });
+
+    const eventPayload = {
+      userId,
+      status,
+      projectId: status === 'offline' ? null : projectId,
+      issueId: status === 'offline' ? null : issueId,
+      lastHeartbeatAt,
+    };
+
+    if (projectId) {
+      this.realtimeGateway.server
+        .to(`project:${projectId}`)
+        .emit('user.status_changed', eventPayload);
+    }
+    this.realtimeGateway.server.emit('user.status_changed', eventPayload);
+
+    return { status: 'ok', lastHeartbeatAt };
+  }
+
+  @Cron('*/2 * * * *')
+  async markStaleUsersOffline() {
+    const staleThreshold = new Date(Date.now() - 3 * 60 * 1000);
+    await this.db
+      .update(userLiveStatus)
+      .set({ status: 'offline' })
+      .where(
+        and(
+          lt(userLiveStatus.lastHeartbeatAt, staleThreshold),
+          ne(userLiveStatus.status, 'offline'),
+        ),
+      );
+  }
 }
+
+

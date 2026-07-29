@@ -1,8 +1,6 @@
 use keyring::{Entry, Error};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
-#[cfg(not(target_os = "macos"))]
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicBool, Ordering};
 use std::path::PathBuf;
 use rusqlite::{Connection, params};
 use tauri::Manager;
@@ -13,10 +11,12 @@ static ALLOW_REAL_EXIT: AtomicBool = AtomicBool::new(false);
 // Global Atomic Event Counters for OS Input Hook (Keyboard / Mouse)
 static KEYBOARD_COUNT: AtomicU32 = AtomicU32::new(0);
 static MOUSE_COUNT: AtomicU32 = AtomicU32::new(0);
+static LAST_INPUT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
 // Only used by the non-macOS rdev push-based input_callback; macOS polls
 // CGEventSourceCounterForEventType instead (see spawn_activity_poller).
 #[cfg(not(target_os = "macos"))]
 static LAST_MOUSE_MOVE: AtomicU64 = AtomicU64::new(0);
+
 
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -269,12 +269,15 @@ fn commit_block_to_db(
 // this app hit on macOS, so they keep the original push-based listener.
 #[cfg(not(target_os = "macos"))]
 fn input_callback(event: rdev::Event) {
+    let now_sec = chrono::Utc::now().timestamp() as u64;
     match event.event_type {
         rdev::EventType::KeyPress(_) => {
             KEYBOARD_COUNT.fetch_add(1, Ordering::Relaxed);
+            LAST_INPUT_TIMESTAMP.store(now_sec, Ordering::Relaxed);
         }
         rdev::EventType::ButtonPress(_) | rdev::EventType::Wheel { .. } => {
             MOUSE_COUNT.fetch_add(1, Ordering::Relaxed);
+            LAST_INPUT_TIMESTAMP.store(now_sec, Ordering::Relaxed);
         }
         rdev::EventType::MouseMove { .. } => {
             if let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
@@ -283,6 +286,7 @@ fn input_callback(event: rdev::Event) {
                 if now >= last + 500 {
                     LAST_MOUSE_MOVE.store(now, Ordering::Relaxed);
                     MOUSE_COUNT.fetch_add(1, Ordering::Relaxed);
+                    LAST_INPUT_TIMESTAMP.store(now_sec, Ordering::Relaxed);
                 }
             }
         }
@@ -341,6 +345,11 @@ fn spawn_activity_poller() {
                 MOUSE_COUNT.fetch_add(1, Ordering::Relaxed);
             }
 
+            if key_delta > 0 || click_delta > 0 || moved != last_moved {
+                let now_sec = chrono::Utc::now().timestamp() as u64;
+                LAST_INPUT_TIMESTAMP.store(now_sec, Ordering::Relaxed);
+            }
+
             last_key = key;
             last_left = left;
             last_right = right;
@@ -350,6 +359,7 @@ fn spawn_activity_poller() {
         }
     });
 }
+
 
 #[cfg(target_os = "macos")]
 fn play_shutter_sound() {
@@ -942,6 +952,42 @@ fn update_tray_state(app_handle: &tauri::AppHandle) {
     }
 }
 
+fn send_heartbeat_sync(
+    status: &str,
+    project_id: Option<&str>,
+    issue_id: Option<&str>,
+) {
+    let token = match Entry::new("trackflow", "auth_token").and_then(|e| e.get_password()) {
+        Ok(t) if !t.trim().is_empty() => t,
+        _ => return,
+    };
+
+    let status = status.to_string();
+    let project_id = project_id.map(|s| s.to_string());
+    let issue_id = issue_id.map(|s| s.to_string());
+
+    tauri::async_runtime::spawn(async move {
+        let client = reqwest::Client::new();
+        let url = "https://trackflow.chimney.id/api/time-blocks/heartbeat";
+        let body = serde_json::json!({
+            "status": status,
+            "projectId": project_id,
+            "issueId": issue_id,
+        });
+
+        let res = client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", token))
+            .json(&body)
+            .send()
+            .await;
+
+        if let Err(e) = res {
+            println!("[Tauri Rust] Heartbeat send failed: {}", e);
+        }
+    });
+}
+
 fn do_start_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     let tracking_state = app_handle.state::<ActiveTrackingState>();
     let timer_state = app_handle.state::<ActiveTimerState>();
@@ -959,9 +1005,13 @@ fn do_start_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
 
     let now = chrono::Utc::now().timestamp();
 
-    // Reset counters on fresh start/resume
+    // Reset counters and input activity timestamp on fresh start/resume
     KEYBOARD_COUNT.store(0, Ordering::Relaxed);
     MOUSE_COUNT.store(0, Ordering::Relaxed);
+    LAST_INPUT_TIMESTAMP.store(now as u64, Ordering::Relaxed);
+
+    // Send initial active heartbeat
+    send_heartbeat_sync("active", Some(&project_id), issue_id.as_deref());
 
     // Clear any previous screenshots in state
     *timer_state.current_screenshot.lock().unwrap() = None;
@@ -985,6 +1035,41 @@ fn do_start_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     );
 
     *timer_state.abort_handle.lock().unwrap() = Some(handle);
+
+    // Spawn 60-second periodic heartbeat loop during tracking
+    let app_handle_hb = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut hb_interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+        hb_interval.tick().await;
+
+        loop {
+            hb_interval.tick().await;
+
+            let timer_state = app_handle_hb.state::<ActiveTimerState>();
+            let status = timer_state.status.lock().unwrap().clone();
+            if status != "Running" {
+                break;
+            }
+
+            let tracking_state = app_handle_hb.state::<ActiveTrackingState>();
+            let project_id = tracking_state.project_id.lock().unwrap().clone();
+            let issue_id = tracking_state.issue_id.lock().unwrap().clone();
+
+            if let Some(proj_id) = project_id {
+                let now_sec = chrono::Utc::now().timestamp() as u64;
+                let last_input = LAST_INPUT_TIMESTAMP.load(Ordering::Relaxed);
+                let idle_threshold_secs = 300; // 5 minutes
+
+                let user_status = if last_input > 0 && (now_sec.saturating_sub(last_input)) > idle_threshold_secs {
+                    "idle"
+                } else {
+                    "active"
+                };
+
+                send_heartbeat_sync(user_status, Some(&proj_id), issue_id.as_deref());
+            }
+        }
+    });
 
     println!("[Tauri Rust] Timer started at Unix time {}", now);
 
@@ -1066,6 +1151,9 @@ fn do_pause_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
 
     *status = "Paused".to_string();
     println!("[Tauri Rust] Timer paused");
+
+    // Send explicit offline heartbeat status when timer is paused
+    send_heartbeat_sync("offline", None, None);
 
     // Drop locks before emitting/updating to avoid deadlocks
     drop(status);
@@ -1152,6 +1240,9 @@ fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
 
     println!("[Tauri Rust] Timer stopped and reset");
 
+    // Send explicit offline heartbeat status when timer is stopped
+    send_heartbeat_sync("offline", None, None);
+
     // Drop locks before emitting/updating to avoid deadlocks
     drop(status);
 
@@ -1159,6 +1250,7 @@ fn do_stop_timer(app_handle: &tauri::AppHandle) -> Result<(), String> {
     schedule_tray_update(app_handle);
     Ok(())
 }
+
 
 #[tauri::command]
 async fn start_timer(app_handle: tauri::AppHandle) -> Result<(), String> {
