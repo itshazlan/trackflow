@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.7 (Lean Internal) |
+| **Versi Dokumen** | 3.8 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Web Push Notification — tabel `push_subscriptions`, VAPID, endpoint subscribe/unsubscribe, integrasi ke fungsi createNotification yang sudah ada) |
+| **Tanggal** | 14 Juli 2026 (revisi: Activity Ranking historis diganti total menjadi Live Status realtime — tabel `user_live_status`, heartbeat desktop client, cron fallback deteksi offline) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -209,7 +209,7 @@ flowchart LR
 | **OS-level Input Hook** | Hitung klik/ketukan tanpa merekam konten (privasi) |
 | **Screenshot Capture Module** | Screenshot pada detik acak + notifikasi shutter, hasil ditahan dulu menunggu keputusan di Floating Widget (bukan langsung lanjut ke buffer) |
 | **Local SQLite Buffer** | Buffer offline sebelum berhasil diunggah. **Hanya diisi kalau widget di-Submit/timeout** — kalau di-Discard, data blok tersebut tidak pernah masuk ke buffer ini sama sekali (§10.9) |
-| **Sync Service** | Ambil token dari Auth/Token Manager, sertakan sebagai header `Authorization: Bearer <token>` di tiap request, upload per blok selesai, retry dengan backoff. Jika server balas `401 Unauthorized` (token expired), pause sync → picu refresh via Auth/Token Manager → resume; jika refresh gagal, tampilkan prompt re-login di WebView UI |
+| **Sync Service** | Ambil token dari Auth/Token Manager, sertakan sebagai header `Authorization: Bearer <token>` di tiap request, upload per blok selesai, retry dengan backoff. Jika server balas `401 Unauthorized` (token expired), pause sync → picu refresh via Auth/Token Manager → resume; jika refresh gagal, tampilkan prompt re-login di WebView UI. **Juga bertanggung jawab kirim heartbeat** (`socket.emit('heartbeat', {status, projectId, issueId})`) tiap ~60 detik selama tracking aktif — terpisah dari siklus sync 10 menit, dipakai untuk Live Status (§10.18) |
 
 **Prinsip privasi tidak berubah:** idle detection, tidak ada keylogging konten, randomisasi jadwal screenshot lokal.
 
@@ -245,6 +245,7 @@ erDiagram
     ISSUE_STATUSES ||--o{ ISSUE_STATUS_HISTORY : "referenced by"
     USERS ||--o{ TIME_BLOCKS : logs
     ISSUES ||--o{ TIME_BLOCKS : "tracked against"
+    USERS ||--o| USER_LIVE_STATUS : "current status"
     TIME_BLOCKS ||--o| SCREENSHOTS : has
     TIME_BLOCKS ||--o| ACTIVITY_LOGS : has
     TIME_BLOCKS ||--o{ TIME_BLOCK_AUDIT_LOGS : "logged in"
@@ -543,6 +544,17 @@ erDiagram
 | active_app_name | varchar | |
 | active_window_title | varchar | |
 
+#### `user_live_status` (Live Status — snapshot, bukan tabel log historis)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| user_id | uuid (PK, FK → users) | Satu baris per user, **di-overwrite terus** — bukan diakumulasi/insert baru tiap heartbeat |
+| status | enum(`active`,`idle`,`offline`) default `offline` | `idle` ditentukan **di sisi desktop client** berdasarkan ketiadaan input keyboard/mouse 5 menit (FR-141), bukan dihitung ulang di backend |
+| project_id | uuid (FK → projects, nullable) | Proyek yang sedang di-tracking saat ini |
+| issue_id | uuid (FK → issues, nullable) | `NULL` = sedang di task "Activity" tanpa tiket spesifik |
+| last_heartbeat_at | timestamptz | Diperbarui tiap heartbeat masuk (~60 detik sekali) — dipakai cron fallback (§10.18) untuk deteksi koneksi terputus tanpa graceful disconnect |
+
+> **Bukan pengganti `activity_logs`** — riwayat historis level aktivitas untuk keperluan payroll/laporan tetap sepenuhnya di `activity_logs` yang sudah ada, tidak berubah sama sekali. Tabel ini murni status kondisi terkini untuk tampilan realtime, tidak dipakai untuk laporan/audit apapun.
+
 #### `manual_time_entries`
 | Kolom | Tipe | Keterangan |
 |---|---|---|
@@ -697,7 +709,7 @@ erDiagram
 | Recently Viewed | `/issues/recently-viewed` | GET | 10 issue terakhir dilihat user ini, lintas proyek, urut terbaru |
 | Project Progress | `/projects` | GET | **Diperluas** — tiap item disertai `issueStats: { total, completed }` berdasarkan `issue_statuses.is_final` (FR-135–136) |
 | Workload | `/projects/:id/workload` | GET | Distribusi tiket per anggota proyek, dipecah per status + jumlah overdue — Manager proyek terkait atau Admin (FR-137–139) |
-| Activity Ranking | `/reports/activity-ranking?period=week\|month&projectId=` | GET | Peringkat skor aktivitas anggota berbasis Time Book. Admin: lintas proyek; Manager: terbatas ke proyek yang dia kelola (FR-140–142) |
+| Live Status | `/projects/:id/live-status` | GET | **Revisi total dari "Activity Ranking"** — status langsung (Aktif/Idle/Offline) seluruh anggota proyek beserta tugas yang sedang dikerjakan. Guard identik Workload Overview: Manager proyek terkait, atau Admin (FR-140–144) |
 
 ### 8.1 Contoh Payload — Buat Tiket dari Template Bug (Sebagai Filler Teks)
 
@@ -776,7 +788,7 @@ POST /time-blocks/sync
 
 | Event | Arah | Payload Ringkas | Kegunaan |
 |---|---|---|---|
-| `user.status_changed` | Server → Web | `{userId, status}` | Status kerja tim real-time |
+| `user.status_changed` | Server → Web | `{userId, status: active\|idle\|offline}` | Status kerja tim real-time — dipicu oleh heartbeat desktop client tiap ~60 detik (§10.18), dipakai oleh halaman Live Status (FR-140–144) |
 | `issue.updated` | Server → Web | `{issueId, changes}` | Update Kanban/List tanpa refresh |
 | `timeblock.synced` | Server → Web | `{userId, projectId, blockStart}` | Indikator "aktif bekerja" |
 | `timesheet.approved` | Server → Web | `{timesheetId, status}` | Notifikasi ke Developer |
@@ -1277,7 +1289,7 @@ sequenceDiagram
     Note over A: Validasi restricted_to_role identik dengan Kanban per-proyek (§10.10) — tidak ada logic baru
 ```
 
-### 10.18 Alur 5 Fitur Visibilitas — Dashboard, Recently Viewed, Progress Bar, Workload, Activity Ranking
+### 10.18 Alur 4 Fitur Visibilitas — Dashboard, Recently Viewed, Progress Bar, Workload
 
 ```mermaid
 sequenceDiagram
@@ -1310,14 +1322,44 @@ sequenceDiagram
     A->>PG: SELECT semua project_memberships proyek ini (termasuk yang 0 tiket assigned)
     A->>PG: LEFT JOIN issues per anggota, GROUP BY user_id, status_id
     A-->>M: { members: [{ userId, totalAssigned, byStatus, overdueCount }, ...] }
-
-    Note over M: 5. Activity Ranking — Manager/Admin only
-    M->>A: GET /reports/activity-ranking?period=week
-    A->>A: Cek role — Admin: tanpa filter proyek; Manager: WHERE project_id IN (proyek yang dia kelola)
-    A->>PG: JOIN time_blocks+activity_logs WHERE is_deleted=false, GROUP BY user_id
-    A->>A: Hitung activityScore = (high*3+medium*2+low*1)/totalBlocks per user
-    A-->>M: Daftar user terurut activityScore DESC
 ```
+
+### 10.18a Alur Live Status — Heartbeat Desktop Client & Fallback Deteksi Offline (Revisi dari Activity Ranking)
+
+```mermaid
+sequenceDiagram
+    participant D as Desktop Client
+    participant WS as Socket.io Gateway
+    participant PG as PostgreSQL
+    participant M as Manager (Live Status page)
+    participant CRON as Cron Job (tiap 2 menit)
+
+    Note over D: Selama tracking berjalan
+    loop Tiap ~60 detik
+        D->>D: Cek waktu sejak input event terakhir vs threshold 5 menit → tentukan status active/idle
+        D->>WS: emit('heartbeat', {status, projectId, issueId})
+        WS->>PG: UPSERT user_live_status (status, projectId, issueId, lastHeartbeatAt=now())
+        WS->>M: emit user.status_changed {userId, status} — broadcast ke room project:{projectId}
+        M->>M: Update badge realtime tanpa refresh
+    end
+
+    Note over D: Saat Stop tracking / quit aplikasi (graceful)
+    D->>WS: emit('heartbeat', {status: 'offline'})
+    WS->>PG: UPDATE user_live_status SET status='offline'
+    WS->>M: emit user.status_changed {userId, status: 'offline'}
+
+    Note over D: Saat koneksi terputus TANPA graceful disconnect (mis. jaringan putus, laptop mati mendadak)
+    CRON->>PG: SELECT user_live_status WHERE last_heartbeat_at < now() - 3 menit AND status != 'offline'
+    CRON->>PG: UPDATE SET status='offline' untuk baris yang stale
+    CRON->>M: emit user.status_changed {userId, status: 'offline'} untuk tiap baris yang diupdate
+
+    Note over M: Membuka halaman untuk pertama kali
+    M->>WS: GET /projects/:id/live-status
+    WS->>PG: SELECT project_memberships JOIN user_live_status (LEFT JOIN — anggota belum pernah tracking = default offline)
+    WS-->>M: { members: [{ userId, status, currentTask, lastHeartbeatAt }, ...] }
+```
+
+**Prinsip penting:** `user_live_status` adalah **snapshot**, bukan log — tidak dipakai untuk laporan/audit historis apapun (itu tetap peran `activity_logs`). Cron fallback memastikan status tidak "tersangkut" Aktif/Idle selamanya kalau desktop client mati mendadak tanpa sempat kirim sinyal offline.
 
 ### 10.19 Alur Log Perubahan Status Tergabung di Issue Activity (Immutable)
 
@@ -1409,7 +1451,7 @@ sequenceDiagram
 | Moderasi komunikasi | Issue Activity terbuka untuk semua anggota proyek (tanpa batasan role), namun Admin tetap dapat menghapus komentar siapapun untuk moderasi jika terjadi penyalahgunaan |
 | Kredensial webhook eksternal | URL Discord Webhook diperlakukan sebagai kredensial sensitif — tidak pernah dikembalikan utuh ke frontend setelah tersimpan (FR-114), guard endpoint dibatasi Admin (app-level) / Manager-Admin (project-level) |
 | Guard hapus vs edit tiket sengaja dibedakan | Edit (FR-026) melibatkan Assignee karena bersifat reversibel; Hapus (FR-026a) dibatasi ke pembuat/Manager/Admin karena bersifat destruktif — assignee yang bukan pembuat tidak boleh menghapus tiket yang bukan miliknya |
-| Data komparatif antar-karyawan (Workload Overview, Activity Ranking) | Dibatasi ketat: Manager hanya bisa lihat proyek yang dia kelola sendiri (bukan lintas semua proyek), Admin baru bisa lihat lintas proyek. Developer/QA/Reporter tidak punya akses ke kedua fitur ini sama sekali — mencegah kesalahpahaman "semua orang bisa lihat skor semua orang" |
+| Data komparatif antar-karyawan (Workload Overview, Live Status) | Dibatasi ketat: Manager hanya bisa lihat proyek yang dia kelola sendiri (bukan lintas semua proyek), Admin baru bisa lihat lintas proyek. Developer/QA/Reporter tidak punya akses ke kedua fitur ini sama sekali — mencegah kesalahpahaman "semua orang bisa lihat status semua orang" |
 | Integritas audit trail status tiket | `issue_status_history` sengaja tidak memiliki endpoint PATCH/DELETE sama sekali (FR-029c) — berbeda dari `issue_comments` yang bisa diedit/dihapus penulis/Admin. Ini memastikan riwayat perubahan status tidak bisa dimanipulasi oleh siapapun, termasuk Admin |
 | Push notification bersifat opt-in eksplisit | Tidak ada auto-prompt izin browser saat login (FR-107) — mencegah pola UX "spam permintaan izin" dan memastikan user sadar & menyetujui sebelum device-nya terdaftar untuk menerima push |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
@@ -1570,7 +1612,9 @@ flowchart TB
 | Discord API down/rate-limited saat volume pembuatan proyek/tiket tinggi | Diterima sebagai fire-and-forget (§10.16) — kegagalan tidak memengaruhi fungsi inti TrackFlow; tidak ada retry queue di MVP ini (bisa ditambah BullMQ nanti jika keandalan notifikasi jadi kebutuhan kritis) |
 | `/issues/mine?view=kanban` berpotensi N+1 query kalau user tergabung di banyak proyek (query `issue_statuses` per proyek dalam loop) | Diterima untuk skala tim internal (jumlah proyek per user biasanya kecil); optimasi ke satu query `WHERE project_id IN (...)` bisa dilakukan belakangan kalau jumlah proyek per user bertambah signifikan |
 | Menghapus tiket melepas ikatan `time_blocks.issue_id` ke `NULL` — riwayat waktu kerja jadi "Activity" tanpa konteks tiket aslinya | Diterima sebagai trade-off yang disengaja (lebih baik dari kehilangan data payroll sepenuhnya); pertimbangkan menyimpan judul tiket asli sebagai teks di `time_blocks.note` sebelum penghapusan jika jejak konteks dirasa penting nanti |
-| Peringkat Aktivitas Time Book berpotensi disalahgunakan sebagai alat penilaian kompetitif yang tidak sehat untuk moral tim | Ini murni saran penggunaan (bukan pembatasan teknis) — dokumentasikan ke Manager bahwa fitur ini dimaksudkan untuk identifikasi pola kerja/bottleneck, bukan pembanding langsung antar individu tanpa konteks |
+| Live Status berpotensi terasa seperti pengawasan berlebihan ("dipantau real-time terus-menerus") kalau tidak dikomunikasikan dengan baik ke tim | Ini murni saran penggunaan (bukan pembatasan teknis) — dokumentasikan ke Manager bahwa fitur ini untuk koordinasi kerja (mis. tahu siapa yang sedang available), bukan alat pengawasan mikro; status Idle bukan berarti pelanggaran, bisa jadi sedang meeting/telepon di luar aplikasi |
+| Heartbeat tiap 60 detik dari seluruh desktop client menambah beban koneksi Socket.io persisten | Untuk skala tim internal, dampaknya minor (payload sangat kecil); kalau jumlah user membesar signifikan, pertimbangkan interval lebih jarang (mis. 90-120 detik) sebelum menambah infrastruktur |
+| Status bisa "tersangkut" Aktif/Idle kalau baik graceful disconnect maupun cron fallback sama-sama gagal (skenario langka) | Cron job §10.18a berjalan tiap 2 menit sebagai jaring pengaman kedua — risiko status basi maksimal terbatas pada jendela waktu tersebut |
 | Progress bar proyek (`GET /projects`) menambah beban query JOIN+GROUP BY di endpoint yang sering diakses (project switcher) | Untuk skala tim internal, dampaknya minor; kalau jumlah proyek/tiket membesar signifikan, pertimbangkan cache hasil agregasi dengan TTL pendek (mis. 60 detik) alih-alih hitung ulang tiap request |
 | Push notification tidak berfungsi di Safari iOS kecuali app di-"Add to Home Screen" (FR-106d) | Diterima sebagai keterbatasan platform (bukan bug); ditampilkan sebagai catatan informatif di halaman Profil supaya user paham, bukan mengira fitur rusak |
 | `push_subscriptions` bisa menumpuk baris basi kalau device di-uninstall/browser di-reset tanpa sempat unsubscribe | Dibersihkan otomatis saat pengiriman gagal dengan status 410/404 (§10.20) — tidak perlu job pembersihan terjadwal terpisah untuk MVP |

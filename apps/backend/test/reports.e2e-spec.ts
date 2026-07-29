@@ -11,6 +11,11 @@ jest.mock('better-auth/adapters/drizzle', () => ({
   drizzleAdapter: jest.fn(),
 }));
 
+jest.mock('better-auth/plugins', () => ({
+  bearer: jest.fn().mockReturnValue({ id: 'bearer' }),
+}));
+
+
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   INestApplication,
@@ -206,7 +211,10 @@ describe('Reports & Analytics (e2e)', () => {
       // Time block check
       expect(csvContent).toContain('"Automatic",15,"Paid"');
       // Approved entry check
-      expect(csvContent).toContain('"N/A","Manual",45,"APPROVED"');
+      expect(csvContent).toContain(
+        '"Activity: Approved manual entry description","Manual",45,"APPROVED"',
+      );
+
       // Pending entry check MUST NOT be in the CSV
       expect(csvContent).not.toContain('Pending manual entry description');
       // Totals check (15 mins + 45 mins = 60 mins / 1.00 hour)
@@ -233,4 +241,25 @@ describe('Reports & Analytics (e2e)', () => {
       expect(pdfBuffer.toString('utf-8', 0, 4)).toBe('%PDF');
     });
   });
+
+  describe('GET /reports/live-status', () => {
+    it('should return live status list for manager', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reports/live-status')
+        .set('x-mock-user-id', mockUsers.developer.id)
+        .query({ projectId })
+        .expect(200);
+
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    it('should reject non-manager/non-admin access (403)', async () => {
+      await request(app.getHttpServer())
+        .get('/reports/live-status')
+        .set('x-mock-user-id', 'non-existent-user')
+        .query({ projectId })
+        .expect(403);
+    });
+  });
 });
+

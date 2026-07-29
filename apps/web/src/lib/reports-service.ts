@@ -71,29 +71,29 @@ export async function downloadReport(
   window.URL.revokeObjectURL(url);
 }
 
-export interface ActivityRankingItem {
+export interface UserLiveStatusItem {
   userId: string;
   name: string;
   username: string;
   avatar?: string | null;
-  totalMinutes: number;
-  none: number;
-  low: number;
-  medium: number;
-  high: number;
-  totalBlocks: number;
-  activityScore: number;
+  email: string;
+  position?: string | null;
+  status: "active" | "idle" | "offline";
+  projectId?: string | null;
+  projectName?: string | null;
+  issueId?: string | null;
+  issueTitle?: string | null;
+  issueKey?: string | null;
+  lastHeartbeatAt?: string | null;
 }
 
-export async function getActivityRanking(
-  period: "week" | "month" = "week",
+export async function getLiveStatus(
   projectId?: string
-): Promise<ActivityRankingItem[]> {
+): Promise<UserLiveStatusItem[]> {
   const params = new URLSearchParams();
-  params.append("period", period);
   if (projectId) params.append("projectId", projectId);
 
-  const res = await fetch(`/api/reports/activity-ranking?${params.toString()}`, {
+  const res = await fetch(`/api/reports/live-status?${params.toString()}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -102,8 +102,18 @@ export async function getActivityRanking(
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || "Gagal mengambil peringkat aktivitas");
+    throw new Error(errorData.message || "Gagal mengambil daftar status live user");
   }
 
   return res.json();
 }
+
+export interface ActivityRankingItem extends UserLiveStatusItem {}
+
+export async function getActivityRanking(
+  _period: "week" | "month" = "week",
+  projectId?: string
+): Promise<any[]> {
+  return getLiveStatus(projectId);
+}
+

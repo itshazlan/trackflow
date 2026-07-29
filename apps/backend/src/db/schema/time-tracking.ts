@@ -28,6 +28,12 @@ export const activityLevelEnum = pgEnum('activity_level', [
   'high',
 ]);
 
+export const userStatusEnum = pgEnum('user_status', [
+  'active',
+  'idle',
+  'offline',
+]);
+
 export const timeBlocks = pgTable('time_blocks', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id')
@@ -96,3 +102,20 @@ export const activityLogs = pgTable('activity_logs', {
   activeAppName: varchar('active_app_name', { length: 255 }).notNull(),
   activeWindowTitle: varchar('active_window_title', { length: 512 }).notNull(),
 });
+
+export const userLiveStatus = pgTable('user_live_status', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  status: userStatusEnum('status').default('offline').notNull(),
+  projectId: uuid('project_id').references(() => projects.id, {
+    onDelete: 'set null',
+  }),
+  issueId: uuid('issue_id').references(() => issues.id, {
+    onDelete: 'set null',
+  }),
+  lastHeartbeatAt: timestamp('last_heartbeat_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+

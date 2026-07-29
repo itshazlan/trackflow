@@ -16,6 +16,14 @@ import { AuthGuard } from '../../common/guards/auth.guard';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
+  @Get('live-status')
+  async getLiveStatus(
+    @Req() req: any,
+    @Query('projectId') projectId?: string,
+  ) {
+    return this.reportsService.getLiveStatus(req.user, projectId);
+  }
+
   @Get('activity-ranking')
   async getActivityRanking(
     @Req() req: any,
@@ -28,6 +36,7 @@ export class ReportsController {
       projectId,
     );
   }
+
 
   @Get('hours/preview')
   async getHoursReportPreview(

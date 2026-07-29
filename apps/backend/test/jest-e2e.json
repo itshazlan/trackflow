@@ -6,8 +6,6 @@
   "transform": {
     "^.+\\.(t|j|mj)s$": "ts-jest"
   },
-  "transformIgnorePatterns": [
-    "node_modules/(?!(better-auth)/)"
-  ],
+  "transformIgnorePatterns": ["node_modules/(?!(better-auth)/)"],
   "setupFiles": ["dotenv/config"]
 }

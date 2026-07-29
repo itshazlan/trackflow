@@ -26,9 +26,21 @@ export const DrizzleProvider: Provider = {
           CONSTRAINT "recently_viewed_user_issue_idx" UNIQUE("user_id", "issue_id")
         );
       `;
+      await client`DO $$ BEGIN CREATE TYPE "public"."user_status" AS ENUM('active', 'idle', 'offline'); EXCEPTION WHEN duplicate_object THEN null; END $$;`;
+      await client`
+        CREATE TABLE IF NOT EXISTS "user_live_status" (
+          "user_id" text PRIMARY KEY NOT NULL REFERENCES "user"("id") ON DELETE cascade,
+          "status" "user_status" DEFAULT 'offline' NOT NULL,
+          "project_id" uuid REFERENCES "projects"("id") ON DELETE set null,
+          "issue_id" uuid REFERENCES "issues"("id") ON DELETE set null,
+          "last_heartbeat_at" timestamp with time zone DEFAULT now() NOT NULL
+        );
+      `;
+
     } catch (err) {
       console.error('[DrizzleProvider] Auto migration error:', err);
     }
+
 
     return db;
   },

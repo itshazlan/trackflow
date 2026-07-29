@@ -1,6 +1,6 @@
 import { ReportsService } from './reports.service';
 
-describe('ReportsService - Activity Ranking', () => {
+describe('ReportsService - Live Status', () => {
   let service: ReportsService;
   let mockDb: any;
 
@@ -11,53 +11,97 @@ describe('ReportsService - Activity Ranking', () => {
     service = new ReportsService(mockDb);
   });
 
-  it('should calculate activity score correctly and sort users', async () => {
+  it('should return live status list for users correctly', async () => {
     const mockUserAdmin = { id: 'admin-1', isAdmin: true };
 
     const mockRows = [
       {
         userId: 'user-1',
-        userName: 'User One',
-        userUsername: 'user1',
-        userAvatar: null,
-        totalMinutes: 120,
-        none: 1,
-        low: 1,
-        medium: 2,
-        high: 2,
-        totalBlocks: 6,
+        name: 'User One',
+        username: 'user1',
+        avatar: null,
+        email: 'user1@example.com',
+        position: 'Developer',
+        rawStatus: 'active',
+        projectId: 'proj-1',
+        projectName: 'Project Alpha',
+        issueId: 'issue-1',
+        issueTitle: 'Fix Bug',
+        issueNumber: 101,
+        projectKey: 'PA',
+        lastHeartbeatAt: new Date(),
       },
       {
         userId: 'user-2',
-        userName: 'User Two',
-        userUsername: 'user2',
-        userAvatar: null,
-        totalMinutes: 180,
-        none: 0,
-        low: 0,
-        medium: 1,
-        high: 3,
-        totalBlocks: 4,
+        name: 'User Two',
+        username: 'user2',
+        avatar: null,
+        email: 'user2@example.com',
+        position: 'Designer',
+        rawStatus: 'idle',
+        projectId: null,
+        projectName: null,
+        issueId: null,
+        issueTitle: null,
+        issueNumber: null,
+        projectKey: null,
+        lastHeartbeatAt: new Date(Date.now() - 60000),
       },
     ];
 
     const mockChain = {
       from: jest.fn().mockReturnThis(),
-      innerJoin: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockResolvedValue(mockRows),
+      leftJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockResolvedValue(mockRows),
     };
 
     mockDb.select.mockReturnValue(mockChain);
 
-    const result = await service.getActivityRanking(mockUserAdmin, 'week');
+    const result = await service.getLiveStatus(mockUserAdmin);
 
     expect(result).toHaveLength(2);
-    // User Two score: (3*3 + 1*2) / 4 = 11 / 4 = 2.75
-    // User One score: (2*3 + 2*2 + 1*1 + 1*0) / 6 = 11 / 6 = 1.83
-    expect(result[0].userId).toBe('user-2');
-    expect(result[0].activityScore).toBe(2.75);
-    expect(result[1].userId).toBe('user-1');
-    expect(result[1].activityScore).toBe(1.83);
+    expect(result[0].userId).toBe('user-1');
+    expect(result[0].status).toBe('active');
+    expect(result[0].issueKey).toBe('PA-101');
+    expect(result[1].userId).toBe('user-2');
+    expect(result[1].status).toBe('idle');
+  });
+
+  it('should fall back status to offline if lastHeartbeatAt is older than 3 minutes', async () => {
+    const mockUserAdmin = { id: 'admin-1', isAdmin: true };
+    const staleDate = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+
+    const mockRows = [
+      {
+        userId: 'user-3',
+        name: 'User Three',
+        username: 'user3',
+        avatar: null,
+        email: 'user3@example.com',
+        position: 'QA',
+        rawStatus: 'active',
+        projectId: 'proj-1',
+        projectName: 'Project Alpha',
+        issueId: null,
+        issueTitle: null,
+        issueNumber: null,
+        projectKey: 'PA',
+        lastHeartbeatAt: staleDate,
+      },
+    ];
+
+    const mockChain = {
+      from: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockResolvedValue(mockRows),
+    };
+
+    mockDb.select.mockReturnValue(mockChain);
+
+    const result = await service.getLiveStatus(mockUserAdmin);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].userId).toBe('user-3');
+    expect(result[0].status).toBe('offline');
   });
 });

@@ -8,7 +8,9 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, Optional } from '@nestjs/common';
+import { DRIZZLE } from '../db/drizzle.provider';
+import { userLiveStatus } from '../db/schema/time-tracking';
 
 @Injectable()
 @WebSocketGateway({
@@ -22,22 +24,143 @@ export class RealtimeGateway
   @WebSocketServer()
   server: Server;
 
-  handleConnection(client: Socket) {
+  constructor(@Optional() @Inject(DRIZZLE) private readonly db?: any) {}
+
+  async handleConnection(client: Socket) {
     const userId =
-      client.handshake.query.userId || client.handshake.headers['x-user-id'];
+      (client.handshake.query.userId as string) ||
+      (client.handshake.headers['x-user-id'] as string);
     if (userId) {
       client.data = { userId };
-      void client.join(`user:${userId as string}`);
-      this.server.emit('user.status_changed', { userId, status: 'online' });
+      void client.join(`user:${userId}`);
+      const lastHeartbeatAt = new Date();
+      if (this.db) {
+        try {
+          await this.db
+            .insert(userLiveStatus)
+            .values({
+              userId,
+              status: 'active',
+              lastHeartbeatAt,
+            })
+            .onConflictDoUpdate({
+              target: userLiveStatus.userId,
+              set: {
+                status: 'active',
+                lastHeartbeatAt,
+              },
+            });
+        } catch (e) {
+          // ignore error if user record is missing in test sandbox
+        }
+      }
+      this.server.emit('user.status_changed', {
+        userId,
+        status: 'online',
+        lastHeartbeatAt,
+      });
     }
   }
 
-  handleDisconnect(client: Socket) {
-    const userId = client.data?.userId;
+  async handleDisconnect(client: Socket) {
+    const userId =
+      client.data?.userId || (client.handshake.query.userId as string);
     if (userId) {
-      this.server.emit('user.status_changed', { userId, status: 'offline' });
+      const lastHeartbeatAt = new Date();
+      if (this.db) {
+        try {
+          await this.db
+            .insert(userLiveStatus)
+            .values({
+              userId,
+              status: 'offline',
+              projectId: null,
+              issueId: null,
+              lastHeartbeatAt,
+            })
+            .onConflictDoUpdate({
+              target: userLiveStatus.userId,
+              set: {
+                status: 'offline',
+                projectId: null,
+                issueId: null,
+                lastHeartbeatAt,
+              },
+            });
+        } catch (e) {
+          // ignore error
+        }
+      }
+      this.server.emit('user.status_changed', {
+        userId,
+        status: 'offline',
+        lastHeartbeatAt,
+      });
     }
   }
+
+  @SubscribeMessage('heartbeat')
+  async handleHeartbeat(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    payload: {
+      status?: 'active' | 'idle';
+      projectId?: string | null;
+      issueId?: string | null;
+    },
+  ) {
+    const userId =
+      client.data?.userId || (client.handshake.query.userId as string);
+    if (!userId) return { status: 'error', message: 'User ID missing' };
+
+    const status = payload?.status === 'idle' ? 'idle' : 'active';
+    const projectId = payload?.projectId || null;
+    const issueId = payload?.issueId || null;
+    const lastHeartbeatAt = new Date();
+
+    if (this.db) {
+      try {
+        await this.db
+          .insert(userLiveStatus)
+          .values({
+            userId,
+            status,
+            projectId,
+            issueId,
+            lastHeartbeatAt,
+          })
+          .onConflictDoUpdate({
+            target: userLiveStatus.userId,
+            set: {
+              status,
+              projectId,
+              issueId,
+              lastHeartbeatAt,
+            },
+          });
+      } catch (e) {
+        // ignore error
+      }
+    }
+
+    const eventPayload = {
+      userId,
+      status,
+      projectId,
+      issueId,
+      lastHeartbeatAt,
+    };
+
+    if (projectId) {
+      this.server
+        .to(`project:${projectId}`)
+        .emit('user.status_changed', eventPayload);
+    }
+    this.server.emit('user.status_changed', eventPayload);
+
+    return { status: 'ok', lastHeartbeatAt };
+  }
+
 
   @SubscribeMessage('joinProject')
   handleJoinProject(

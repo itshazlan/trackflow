@@ -1,7 +1,11 @@
 import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
 import { eq, and, gte, lte, count, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
-import { timeBlocks, activityLogs } from '../../db/schema/time-tracking';
+import {
+  timeBlocks,
+  activityLogs,
+  userLiveStatus,
+} from '../../db/schema/time-tracking';
 import { manualTimeEntries } from '../../db/schema/timesheets';
 import { user } from '../../db/schema/auth';
 import { projects, projectMemberships } from '../../db/schema/projects';
@@ -12,23 +16,10 @@ import PDFDocument from 'pdfkit';
 export class ReportsService {
   constructor(@Inject(DRIZZLE) private db: any) {}
 
-  async getActivityRanking(
+  async getLiveStatus(
     currentUser: { id: string; isAdmin: boolean },
-    period: 'week' | 'month' = 'week',
     projectId?: string,
   ) {
-    const now = new Date();
-    let rangeStart: Date;
-
-    if (period === 'month') {
-      rangeStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else {
-      const day = now.getDay();
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-      rangeStart = new Date(now.setDate(diff));
-      rangeStart.setHours(0, 0, 0, 0);
-    }
-
     let filterProjectIds: string[] | null = null;
 
     if (projectId) {
@@ -46,7 +37,7 @@ export class ReportsService {
 
         if (!membership || membership.role !== 'manager') {
           throw new ForbiddenException(
-            'Hanya Manager proyek ini atau Admin yang dapat melihat peringkat aktivitas',
+            'Hanya Manager proyek ini atau Admin yang dapat melihat status live user',
           );
         }
       }
@@ -68,77 +59,89 @@ export class ReportsService {
       }
     }
 
-    const conditions: any[] = [
-      eq(timeBlocks.isDeleted, false),
-      gte(timeBlocks.blockStart, rangeStart),
-    ];
-
+    const userConditions: any[] = [];
     if (filterProjectIds && filterProjectIds.length > 0) {
-      conditions.push(inArray(timeBlocks.projectId, filterProjectIds));
+      const memberUsers = await this.db
+        .selectDistinct({ userId: projectMemberships.userId })
+        .from(projectMemberships)
+        .where(inArray(projectMemberships.projectId, filterProjectIds));
+
+      const userIds = memberUsers.map((m: any) => m.userId);
+      if (userIds.length === 0) return [];
+      userConditions.push(inArray(user.id, userIds));
     }
 
     const rows = await this.db
       .select({
-        userId: timeBlocks.userId,
-        userName: user.name,
-        userUsername: user.username,
-        userAvatar: user.image,
-        totalMinutes: sql<number>`COALESCE(SUM(EXTRACT(EPOCH FROM (${timeBlocks.blockEnd} - ${timeBlocks.blockStart})) / 60), 0)::int`,
-        none: count(
-          sql`CASE WHEN ${activityLogs.activityLevel} = 'none' THEN 1 END`,
-        ),
-        low: count(
-          sql`CASE WHEN ${activityLogs.activityLevel} = 'low' THEN 1 END`,
-        ),
-        medium: count(
-          sql`CASE WHEN ${activityLogs.activityLevel} = 'medium' THEN 1 END`,
-        ),
-        high: count(
-          sql`CASE WHEN ${activityLogs.activityLevel} = 'high' THEN 1 END`,
-        ),
-        totalBlocks: count(),
+        userId: user.id,
+        name: user.name,
+        username: user.username,
+        avatar: user.image,
+        email: user.email,
+        position: user.position,
+        rawStatus: userLiveStatus.status,
+        projectId: userLiveStatus.projectId,
+        projectName: projects.name,
+        projectKey: projects.key,
+        issueId: userLiveStatus.issueId,
+        issueTitle: issues.title,
+        issueNumber: issues.number,
+        lastHeartbeatAt: userLiveStatus.lastHeartbeatAt,
       })
-      .from(timeBlocks)
-      .innerJoin(activityLogs, eq(activityLogs.timeBlockId, timeBlocks.id))
-      .innerJoin(user, eq(timeBlocks.userId, user.id))
-      .where(and(...conditions))
-      .groupBy(timeBlocks.userId, user.name, user.username, user.image);
+      .from(user)
+      .leftJoin(userLiveStatus, eq(user.id, userLiveStatus.userId))
+      .leftJoin(projects, eq(userLiveStatus.projectId, projects.id))
+      .leftJoin(issues, eq(userLiveStatus.issueId, issues.id))
+      .where(userConditions.length > 0 ? and(...userConditions) : undefined);
 
-    const ranking = rows
-      .map((r: any) => {
-        const totalBlocks = Number(r.totalBlocks) || 0;
-        const none = Number(r.none) || 0;
-        const low = Number(r.low) || 0;
-        const medium = Number(r.medium) || 0;
-        const high = Number(r.high) || 0;
-        const totalMinutes = Number(r.totalMinutes) || 0;
+    const STALE_THRESHOLD_MS = 3 * 60 * 1000;
+    const now = new Date().getTime();
 
-        const score =
-          totalBlocks > 0
-            ? (high * 3 + medium * 2 + low * 1 + none * 0) / totalBlocks
-            : 0;
+    return rows.map((r: any) => {
+      let status: 'active' | 'idle' | 'offline' = r.rawStatus || 'offline';
+      const lastHeartbeat = r.lastHeartbeatAt
+        ? new Date(r.lastHeartbeatAt).getTime()
+        : 0;
 
-        return {
-          userId: r.userId,
-          name: r.userName,
-          username: r.userUsername,
-          avatar: r.userAvatar,
-          totalMinutes,
-          none,
-          low,
-          medium,
-          high,
-          totalBlocks,
-          activityScore: Number(score.toFixed(2)),
-        };
-      })
-      .sort(
-        (a: any, b: any) =>
-          b.activityScore - a.activityScore || b.totalMinutes - a.totalMinutes,
-      );
+      if (
+        status !== 'offline' &&
+        (!r.lastHeartbeatAt || now - lastHeartbeat > STALE_THRESHOLD_MS)
+      ) {
+        status = 'offline';
+      }
 
-    return ranking;
+      const issueKey =
+        status !== 'offline' && r.projectKey && r.issueNumber
+          ? `${r.projectKey as string}-${r.issueNumber as number}`
+          : null;
+
+      return {
+        userId: r.userId,
+        name: r.name,
+        username: r.username,
+        avatar: r.avatar,
+        email: r.email,
+        position: r.position || null,
+        status,
+        projectId: status !== 'offline' ? r.projectId || null : null,
+        projectName: status !== 'offline' ? r.projectName || null : null,
+        issueId: status !== 'offline' ? r.issueId || null : null,
+        issueTitle: status !== 'offline' ? r.issueTitle || null : null,
+        issueKey,
+        lastHeartbeatAt: r.lastHeartbeatAt || null,
+      };
+    });
+
   }
+
+  async getActivityRanking(
+    currentUser: { id: string; isAdmin: boolean },
+    _period: 'week' | 'month' = 'week',
+    projectId?: string,
+  ) {
+    return this.getLiveStatus(currentUser, projectId);
+  }
+
 
   private formatDateString(d: Date): string {
     return d.toISOString().split('T')[0];

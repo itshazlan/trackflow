@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.5 (Lean Internal) |
+| **Versi Dokumen** | 3.6 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Web Push Notification — opt-in per perangkat, terintegrasi ke sistem notifikasi esensial yang sudah ada, catatan batasan Safari iOS) |
+| **Tanggal** | 14 Juli 2026 (revisi: Peringkat Aktivitas Time Book diganti total menjadi Live Status — daftar Aktif/Idle/Offline realtime, bukan lagi laporan skor historis) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -318,13 +318,17 @@ Field:
 | FR-138 | Anggota tanpa tiket assigned sama sekali **tetap ditampilkan** (dengan angka nol) — supaya Manager dapat melihat siapa yang belum memiliki penugasan |
 | FR-139 | Klik pada suatu angka di halaman ini mengarahkan ke tampilan Kanban/List proyek yang sudah terfilter sesuai anggota dan status terkait |
 
-#### 7.13.5 Peringkat Aktivitas Time Book (Manager Only)
+#### 7.13.5 Live Status: Daftar Aktif & Idle (Manager Only)
+
+> **Revisi dari desain sebelumnya:** fitur ini semula dirancang sebagai laporan historis (skor aktivitas mingguan/bulanan). Direvisi total menjadi **status langsung (live)** — Manager melihat siapa yang sedang aktif/idle di desktop client **saat ini juga**, bukan laporan agregat dari periode lalu.
 
 | ID | Requirement |
 |---|---|
-| FR-140 | Manager/Admin dapat melihat **peringkat aktivitas** seluruh anggota berdasarkan data Time Book (level aktivitas keyboard/mouse), untuk periode Minggu Ini atau Bulan Ini |
-| FR-141 | Admin dapat melihat peringkat lintas seluruh proyek; Manager hanya dapat melihat peringkat untuk proyek yang dia kelola |
-| FR-142 | Blok waktu yang sudah dihapus (baik oleh pekerja sendiri maupun di-override Admin) **dikecualikan** dari perhitungan peringkat — data yang sudah dihapus tidak dipakai untuk penilaian apapun |
+| FR-140 | Manager/Admin dapat melihat **status langsung** (live) seluruh anggota proyek — apakah sedang **Aktif**, **Idle**, atau **Offline** di desktop client saat ini, beserta tugas yang sedang dikerjakan (Issue ID atau "Activity") |
+| FR-141 | Status **Idle** ditentukan otomatis oleh desktop client berdasarkan ketiadaan aktivitas keyboard/mouse selama **5 menit** — terpisah dari siklus sinkronisasi 10 menit, sehingga status yang ditampilkan benar-benar terkini (bukan basi sampai 10 menit) |
+| FR-142 | Status **Offline** ditampilkan otomatis maksimal **2 menit** setelah desktop client ditutup atau kehilangan koneksi — baik lewat pemberitahuan eksplisit (Stop tracking/quit aplikasi) maupun deteksi otomatis jika tidak ada sinyal dalam jangka waktu tertentu |
+| FR-143 | Admin dapat melihat status langsung lintas seluruh proyek; Manager hanya dapat melihat status langsung untuk proyek yang dia kelola — guard identik dengan Workload Overview (FR-137–139) |
+| FR-144 | Daftar status diperbarui **secara realtime** tanpa perlu refresh halaman, termasuk anggota yang belum pernah membuka desktop client sama sekali (ditampilkan sebagai Offline sejak awal) |
 
 ---
 
@@ -457,10 +461,11 @@ Field:
 2. Melihat satu anggota dengan 8 tiket "In Progress" sementara anggota lain hanya 1 — indikasi beban tidak merata.
 3. Klik angka "8" pada kolom In Progress milik anggota tersebut → Kanban proyek langsung terfilter menampilkan hanya tiket miliknya di status itu.
 
-### 9.20 Meninjau Peringkat Aktivitas Tim
-1. Manager membuka halaman Peringkat Aktivitas, memilih periode "Bulan Ini".
-2. Melihat anggota terurut berdasarkan skor aktivitas — dipakai sebagai bahan diskusi 1-on-1, bukan penilaian otomatis semata.
-3. Menyadari satu anggota punya skor rendah karena banyak blok waktu ber-level "Tidak Ada Aktivitas" — jadi bahan follow-up personal, bukan teguran otomatis dari sistem.
+### 9.20 Memantau Status Langsung Tim
+1. Manager membuka halaman Live Status pada proyeknya.
+2. Melihat sebagian besar anggota berstatus 🟢 Aktif dengan tugas masing-masing tertera, satu anggota 🟡 Idle sudah 6 menit.
+3. Beberapa saat kemudian, anggota yang Idle mulai mengetik lagi — badge otomatis berubah jadi 🟢 Aktif tanpa Manager perlu refresh halaman.
+4. Menjelang jam pulang kantor, satu per satu anggota menutup desktop client — badge mereka berubah jadi ⚪ Offline dalam hitungan menit.
 
 ### 9.21 Mengaktifkan Push Notification
 1. Developer membuka halaman Profil, menemukan toggle "Aktifkan Notifikasi Push".
@@ -497,7 +502,7 @@ Field:
 | Fase | Cakupan |
 |---|---|
 | **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view) + guard hapus tiket khusus pembuat, Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Halaman Tugas Saya (agregasi lintas proyek), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
-| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, Peringkat Aktivitas Time Book, **Web Push Notification** |
+| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, **Live Status Aktif/Idle Tim**, Web Push Notification |
 | **Fase 3** | Notifikasi lanjutan (email), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan |
 
 ---
