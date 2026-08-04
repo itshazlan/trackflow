@@ -162,23 +162,30 @@ export default function ProfileModal({ open, onOpenChange, onSuccess }: ProfileM
       setError("");
       setSuccessMsg("");
 
-      // Upload via backend — avoids browser CORS against R2 entirely.
-      // Backend receives the file and pushes it to R2 server-side.
-      const formData = new FormData();
-      formData.append("file", file);
-
+      // 1. Get presigned upload URL from backend (POST request without body, avoiding 413)
       const res = await fetch("/api/users/me/avatar", {
         method: "POST",
-        body: formData,
-        // Do NOT set Content-Type — browser sets it with the correct boundary automatically
       });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message ?? "Gagal mengunggah foto profil");
+        throw new Error(body?.message ?? "Gagal menginisialisasi unggahan foto");
       }
 
-      const { publicUrl } = await res.json();
+      const { uploadUrl, publicUrl } = await res.json();
+
+      // 2. PUT file directly to the presigned URL
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Gagal mengunggah foto ke penyimpanan cloud");
+      }
 
       // Update local preview with cache-busting param
       setImage(`${publicUrl}?t=${Date.now()}`);

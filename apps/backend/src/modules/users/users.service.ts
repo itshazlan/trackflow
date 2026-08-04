@@ -63,21 +63,21 @@ export class UsersService {
     return safeUser;
   }
 
-  async uploadAvatar(id: string, buffer: Buffer, mimeType: string) {
+  async getAvatarUploadUrl(id: string) {
     const objectKey = `avatars/${id}.webp`;
-
-    // 1. Upload to R2 (or local disk in mock mode) FIRST
-    await this.r2Service.uploadBuffer(objectKey, buffer, mimeType);
-
-    // 2. Determine the public URL for serving the image
-    //    - Real R2: served via /uploads proxy (main.ts pipes from R2)
-    //    - Mock mode: served as static from /uploads directory
+    const uploadUrl = await this.r2Service.getPresignedUploadUrl(objectKey, 'image/webp');
     const publicUrl = `/api/uploads/${objectKey}`;
 
-    // 3. Only update DB after upload succeeds
-    await this.db.update(user).set({ image: publicUrl }).where(eq(user.id, id));
+    await this.db
+      .update(user)
+      .set({ image: publicUrl })
+      .where(eq(user.id, id));
 
-    return { publicUrl };
+    return {
+      uploadUrl,
+      publicUrl,
+      r2ObjectKey: objectKey,
+    };
   }
 
   async findAll() {

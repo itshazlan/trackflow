@@ -6,11 +6,7 @@ import {
   Body,
   Req,
   UseGuards,
-  UseInterceptors,
-  UploadedFile,
-  BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/user-profile.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
@@ -37,32 +33,10 @@ export class UsersController {
 
   /**
    * POST /api/users/me/avatar
-   * Accepts multipart/form-data with field "file".
-   * Uploads server-side to R2 — no browser CORS required.
+   * Generates a pre-signed upload URL for avatar photo.
    */
   @Post('me/avatar')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
-      fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.startsWith('image/')) {
-          return cb(
-            new BadRequestException('Berkas harus berupa gambar.'),
-            false,
-          );
-        }
-        cb(null, true);
-      },
-    }),
-  )
-  uploadAvatar(@Req() req: any, @UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('File tidak ditemukan dalam request.');
-    }
-    return this.usersService.uploadAvatar(
-      req.user.id,
-      file.buffer,
-      file.mimetype,
-    );
+  getAvatarUploadUrl(@Req() req: any) {
+    return this.usersService.getAvatarUploadUrl(req.user.id);
   }
 }
