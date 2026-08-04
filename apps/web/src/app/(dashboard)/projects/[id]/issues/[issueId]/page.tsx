@@ -657,7 +657,15 @@ export default function IssueDetailPage() {
       setAttachments((prev) => [...prev, ...uploaded]);
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Gagal mengunggah lampiran.");
+      let msg = err instanceof Error ? err.message : "Gagal mengunggah lampiran.";
+      if (msg.includes("52428800")) {
+        msg = "Ukuran berkas tidak boleh melebihi 50MB.";
+      } else if (msg.includes("104857600")) {
+        msg = "Ukuran berkas tidak boleh melebihi 100MB.";
+      } else if (msg.includes("fileSizeBytes must not be greater than")) {
+        msg = msg.replace("fileSizeBytes must not be greater than ", "Ukuran berkas tidak boleh melebihi ");
+      }
+      setError(msg);
     } finally {
       setAttachmentsLoading(false);
     }
@@ -1180,6 +1188,22 @@ export default function IssueDetailPage() {
           )}
         </div>
       </div>
+      {error && (
+        <div className="mx-6 mt-4">
+          <div className="flex items-center justify-between gap-2 rounded border border-destructive/20 bg-destructive/10 px-3 py-2 text-destructive text-[11.5px] leading-normal">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <button
+              onClick={() => setError("")}
+              className="text-[10px] font-semibold uppercase hover:underline cursor-pointer tracking-wider shrink-0 opacity-80 hover:opacity-100"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid View */}
       <div className="flex-1 overflow-y-auto min-h-0 bg-background/20">

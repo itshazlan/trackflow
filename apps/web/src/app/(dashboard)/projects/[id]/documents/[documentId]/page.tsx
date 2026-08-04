@@ -288,7 +288,15 @@ export default function DocumentDetailPage() {
         void fetchImageUrls(updatedDetail.files);
       } catch (err: any) {
         console.error(err);
-        setUploadError(err.message || "Gagal mengunggah file.");
+        let msg = err.message || "Gagal mengunggah file.";
+        if (msg.includes("52428800")) {
+          msg = "Ukuran berkas tidak boleh melebihi 50MB.";
+        } else if (msg.includes("104857600")) {
+          msg = "Ukuran berkas tidak boleh melebihi 100MB.";
+        } else if (msg.includes("fileSizeBytes must not be greater than")) {
+          msg = msg.replace("fileSizeBytes must not be greater than ", "Ukuran berkas tidak boleh melebihi ");
+        }
+        setUploadError(msg);
       } finally {
         setUploadLoading(false);
       }

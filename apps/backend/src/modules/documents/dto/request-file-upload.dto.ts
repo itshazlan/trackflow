@@ -11,6 +11,6 @@ export class RequestFileUploadDto {
 
   @IsInt()
   @Min(1)
-  @Max(104857600) // 100MB limit (104857600 bytes)
+  @Max(104857600, { message: 'Ukuran berkas tidak boleh melebihi 100MB.' })
   fileSizeBytes: number;
 }
