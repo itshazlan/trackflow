@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.8 (Lean Internal) |
+| **Versi Dokumen** | 3.9 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Activity Ranking historis diganti total menjadi Live Status realtime — tabel `user_live_status`, heartbeat desktop client, cron fallback deteksi offline) |
+| **Tanggal** | 14 Juli 2026 (revisi: §5.1 baru — penyatuan menu Issues dengan mode agregasi "Tugas Saya" sebelumnya, dropdown proyek inline untuk Time Book/Documents/Settings, shared state `activeProjectId`. Tidak ada perubahan backend/skema) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -154,7 +154,7 @@ Better Auth secara default memakai **session cookie httpOnly**, cocok untuk `app
 
 ## 5. Arsitektur Frontend Web (Next.js)
 
-- **Routing:** App Router Next.js (`/projects/:projectId/issues`, tanpa prefix `/org/:orgId` karena tidak ada konsep multi-organisasi).
+- **Routing:** App Router Next.js (`/projects/:projectId/issues`, tanpa prefix `/org/:orgId` karena tidak ada konsep multi-organisasi). Menu **Issues** juga dapat diakses tanpa `projectId` (`/issues`) — lihat §5.1 untuk penjelasan dua state ini.
 - **Data table tiket:** TanStack Table + Shadcn UI.
 - **State realtime:** koneksi Socket.io di root layout, invalidate cache TanStack Query saat menerima event (`issue.updated`, `timeblock.synced`, `user.status_changed`).
 - **Mode tampilan tiket:** List, Kanban, Calendar — ketiganya membaca dari endpoint `GET /projects/:id/issues` yang sama (tanpa parameter `view` mengubah bentuk response backend); pengelompokan per-status/per-tanggal dilakukan di frontend.
@@ -164,7 +164,42 @@ Better Auth secara default memakai **session cookie httpOnly**, cocok untuk `app
 - **Pengaturan Workflow:** halaman admin/manager proyek untuk CRUD status tiket (drag-drop reorder, toggle "restricted to role").
 - **Pengaturan Template:** halaman untuk mengelola Issue Template per proyek/global (form builder sederhana: daftar field + toggle wajib/opsional).
 
+### 5.1 Penyatuan Menu Issues & "Tugas Saya" + Dropdown Proyek Inline (Revisi)
+
+> **Revisi dari desain sebelumnya:** "Tugas Saya" semula direncanakan sebagai halaman/menu sidebar terpisah. Direvisi menjadi **state kedua dari menu Issues yang sama** (FR-150) — menghindari sidebar punya dua menu dengan konsep tumpang tindih.
+
+- **Shared state `activeProjectId`:** disimpan di context/store frontend (mis. Zustand kecil atau React Context) **dan** di-persist ke `localStorage` (FR-153) — dipakai bersama oleh project switcher (kiri atas) dan seluruh item sidebar yang project-scoped (Issues, Time Book, Documents, Settings). Mengubah proyek aktif dari manapun memperbarui semuanya serentak (FR-152).
+- **Menu Issues (2 state, satu komponen halaman):**
+  - `activeProjectId` kosong → render mode agregasi (memanggil `GET /issues/mine`, dikelompokkan per proyek sebagai mini-board collapsible — logic ini **tidak berubah** dari desain "Tugas Saya" sebelumnya, cuma pindah lokasi pemanggilan).
+  - `activeProjectId` terisi → render Issues per-proyek seperti biasa (memanggil `GET /projects/:id/issues`).
+- **Menu Time Book, Documents, Settings — dropdown inline pengganti state disabled:**
+  ```tsx
+  function ProjectScopedNavItem({ icon, label, hrefSuffix }: Props) {
+    const { activeProjectId, setActiveProject } = useActiveProject(); // shared store, sama dgn project switcher
+    const { data: projects } = useProjects();
+
+    if (!activeProjectId) {
+      return (
+        <DropdownMenu>
+          <DropdownMenuTrigger>{icon} {label}</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {projects.map(p => (
+              <DropdownMenuItem key={p.id} onClick={() => setActiveProject(p.id)}>
+                {p.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      );
+    }
+    return <NavLink href={`/projects/${activeProjectId}${hrefSuffix}`}>{icon} {label}</NavLink>;
+  }
+  ```
+  Dipakai untuk ketiga menu (Time Book, Documents, Settings) dengan komponen yang sama — cuma beda `hrefSuffix`/`icon`/`label`.
+- **Tidak ada perubahan backend** untuk revisi ini — `GET /issues/mine` dan `GET /projects/:id/issues` sudah ada persis dari desain sebelumnya; yang berubah murni titik masuk & state management di sisi frontend.
+
 ---
+
 
 ## 6. Arsitektur Desktop Client (Tauri)
 
@@ -491,7 +526,7 @@ erDiagram
 | changed_by | uuid (FK → users) | |
 | changed_at | timestamptz | |
 
-> **Immutable by design (FR-029c):** tabel ini **tidak punya endpoint PATCH/DELETE sama sekali** — tidak untuk penulis, tidak untuk Admin. Ini murni audit trail perubahan status, berbeda dari `issue_comments` yang bisa diedit/dihapus. Diisi otomatis oleh service `updateIssueStatus()` yang sama dipakai List/Kanban/Tugas Saya — satu titik trigger, bukan diduplikasi di tiap tempat.
+> **Immutable by design (FR-029c):** tabel ini **tidak punya endpoint PATCH/DELETE sama sekali** — tidak untuk penulis, tidak untuk Admin. Ini murni audit trail perubahan status, berbeda dari `issue_comments` yang bisa diedit/dihapus. Diisi otomatis oleh service `updateIssueStatus()` yang sama dipakai List/Kanban/mode agregasi Issues — satu titik trigger, bukan diduplikasi di tiap tempat.
 
 #### `time_blocks`
 > Tabel PostgreSQL biasa dengan composite index `(user_id, block_start)` dan `(project_id, block_start)`.
@@ -667,7 +702,7 @@ erDiagram
 | Issues | `/projects/:id/issues` | GET/POST | List (view=list\|kanban\|calendar) & buat tiket — nomor issue (`number`) di-generate otomatis, atomik per proyek |
 | Issues | `/issues/:id` | GET/PATCH | Detail & edit tiket — edit oleh Assignee, Manager proyek terkait, atau Admin (FR-026) |
 | Issues | `/issues/:id` | DELETE | Hapus tiket — **guard lebih ketat dari edit**: hanya pembuat tiket (`createdBy === currentUser`, peran apapun), Manager proyek terkait, atau Admin. Assignee yang bukan pembuat **ditolak** (403) (FR-026a). `time_blocks.issue_id` milik tiket yang dihapus di-set `NULL` (jadi kategori "Activity"), **bukan** ikut dihapus — data payroll tetap utuh |
-| Issues | `/issues/mine?view=list\|kanban\|calendar` | GET | **Baru** — agregasi tiket assigned ke user saat ini lintas semua proyek yang diikuti. Response dikelompokkan per proyek (`list`/`kanban`) atau flat lintas-proyek (`calendar`) — lihat §10.17 untuk struktur detail (FR-120–125) |
+| Issues | `/issues/mine?view=list\|kanban\|calendar` | GET | Agregasi tiket assigned ke user saat ini lintas semua proyek yang diikuti — dipanggil frontend saat menu Issues dibuka **tanpa proyek aktif** (FR-150, §5.1). Response dikelompokkan per proyek (`list`/`kanban`) atau flat lintas-proyek (`calendar`) — lihat §10.17 untuk struktur detail (FR-120–125) |
 | Issues | `/issues/:id/status` | PATCH | Ubah status (dicek terhadap `restricted_to_role`) — **otomatis mencatat baris ke `issue_status_history`** dalam transaksi yang sama (FR-029c) |
 | Issue Attachments | `/issues/:id/attachments` | GET/POST | List & upload lampiran (presigned URL R2) |
 | Issue Attachments | `/issues/:id/attachments/:attachmentId` | DELETE | Hapus lampiran (uploader atau Admin) |
@@ -794,7 +829,7 @@ POST /time-blocks/sync
 | `timesheet.approved` | Server → Web | `{timesheetId, status}` | Notifikasi ke Developer |
 | `timeblock.overridden` | Server → Web | `{timeBlockId, actorId, targetUserId, action, reason}` | Notifikasi ke pekerja terdampak saat Admin override |
 | `issue.comment_created` | Server → Web | `{issueId, commentId, authorId, bodyPreview, parentCommentId, hasImages}` | Update panel Aktivitas/Komentar secara realtime tanpa refresh — `parentCommentId` dipakai frontend untuk menyisipkan reply ke bawah komentar induk yang tepat, bukan di akhir list |
-| `issue.status_logged` | Server → Web | `{issueId, oldStatusName, newStatusName, changedBy, changedAt}` | Baris log status baru muncul realtime di panel Aktivitas siapapun yang sedang membuka issue tersebut, terlepas dari tampilan mana yang memicu perubahan (List/Kanban/Tugas Saya) |
+| `issue.status_logged` | Server → Web | `{issueId, oldStatusName, newStatusName, changedBy, changedAt}` | Baris log status baru muncul realtime di panel Aktivitas siapapun yang sedang membuka issue tersebut, terlepas dari tampilan mana yang memicu perubahan (List/Kanban/mode agregasi Issues) |
 | `notification.created` | Server → Web | `{id, type, title, body, entityType, entityId}` | Notifikasi baru (FR-100–104) — dikirim **hanya ke room pribadi penerima** (`user:{userId}`), bukan broadcast ke semua |
 
 **Room per-user untuk notifikasi:** setiap koneksi Socket.io otomatis `socket.join('user:' + userId)` saat connect (identitas dari sesi Better Auth). Event `notification.created` di-emit ke room spesifik ini — memastikan notifikasi hanya sampai ke penerima yang dituju, bukan seluruh pengguna yang sedang online.
@@ -1246,7 +1281,7 @@ sequenceDiagram
 
 **Prinsip penting:** insert `issues`/`projects` ke database **selalu dianggap selesai** sebelum proses kirim ke Discord dimulai — kegagalan Discord (channel dihapus, rate limit, downtime) tidak boleh pernah menggagalkan atau menunda response ke user (FR-115).
 
-### 10.17 Alur Guard Hapus Tiket (Creator-Only) & Agregasi "Tugas Saya"
+### 10.17 Alur Guard Hapus Tiket (Creator-Only) & Mode Agregasi Menu Issues (Tanpa Proyek Aktif)
 
 ```mermaid
 sequenceDiagram
@@ -1270,7 +1305,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant U as Pengguna
+    participant U as Pengguna (buka menu Issues TANPA proyek aktif)
     participant A as Backend API
     participant PG as PostgreSQL
 
@@ -1287,6 +1322,9 @@ sequenceDiagram
     Note over U: Drag-and-drop pada mini-board mana pun tetap panggil endpoint yang sama
     U->>A: PATCH /issues/:id/status {statusId}
     Note over A: Validasi restricted_to_role identik dengan Kanban per-proyek (§10.10) — tidak ada logic baru
+
+    Note over U: Begitu user pilih proyek dari switcher/dropdown manapun (§5.1)
+    U->>U: activeProjectId ter-set → menu Issues otomatis beralih memanggil GET /projects/:id/issues (mode per-proyek biasa)
 ```
 
 ### 10.18 Alur 4 Fitur Visibilitas — Dashboard, Recently Viewed, Progress Bar, Workload
@@ -1365,7 +1403,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Dev as Developer (dari Kanban/List/Tugas Saya)
+    participant Dev as Developer (dari Kanban/List/mode agregasi Issues)
     participant A as Backend API
     participant PG as PostgreSQL
     participant WS as Socket.io Gateway

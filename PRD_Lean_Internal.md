@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.6 (Lean Internal) |
+| **Versi Dokumen** | 3.7 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Peringkat Aktivitas Time Book diganti total menjadi Live Status — daftar Aktif/Idle/Offline realtime, bukan lagi laporan skor historis) |
+| **Tanggal** | 14 Juli 2026 (revisi: menu "Tugas Saya" disatukan menjadi mode agregasi bawaan menu Issues; dropdown pemilihan proyek inline pada Time Book/Documents/Settings, satu state proyek aktif dipakai bersama sidebar) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -150,7 +150,7 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-029 | Komentar dapat diedit/dihapus oleh penulisnya sendiri; Admin dapat menghapus komentar siapapun untuk keperluan moderasi |
 | FR-029a | Pengguna dapat **melampirkan file apa saja** pada komentar (diunggah setelah teks komentar tersimpan). File bertipe **gambar** ditampilkan sebagai thumbnail di bawah teks (klik untuk lihat ukuran penuh); tipe file lain ditampilkan sebagai kartu (ikon + nama + ukuran) dengan tombol **unduh** |
 | FR-029b | Pengguna dapat **membalas** komentar yang sudah ada — balasan ditampilkan terindentasi di bawah komentar induknya. **Reply dibatasi 1 tingkat** (tidak bisa membalas balasan) — cukup untuk menjawab komentar spesifik tanpa kompleksitas thread berlapis-lapis |
-| FR-029c | Panel Aktivitas menampilkan **log perubahan status** tiket (mis. "Nama User mengubah status dari New ke In Progress") tergabung secara kronologis dengan komentar — dicatat otomatis setiap kali status tiket berubah, dari tampilan manapun (List/Kanban/Tugas Saya). Log ini bersifat **permanen dan tidak dapat diedit/dihapus oleh siapapun, termasuk Admin** — berbeda dari komentar biasa yang bisa dihapus (FR-029) |
+| FR-029c | Panel Aktivitas menampilkan **log perubahan status** tiket (mis. "Nama User mengubah status dari New ke In Progress") tergabung secara kronologis dengan komentar — dicatat otomatis setiap kali status tiket berubah, dari tampilan manapun (List/Kanban/mode agregasi Issues). Log ini bersifat **permanen dan tidak dapat diedit/dihapus oleh siapapun, termasuk Admin** — berbeda dari komentar biasa yang bisa dihapus (FR-029) |
 
 ### 7.4 Issue Template (Preset & Dapat Diperluas — Sebagai Filler Judul & Deskripsi)
 
@@ -275,15 +275,17 @@ Field:
 | FR-115 | Kegagalan mengirim notifikasi ke Discord (mis. channel dihapus, webhook tidak valid) **tidak boleh menggagalkan** proses pembuatan proyek/tiket itu sendiri |
 | FR-116 | Manager/Admin dapat mengaktifkan event **"Status Issue Berubah"** secara terpisah dari event "Issue Baru Dibuat" pada webhook tingkat proyek — notifikasi mencakup status lama, status baru, dan siapa yang mengubahnya. Dua event ini dapat diaktifkan/nonaktifkan independen satu sama lain, supaya tim bisa menyesuaikan tingkat "kebisingan" notifikasi sesuai kebutuhan |
 
-### 7.12 Tugas Saya (Agregasi Tiket Lintas Proyek)
+### 7.12 Mode Agregasi Lintas Proyek pada Menu Issues (Sebelumnya "Tugas Saya")
+
+> **Revisi dari desain sebelumnya:** fitur ini semula dirancang sebagai halaman/menu sidebar terpisah ("Tugas Saya"). Direvisi menjadi **mode bawaan dari menu Issues** — supaya sidebar tidak mempunyai dua menu dengan konsep tumpang tindih (Issues vs Tugas Saya). Nilai fiturnya **tidak dihilangkan**, hanya disatukan sebagai satu dari dua state menu Issues (lihat FR-150 di §7.14).
 
 | ID | Requirement |
 |---|---|
-| FR-120 | Setiap pengguna memiliki halaman **"Tugas Saya"** yang menampilkan seluruh tiket yang **ditugaskan (assignee)** kepadanya, dikumpulkan dari **semua proyek** yang dia ikuti dalam satu tempat |
-| FR-121 | Halaman ini mendukung mode tampilan **List, Kanban, dan Calendar** — sama seperti tampilan tiket per-proyek |
+| FR-120 | Ketika **belum ada proyek aktif dipilih**, menu Issues menampilkan seluruh tiket yang **ditugaskan (assignee)** kepada pengguna, dikumpulkan dari **semua proyek** yang dia ikuti dalam satu tempat |
+| FR-121 | Mode agregasi ini mendukung tampilan **List, Kanban, dan Calendar** — sama seperti tampilan tiket per-proyek |
 | FR-122 | Pada mode **List dan Kanban**, tiket dikelompokkan sebagai **mini-board terpisah per proyek**, masing-masing dapat **di-collapse/expand** secara independen. Mini-board Kanban tiap proyek menggunakan **kolom status milik proyek itu sendiri** (termasuk status kustom yang berbeda antar proyek) |
 | FR-123 | Pada mode **Calendar**, seluruh tiket dari semua proyek ditampilkan dalam **satu kalender gabungan** (bukan kalender terpisah per proyek), dengan tiap tiket diberi penanda visual (badge/warna) sesuai kode proyek asalnya |
-| FR-124 | Drag-and-drop pada mini-board Kanban di halaman ini mengubah status tiket dengan validasi yang **sama persis** seperti di tampilan Kanban per-proyek (termasuk pembatasan status ke role tertentu) |
+| FR-124 | Drag-and-drop pada mini-board Kanban di mode ini mengubah status tiket dengan validasi yang **sama persis** seperti di tampilan Kanban per-proyek (termasuk pembatasan status ke role tertentu) |
 | FR-125 | Proyek yang tidak memiliki tiket assigned ke pengguna tersebut **tidak ditampilkan** sebagai mini-board kosong — hanya proyek dengan minimal satu tiket assigned yang muncul |
 
 ### 7.13 Fitur Visibilitas Tambahan
@@ -293,7 +295,7 @@ Field:
 | ID | Requirement |
 |---|---|
 | FR-130 | Halaman **Dashboard** menjadi halaman utama setelah login, menampilkan: total jam kerja hari ini, jumlah tiket overdue milik pengguna, dan status tracking terkini (sedang bekerja/idle) |
-| FR-131 | Klik jumlah tiket overdue mengarahkan pengguna ke halaman "Tugas Saya" dengan filter overdue otomatis aktif |
+| FR-131 | Klik jumlah tiket overdue mengarahkan pengguna ke menu Issues dalam mode agregasi lintas proyek (tanpa proyek aktif dipilih), dengan filter overdue otomatis aktif |
 
 #### 7.13.2 "Dilihat Baru-baru Ini"
 
@@ -329,6 +331,15 @@ Field:
 | FR-142 | Status **Offline** ditampilkan otomatis maksimal **2 menit** setelah desktop client ditutup atau kehilangan koneksi — baik lewat pemberitahuan eksplisit (Stop tracking/quit aplikasi) maupun deteksi otomatis jika tidak ada sinyal dalam jangka waktu tertentu |
 | FR-143 | Admin dapat melihat status langsung lintas seluruh proyek; Manager hanya dapat melihat status langsung untuk proyek yang dia kelola — guard identik dengan Workload Overview (FR-137–139) |
 | FR-144 | Daftar status diperbarui **secara realtime** tanpa perlu refresh halaman, termasuk anggota yang belum pernah membuka desktop client sama sekali (ditampilkan sebagai Offline sejak awal) |
+
+### 7.14 Navigasi Sidebar: Dropdown Proyek Inline & Penyatuan State Proyek Aktif
+
+| ID | Requirement |
+|---|---|
+| FR-150 | Menu **Issues** memiliki 2 state bergantung ada/tidaknya proyek aktif dipilih: **tanpa proyek aktif** → tampilkan mode agregasi lintas proyek (FR-120–125, sebelumnya "Tugas Saya"); **dengan proyek aktif** → tampilkan Issues proyek tersebut seperti biasa (List/Kanban/Calendar per-proyek) |
+| FR-151 | Menu **Time Book**, **Documents**, dan **Settings** yang sebelumnya nonaktif (disabled) saat belum ada proyek aktif, kini menampilkan **dropdown pemilihan proyek inline** — memilih proyek dari dropdown ini langsung mengaktifkan menu tersebut ke proyek yang dipilih |
+| FR-152 | Proyek aktif bersifat **satu state yang dipakai bersama** oleh project switcher (kiri atas) dan seluruh dropdown inline di sidebar — memilih proyek dari manapun (switcher maupun dropdown menu manapun) memperbarui proyek aktif secara serentak di semua menu |
+| FR-153 | Proyek aktif yang terakhir dipilih **tetap tersimpan** setelah pengguna me-refresh halaman atau membuka tab baru — tidak kembali ke kondisi kosong setiap kali |
 
 ---
 
@@ -436,15 +447,16 @@ Field:
 4. Manager proyek terkait tetap bisa menghapus tiket siapapun di proyeknya, terlepas dari siapa pembuatnya.
 
 ### 9.15 Melihat Semua Tugas Lintas Proyek
-1. Developer yang tergabung di 3 proyek berbeda membuka menu "Tugas Saya".
+1. Developer yang tergabung di 3 proyek berbeda membuka menu **Issues** tanpa memilih proyek aktif terlebih dahulu.
 2. Melihat 3 mini-board terpisah (satu per proyek yang punya tiket assigned kepadanya), masing-masing dengan kolom status sesuai konfigurasi proyeknya sendiri.
 3. Collapse salah satu mini-board proyek yang sedang tidak jadi fokus — proyek lain tetap terlihat penuh.
 4. Drag satu tiket antar kolom status di salah satu mini-board — berfungsi sama seperti Kanban per-proyek biasa.
 5. Beralih ke mode Calendar — melihat seluruh tenggat waktu dari ketiga proyek dalam satu kalender, dibedakan lewat badge warna per proyek.
+6. Setelah itu, Developer memilih salah satu proyek dari project switcher — menu Issues otomatis beralih ke tampilan per-proyek untuk proyek yang baru dipilih tersebut.
 
 ### 9.16 Memulai Hari Lewat Dashboard
 1. Developer login, langsung melihat halaman Dashboard: jam kerja hari ini masih 0, 2 tiket overdue, status "Idle".
-2. Klik angka "2 tiket overdue" → diarahkan ke Tugas Saya dengan filter overdue otomatis aktif.
+2. Klik angka "2 tiket overdue" → diarahkan ke menu Issues dalam mode agregasi (tanpa proyek aktif) dengan filter overdue otomatis aktif.
 3. Mulai tracking dari desktop client — status di Dashboard berubah jadi "Sedang Bekerja" saat halaman dibuka ulang.
 
 ### 9.17 Berpindah Cepat Antar Tiket yang Sering Dibuka
@@ -474,6 +486,12 @@ Field:
 4. QA me-mention Developer tersebut di komentar sebuah tiket — notifikasi push muncul di notification tray OS meski TrackFlow sedang tidak terbuka sama sekali.
 5. Klik notifikasi push tersebut → browser terbuka langsung menuju tiket dan komentar yang dimaksud.
 
+### 9.22 Mengakses Menu Proyek Langsung dari Sidebar
+1. Developer baru login, belum memilih proyek apapun — menu Time Book, Documents, dan Settings tampil dengan dropdown pemilihan proyek inline (bukan lagi abu-abu/nonaktif tanpa penjelasan).
+2. Klik dropdown pada menu Documents, pilih salah satu proyek — langsung diarahkan ke Documents proyek tersebut.
+3. Menu Issues dan Time Book di sidebar ikut menunjuk ke proyek yang sama, tanpa perlu memilih ulang dari project switcher.
+4. Refresh browser — proyek yang tadi dipilih tetap aktif, tidak kembali ke kondisi kosong.
+
 ---
 
 ## 10. Metrik Keberhasilan
@@ -501,7 +519,7 @@ Field:
 
 | Fase | Cakupan |
 |---|---|
-| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view) + guard hapus tiket khusus pembuat, Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Halaman Tugas Saya (agregasi lintas proyek), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
+| **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view) + guard hapus tiket khusus pembuat + mode agregasi lintas proyek (tanpa proyek aktif dipilih), Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Sidebar dengan dropdown proyek inline (Time Book/Documents/Settings), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
 | **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, **Live Status Aktif/Idle Tim**, Web Push Notification |
 | **Fase 3** | Notifikasi lanjutan (email), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan |
 
