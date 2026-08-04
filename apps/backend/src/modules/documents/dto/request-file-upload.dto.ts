@@ -11,6 +11,6 @@ export class RequestFileUploadDto {
 
   @IsInt()
   @Min(1)
-  @Max(52428800) // 50MB limit (52428800 bytes)
+  @Max(104857600) // 100MB limit (104857600 bytes)
   fileSizeBytes: number;
 }

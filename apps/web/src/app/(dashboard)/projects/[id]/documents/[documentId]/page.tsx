@@ -252,6 +252,12 @@ export default function DocumentDetailPage() {
         for (let i = 0; i < e.target.files.length; i++) {
           const file = e.target.files[i];
 
+          // Local file size limit check (100MB)
+          const MAX_SIZE = 100 * 1024 * 1024; // 100MB
+          if (file.size > MAX_SIZE) {
+            throw new Error(`Berkas "${file.name}" melebihi batas ukuran maksimal 100MB.`);
+          }
+
           // 1. Request presigned upload URL
           const { fileId, uploadUrl } = await requestFileUpload(projectId, documentId, {
             fileName: file.name,
