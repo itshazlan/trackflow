@@ -715,6 +715,7 @@ export default function IssueDetailPage() {
             uploadedAttachments.push(att);
           } catch (err) {
             console.error("Gagal mengunggah lampiran komentar:", err);
+            throw err;
           }
         }
         newComment.commentAttachments = uploadedAttachments;
