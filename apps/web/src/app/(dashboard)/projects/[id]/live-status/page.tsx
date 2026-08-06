@@ -9,10 +9,8 @@ export default function ProjectLiveStatusRoute() {
   const projectId = params?.id as string;
 
   useEffect(() => {
-    if (projectId) {
-      router.replace(`/projects/${projectId}?tab=live-status`);
-    }
-  }, [projectId, router]);
+    router.replace(`/reports/activity-ranking`);
+  }, [router]);
 
   return null;
 }

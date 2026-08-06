@@ -18,7 +18,6 @@ import IssuesSection from "@/components/project/issues-section";
 import SettingsSection from "@/components/project/settings-section";
 import TimeBookSection from "@/components/project/timebook-section";
 import WorkloadSection from "@/components/project/workload-section";
-import LiveStatusSection from "@/components/project/live-status-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,11 +37,9 @@ import {
   Layers,
   CheckSquare,
   Clock,
-  LineChart,
   Settings,
   Pencil,
   BarChart3,
-  Activity,
 } from "lucide-react";
 
 
@@ -420,16 +417,10 @@ export default function ProjectDetailPage() {
             Settings
           </TabsTrigger>
           {(session?.user?.isAdmin || members.find((m) => m.email === session?.user?.email || m.username === session?.user?.username || m.id === session?.user?.id)?.role === "manager") && (
-            <>
-              <TabsTrigger value="workload" className="text-[12px] font-medium px-4 rounded-md flex items-center gap-1.5">
-                <BarChart3 className="h-3.5 w-3.5" />
-                Workload Overview
-              </TabsTrigger>
-              <TabsTrigger value="live-status" className="text-[12px] font-medium px-4 rounded-md flex items-center gap-1.5">
-                <Activity className="h-3.5 w-3.5 text-emerald-500" />
-                Live Status
-              </TabsTrigger>
-            </>
+            <TabsTrigger value="workload" className="text-[12px] font-medium px-4 rounded-md flex items-center gap-1.5">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Workload Overview
+            </TabsTrigger>
           )}
         </TabsList>
 
@@ -447,14 +438,9 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         {(session?.user?.isAdmin || members.find((m) => m.email === session?.user?.email || m.username === session?.user?.username || m.id === session?.user?.id)?.role === "manager") && (
-          <>
-            <TabsContent value="workload" className="mt-0">
-              <WorkloadSection projectId={projectId} />
-            </TabsContent>
-            <TabsContent value="live-status" className="mt-0">
-              <LiveStatusSection projectId={projectId} />
-            </TabsContent>
-          </>
+          <TabsContent value="workload" className="mt-0">
+            <WorkloadSection projectId={projectId} />
+          </TabsContent>
         )}
 
       </Tabs>
