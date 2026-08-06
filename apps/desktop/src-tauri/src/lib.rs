@@ -589,7 +589,6 @@ fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screensh
     if let Some(win) = app_handle.get_webview_window("screenshot-widget") {
         let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x as i32, y as i32)));
         let _ = win.show();
-        let _ = win.set_focus();
         let _ = win.emit("review-data-changed", ());
     } else {
         println!("[Tauri Rust] screenshot-widget window not found, building programmatically...");
@@ -608,6 +607,7 @@ fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screensh
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(false)
+        .focused(false)
         .inner_size(280.0, 180.0)
         .position(logical_x, logical_y)
         .build();
@@ -623,6 +623,7 @@ fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screensh
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(false)
+        .focused(false)
         .inner_size(280.0, 180.0)
         .position(logical_x, logical_y)
         .build();
@@ -630,7 +631,6 @@ fn trigger_screenshot_review(app_handle: &tauri::AppHandle, id: String, screensh
         match widget_win {
             Ok(win) => {
                 let _ = win.show();
-                let _ = win.set_focus();
                 let _ = win.emit("review-data-changed", ());
             }
             Err(e) => {

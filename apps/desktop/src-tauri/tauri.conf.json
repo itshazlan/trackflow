@@ -29,7 +29,8 @@
         "resizable": false,
         "transparent": true,
         "shadow": false,
-        "visible": false
+        "visible": false,
+        "focus": false
       },
       {
         "label": "screenshot-preview",
