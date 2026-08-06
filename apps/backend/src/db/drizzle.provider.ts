@@ -15,6 +15,7 @@ export const DrizzleProvider: Provider = {
     const db = drizzle(client, { schema });
 
     try {
+      await client`ALTER TABLE "issue_comments" ADD COLUMN IF NOT EXISTS "parent_comment_id" uuid;`;
       await client`ALTER TABLE "issue_statuses" ADD COLUMN IF NOT EXISTS "is_final" boolean DEFAULT false NOT NULL;`;
       await client`UPDATE "issue_statuses" SET "is_final" = true WHERE LOWER("name") = 'done';`;
       await client`
