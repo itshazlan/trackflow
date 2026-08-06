@@ -120,8 +120,9 @@ export async function logout(): Promise<void> {
 
 export async function getSession(): Promise<UserSession | null> {
   try {
-    const res = await fetch("/api/auth/get-session", {
+    const res = await fetch(`/api/auth/get-session?t=${Date.now()}`, {
       method: "GET",
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
       },

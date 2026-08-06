@@ -96,8 +96,11 @@ export default function ProfileModal({ open, onOpenChange, onSuccess }: ProfileM
         setUsername(data.username || "");
         setPhoneNumber(data.phoneNumber || "");
         setPosition(data.position || "");
-        setDepartment(data.department || "");
-        setImage(data.image);
+        setImage(
+          data.image
+            ? `${data.image}${data.image.includes("?") ? "&" : "?"}t=${Date.now()}`
+            : null
+        );
 
         // Check push notification state
         const pushState = await getPushSubscriptionState();

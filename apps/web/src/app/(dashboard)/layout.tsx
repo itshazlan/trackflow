@@ -107,10 +107,13 @@ export default function DashboardLayout({
     }
   };
 
+  const [sessionTimestamp, setSessionTimestamp] = useState(Date.now());
+
   const reloadSession = async () => {
     try {
       const s = await getSession();
       setSession(s);
+      setSessionTimestamp(Date.now());
     } catch (err) {
       console.error("Failed to reload session", err);
     }
@@ -381,7 +384,7 @@ export default function DashboardLayout({
                 <Avatar className="h-6 w-6">
                   {session?.user?.image ? (
                     <img
-                      src={session.user.image}
+                      src={`${session.user.image}${session.user.image.includes("?") ? "&" : "?"}t=${sessionTimestamp}`}
                       alt={session.user.name}
                       className="h-full w-full object-cover"
                     />
@@ -450,7 +453,7 @@ export default function DashboardLayout({
                 <Avatar className="h-5 w-5">
                   {session?.user?.image ? (
                     <img
-                      src={session.user.image}
+                      src={`${session.user.image}${session.user.image.includes("?") ? "&" : "?"}t=${sessionTimestamp}`}
                       alt={session.user.name}
                       className="h-full w-full object-cover"
                     />
@@ -545,7 +548,7 @@ export default function DashboardLayout({
             <Avatar className="h-6 w-6 border border-border">
               {session?.user?.image ? (
                 <img
-                  src={session.user.image}
+                  src={`${session.user.image}${session.user.image.includes("?") ? "&" : "?"}t=${sessionTimestamp}`}
                   alt={session.user.name}
                   className="h-full w-full object-cover"
                 />
