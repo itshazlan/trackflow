@@ -187,7 +187,8 @@ export class IssuesService {
       .innerJoin(issueStatuses, eq(issues.statusId, issueStatuses.id))
       .innerJoin(projects, eq(issues.projectId, projects.id))
       .leftJoin(user, eq(issues.assigneeId, user.id))
-      .where(eq(issues.projectId, projectId));
+      .where(eq(issues.projectId, projectId))
+      .orderBy(desc(issues.createdAt));
 
     return list.map((item: any) => ({
       ...item,
@@ -218,7 +219,8 @@ export class IssuesService {
       .innerJoin(issueTrackers, eq(issues.trackerId, issueTrackers.id))
       .innerJoin(issueStatuses, eq(issues.statusId, issueStatuses.id))
       .innerJoin(projects, eq(issues.projectId, projects.id))
-      .where(or(eq(issues.assigneeId, userId), eq(issues.createdBy, userId)));
+      .where(or(eq(issues.assigneeId, userId), eq(issues.createdBy, userId)))
+      .orderBy(desc(issues.createdAt));
 
     return list.map((item: any) => ({
       ...item,
@@ -307,7 +309,8 @@ export class IssuesService {
           eq(issues.assigneeId, currentUser.id),
           inArray(issues.projectId, projectIds),
         ),
-      );
+      )
+      .orderBy(desc(issues.createdAt));
 
     const formattedIssues = list.map((item: any) => ({
       ...item,
