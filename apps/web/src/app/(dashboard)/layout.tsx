@@ -68,6 +68,44 @@ export default function DashboardLayout({
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const mainRef = React.useRef<HTMLElement>(null);
+
+  // Save & Restore scroll position per page URL to preserve table/list scroll when navigating back
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mainEl = mainRef.current;
+    if (!mainEl) return;
+
+    const currentKey = `trackflow:scroll:${window.location.pathname}${window.location.search}`;
+    const savedPos = sessionStorage.getItem(currentKey);
+
+    if (savedPos) {
+      const targetPos = parseInt(savedPos, 10);
+      mainEl.scrollTop = targetPos;
+
+      const rafId = requestAnimationFrame(() => {
+        if (mainEl) mainEl.scrollTop = targetPos;
+      });
+      const timerId = setTimeout(() => {
+        if (mainEl) mainEl.scrollTop = targetPos;
+      }, 60);
+
+      return () => {
+        cancelAnimationFrame(rafId);
+        clearTimeout(timerId);
+      };
+    } else {
+      mainEl.scrollTop = 0;
+    }
+  }, [pathname]);
+
+  const handleMainScroll = (e: React.UIEvent<HTMLElement>) => {
+    if (typeof window !== "undefined") {
+      const currentKey = `trackflow:scroll:${window.location.pathname}${window.location.search}`;
+      sessionStorage.setItem(currentKey, String(e.currentTarget.scrollTop));
+    }
+  };
 
   const reloadSession = async () => {
     try {
@@ -521,7 +559,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Content area */}
-        <main className="flex-1 overflow-y-auto">
+        <main ref={mainRef} onScroll={handleMainScroll} className="flex-1 overflow-y-auto">
           {children}
         </main>
       </div>

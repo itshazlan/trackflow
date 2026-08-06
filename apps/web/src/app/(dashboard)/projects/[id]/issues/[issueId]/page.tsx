@@ -1120,7 +1120,13 @@ export default function IssueDetailPage() {
       <div className="flex items-center justify-between border-b border-border/60 px-6 py-3 shrink-0 bg-background/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push(`/projects/${projectId}`)}
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push(`/projects/${projectId}?tab=issues`);
+              }
+            }}
             className="rounded p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
           >
             <X className="h-4 w-4" />
