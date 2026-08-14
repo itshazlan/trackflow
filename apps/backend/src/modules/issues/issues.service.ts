@@ -120,6 +120,20 @@ export class IssuesService {
         changedAt: new Date(),
       });
 
+      if (createIssueDto.collaboratorIds?.length) {
+        const uniqueCollaboratorIds = Array.from(
+          new Set(createIssueDto.collaboratorIds),
+        );
+        await tx.insert(issueCollaborators).values(
+          uniqueCollaboratorIds.map((cUserId) => ({
+            issueId: insertedIssue.id,
+            userId: cUserId,
+            addedBy: userId,
+            addedAt: new Date(),
+          })),
+        );
+      }
+
       return {
         ...insertedIssue,
         projectKey: updatedProject.key,
@@ -137,6 +151,36 @@ export class IssuesService {
         entityType: 'issue',
         entityId: newIssue.id,
       });
+    }
+
+    if (createIssueDto.collaboratorIds?.length) {
+      const uniqueCollaboratorIds = Array.from(
+        new Set(createIssueDto.collaboratorIds),
+      );
+      const targetCollaborators = uniqueCollaboratorIds.filter(
+        (cUserId) => cUserId !== userId,
+      );
+
+      if (targetCollaborators.length > 0) {
+        const [actorUser] = await this.db
+          .select({ name: user.name })
+          .from(user)
+          .where(eq(user.id, userId))
+          .limit(1);
+
+        const actorName = actorUser?.name || 'Seseorang';
+
+        for (const targetUserId of targetCollaborators) {
+          await this.notificationsService.createNotification({
+            userId: targetUserId,
+            type: 'issue_collaborator_added',
+            title: 'Ditambahkan sebagai Collaborator',
+            body: `${actorName} menambahkan Anda sebagai collaborator di ${newIssue.displayId}`,
+            entityType: 'issue',
+            entityId: newIssue.id,
+          });
+        }
+      }
     }
 
     // Fire-and-forget notification to Discord (non-blocking)

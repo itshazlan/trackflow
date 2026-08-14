@@ -35,7 +35,9 @@ describe('IssuesService - remove', () => {
     mockNotificationsService = {
       createNotification: jest.fn().mockResolvedValue({}),
     };
-    const mockDiscordService = {} as any;
+    const mockDiscordService = {
+      notifyDiscordIssueCreated: jest.fn(),
+    } as any;
 
     service = new IssuesService(
       mockDb,
@@ -304,6 +306,56 @@ describe('IssuesService - remove', () => {
   });
 
   describe('IssuesService - Collaborators', () => {
+    it('should insert collaborators and send notifications during issue creation', async () => {
+      const creatorUserId = 'user-creator';
+      const collaboratorUserId = 'user-collab';
+      const dto = {
+        trackerId: 'tracker-1',
+        statusId: 'status-1',
+        title: 'New Issue with Collaborators',
+        collaboratorIds: [creatorUserId, collaboratorUserId],
+      };
+
+      const mockTx = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        returning: jest.fn().mockResolvedValue([
+          { issueSequence: 5, key: 'PRJ', name: 'Project 1' },
+        ]),
+        insert: jest.fn().mockReturnThis(),
+        values: jest.fn().mockReturnThis(),
+      };
+      mockTx.insert.mockImplementation(() => {
+        return {
+          values: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([
+              { id: 'issue-new', number: 5, title: dto.title },
+            ]),
+          }),
+        };
+      });
+
+      mockDb.transaction = jest
+        .fn()
+        .mockImplementation((cb: any) => cb(mockTx));
+      mockDb.limit.mockResolvedValueOnce([{ name: 'Creator User' }]);
+
+      const result = await service.create('proj-1', dto as any, creatorUserId);
+
+      expect(result).toBeDefined();
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
+        {
+          userId: collaboratorUserId,
+          type: 'issue_collaborator_added',
+          title: 'Ditambahkan sebagai Collaborator',
+          body: 'Creator User menambahkan Anda sebagai collaborator di PRJ-5',
+          entityType: 'issue',
+          entityId: 'issue-new',
+        },
+      );
+    });
+
     it('should allow any project member to self-add as collaborator', async () => {
       const actor = { id: 'user-dev', name: 'Dev User', isAdmin: false };
       const issueData = {

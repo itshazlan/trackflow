@@ -5,6 +5,7 @@ import {
   IsUUID,
   IsIn,
   IsNumber,
+  IsArray,
 } from 'class-validator';
 
 export class CreateIssueDto {
@@ -44,6 +45,11 @@ export class CreateIssueDto {
   @IsNumber()
   @IsOptional()
   estimatedHours?: number | null;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  collaboratorIds?: string[];
 }
 
 export class UpdateIssueDto {
