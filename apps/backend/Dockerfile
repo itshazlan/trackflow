@@ -33,5 +33,5 @@ COPY --from=builder /app/apps/backend ./apps/backend
 COPY --from=builder /app/packages/shared-types ./packages/shared-types
 
 EXPOSE 3000
-CMD ["sh", "-c", "(pnpm --filter @trackflow/backend db:migrate || true) && pnpm --filter @trackflow/backend start:prod"]
+CMD ["sh", "-c", "pnpm --filter @trackflow/backend db:migrate && pnpm --filter @trackflow/backend start:prod"]
 

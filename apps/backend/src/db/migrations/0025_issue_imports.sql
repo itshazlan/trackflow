@@ -9,13 +9,13 @@ CREATE TABLE IF NOT EXISTS "issue_imports" (
 	"error_rows" integer NOT NULL,
 	"imported_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "issue_imports" ADD CONSTRAINT "issue_imports_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
-
+--> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "issue_imports" ADD CONSTRAINT "issue_imports_imported_by_user_id_fk" FOREIGN KEY ("imported_by") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;
 EXCEPTION
