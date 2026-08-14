@@ -15,15 +15,16 @@ import {
   getIssueAttachments,
   createIssueAttachment,
   deleteIssueAttachment,
-  getIssueComments,
   getIssueActivity,
   createIssueComment,
-  uploadCommentImage,
   uploadCommentAttachment,
   getCommentAttachmentDownloadUrl,
   updateIssueComment,
   deleteIssueComment,
   updateIssueStatus,
+  getIssueCollaborators,
+  addIssueCollaborator,
+  removeIssueCollaborator,
   Issue,
   IssueStatus,
   Tracker,
@@ -33,7 +34,7 @@ import {
   CommentAttachment,
   ActivityItem,
   CommentActivityItem,
-  StatusChangeActivityItem,
+  IssueCollaborator,
 } from "@/lib/issues-service";
 import { getProjectDetail, Project } from "@/lib/projects-service";
 import { getSession, UserSession } from "@/lib/auth-service";
@@ -53,6 +54,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Loader2,
@@ -77,6 +79,8 @@ import {
   Reply,
   Link as LinkIcon,
   Download,
+  Plus,
+  Eye,
 } from "lucide-react";
 
 const EmojiPicker = dynamic(
@@ -167,6 +171,10 @@ export default function IssueDetailPage() {
   const [trackers, setTrackers] = useState<Tracker[]>([]);
   const [attachments, setAttachments] = useState<IssueAttachment[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [collaborators, setCollaborators] = useState<IssueCollaborator[]>([]);
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
+  const [collaboratorError, setCollaboratorError] = useState("");
+  const [collaboratorSearch, setCollaboratorSearch] = useState("");
 
   const comments = activity.filter(
     (item): item is CommentActivityItem => item.type === "comment"
@@ -459,6 +467,48 @@ export default function IssueDetailPage() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  const fetchCollaborators = useCallback(async () => {
+    if (!issueId) return;
+    try {
+      setCollaboratorsLoading(true);
+      const data = await getIssueCollaborators(issueId);
+      setCollaborators(data);
+    } catch (err: unknown) {
+      console.error("Gagal memuat collaborator:", err);
+    } finally {
+      setCollaboratorsLoading(false);
+    }
+  }, [issueId]);
+
+  const handleAddCollaborator = async (targetUserId: string) => {
+    if (!issue) return;
+    setCollaboratorError("");
+    try {
+      await addIssueCollaborator(issue.id, targetUserId);
+      await fetchCollaborators();
+      setCollaboratorSearch("");
+    } catch (err: unknown) {
+      console.error(err);
+      setCollaboratorError(
+        err instanceof Error ? err.message : "Gagal menambahkan collaborator.",
+      );
+    }
+  };
+
+  const handleRemoveCollaborator = async (targetUserId: string) => {
+    if (!issue) return;
+    setCollaboratorError("");
+    try {
+      await removeIssueCollaborator(issue.id, targetUserId);
+      await fetchCollaborators();
+    } catch (err: unknown) {
+      console.error(err);
+      setCollaboratorError(
+        err instanceof Error ? err.message : "Gagal menghapus collaborator.",
+      );
+    }
+  };
+
   const fetchAllData = useCallback(async () => {
     if (!projectId || !issueId) return;
     try {
@@ -493,7 +543,7 @@ export default function IssueDetailPage() {
         setUserRole(userProjMembership?.role || null);
       }
 
-      // Load comments and attachments
+      // Load comments, attachments, and collaborators
       setAttachmentsLoading(true);
       getIssueAttachments(issueId)
         .then((data) => setAttachments(data))
@@ -506,13 +556,15 @@ export default function IssueDetailPage() {
         .catch((err) => console.error("Gagal mengambil aktivitas:", err))
         .finally(() => setCommentsLoading(false));
 
+      fetchCollaborators();
+
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Gagal memuat detail tiket.");
     } finally {
       setLoading(false);
     }
-  }, [projectId, issueId]);
+  }, [projectId, issueId, fetchCollaborators]);
 
   useEffect(() => {
     void fetchAllData();
@@ -967,29 +1019,191 @@ export default function IssueDetailPage() {
       <div className="h-px bg-border/60 my-2" />
 
       {/* Collaborators / Team */}
-      <div className="flex flex-col gap-2">
-        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Collaborators</span>
-        <div className="flex items-center gap-1.5 py-1">
-          <div className="flex -space-x-2 overflow-hidden">
-            {members.slice(0, 4).map((member) => (
-              <Avatar key={member.id} className="h-6 w-6 border-2 border-background ring-1 ring-border shadow-sm">
-                {member.image ? (
-                  <img src={member.image} alt={member.name} className="h-full w-full object-cover rounded-full" />
-                ) : (
-                  <AvatarFallback className="text-[9px] font-bold bg-muted text-muted-foreground">
-                    {member.name.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                )}
-              </Avatar>
-            ))}
+      {(() => {
+        const isAssignee = issue.assigneeId === session?.user?.id;
+        const canEditCollaborator = isAdmin || userRole === "manager" || isAssignee;
+        const isCurrentUserCollaborator = collaborators.some(
+          (c) => c.userId === session?.user?.id
+        );
+        const showFollowButton = Boolean(
+          session?.user?.id && !isAssignee && !isCurrentUserCollaborator
+        );
+
+        return (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between min-h-[24px]">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Collaborators
+              </span>
+              {showFollowButton && session?.user?.id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddCollaborator(session.user.id)}
+                  className="h-6 px-2 text-[11px] font-medium gap-1 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary transition-colors shadow-none"
+                >
+                  <Eye className="h-3 w-3" />
+                  Ikuti Tiket Ini
+                </Button>
+              )}
+            </div>
+
+            {collaboratorError && (
+              <div className="text-[11px] text-destructive font-medium bg-destructive/10 px-2 py-1 rounded flex items-center gap-1 border border-destructive/20">
+                <AlertCircle className="h-3 w-3 shrink-0" />
+                <span>{collaboratorError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 py-1 flex-wrap">
+              {/* Avatar stack of current collaborators */}
+              <div className="flex -space-x-2 overflow-visible">
+                {collaborators.map((collab) => {
+                  const memberInfo = members.find((m) => m.id === collab.userId);
+                  const displayName = collab.user?.name || memberInfo?.name || "User";
+                  const displayImage = collab.user?.image || memberInfo?.image;
+                  const isSelf = collab.userId === session?.user?.id;
+                  const canRemoveThis = isSelf || canEditCollaborator;
+
+                  return (
+                    <DropdownMenu key={collab.id}>
+                      <DropdownMenuTrigger
+                        render={
+                          <button
+                            type="button"
+                            className="relative rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 group"
+                            title={displayName}
+                          >
+                            <Avatar className="h-7 w-7 border-2 border-background ring-1 ring-border shadow-sm transition-transform group-hover:scale-105">
+                              {displayImage ? (
+                                <img src={displayImage} alt={displayName} className="h-full w-full object-cover rounded-full" />
+                              ) : (
+                                <AvatarFallback className="text-[10px] font-bold bg-muted text-muted-foreground">
+                                  {displayName.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              )}
+                            </Avatar>
+                          </button>
+                        }
+                      />
+                      <DropdownMenuContent align="start" className="w-56 p-2">
+                        <div className="flex items-center gap-2 p-1.5 border-b border-border/50 pb-2 mb-1">
+                          <Avatar className="h-8 w-8 border border-border">
+                            {displayImage ? (
+                              <img src={displayImage} alt={displayName} className="h-full w-full object-cover rounded-full" />
+                            ) : (
+                              <AvatarFallback className="text-[11px] font-bold">
+                                {displayName.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            )}
+                          </Avatar>
+                          <div className="flex flex-col overflow-hidden text-left">
+                            <span className="text-[12px] font-semibold text-foreground truncate">
+                              {displayName} {isSelf && "(Anda)"}
+                            </span>
+                            {collab.user?.email && (
+                              <span className="text-[11px] text-muted-foreground truncate">
+                                {collab.user.email}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {canRemoveThis ? (
+                          <DropdownMenuItem
+                            onClick={() => handleRemoveCollaborator(collab.userId)}
+                            className="text-destructive focus:text-destructive focus:bg-destructive/10 text-[12px] cursor-pointer gap-2 font-medium"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {isSelf ? "Berhenti Mengikuti" : "Hapus Collaborator"}
+                          </DropdownMenuItem>
+                        ) : (
+                          <div className="px-2 py-1 text-[11px] text-muted-foreground italic">
+                            Hanya Assignee, Manager, atau Admin yang dapat menghapus collaborator lain
+                          </div>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  );
+                })}
+              </div>
+
+              {/* Add collaborator "+" button */}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7 rounded-full border-dashed border-border/80 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                      title="Tambah Collaborator"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="start" className="w-64 p-2">
+                  <div className="p-1 mb-1">
+                    <Input
+                      type="text"
+                      placeholder="Cari anggota proyek..."
+                      value={collaboratorSearch}
+                      onChange={(e) => setCollaboratorSearch(e.target.value)}
+                      className="h-7 text-[12px] px-2.5 bg-card"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                  <DropdownMenuSeparator />
+                  <div className="max-h-48 overflow-y-auto space-y-0.5">
+                    {members
+                      .filter(
+                        (m) =>
+                          !collaborators.some((c) => c.userId === m.id) &&
+                          (m.name.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                            m.username.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                            m.email.toLowerCase().includes(collaboratorSearch.toLowerCase()))
+                      )
+                      .map((m) => (
+                        <DropdownMenuItem
+                          key={m.id}
+                          onClick={() => handleAddCollaborator(m.id)}
+                          className="flex items-center gap-2 p-1.5 text-[12px] cursor-pointer rounded-md hover:bg-accent"
+                        >
+                          <Avatar className="h-6 w-6">
+                            {m.image ? (
+                              <img src={m.image} alt={m.name} className="h-full w-full object-cover rounded-full" />
+                            ) : (
+                              <AvatarFallback className="text-[9px] font-bold">
+                                {m.name.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            )}
+                          </Avatar>
+                          <div className="flex flex-col min-w-0 flex-1 text-left">
+                            <span className="font-medium text-foreground truncate">{m.name}</span>
+                            <span className="text-[10px] text-muted-foreground truncate">{m.email}</span>
+                          </div>
+                          <Plus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        </DropdownMenuItem>
+                      ))}
+
+                    {members.filter(
+                      (m) =>
+                        !collaborators.some((c) => c.userId === m.id) &&
+                        (m.name.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                          m.username.toLowerCase().includes(collaboratorSearch.toLowerCase()) ||
+                          m.email.toLowerCase().includes(collaboratorSearch.toLowerCase()))
+                    ).length === 0 && (
+                      <div className="p-3 text-center text-[12px] text-muted-foreground">
+                        Tidak ada anggota lain.
+                      </div>
+                    )}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-          {members.length > 0 && (
-            <span className="text-[11px] text-muted-foreground font-medium ml-1">
-              {members.length} members
-            </span>
-          )}
-        </div>
-      </div>
+        );
+      })()}
 
       <div className="h-px bg-border/60 my-2" />
 

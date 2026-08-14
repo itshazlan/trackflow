@@ -824,3 +824,59 @@ export async function deleteIssueComment(issueId: string, commentId: string): Pr
     throw new Error(errorData.message || "Failed to delete comment");
   }
 }
+
+export interface IssueCollaborator {
+  id: string;
+  issueId: string;
+  userId: string;
+  addedBy: string;
+  addedAt: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    image?: string | null;
+    username?: string;
+  };
+}
+
+export async function getIssueCollaborators(issueId: string): Promise<IssueCollaborator[]> {
+  const res = await fetch(`/api/issues/${issueId}/collaborators`, { credentials: "include" });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Gagal mengambil daftar collaborator.");
+  }
+  return res.json();
+}
+
+export async function addIssueCollaborator(
+  issueId: string,
+  userId: string,
+): Promise<{ message: string }> {
+  const res = await fetch(`/api/issues/${issueId}/collaborators`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId }),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Gagal menambahkan collaborator.");
+  }
+  return res.json();
+}
+
+export async function removeIssueCollaborator(
+  issueId: string,
+  userId: string,
+): Promise<{ message: string }> {
+  const res = await fetch(`/api/issues/${issueId}/collaborators/${userId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Gagal menghapus collaborator.");
+  }
+  return res.json();
+}
