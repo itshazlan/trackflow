@@ -51,6 +51,7 @@ export default function ImportExcelModal({
   const [sheets, setSheets] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
   const [previewData, setPreviewData] = useState<ExcelImportPreviewResponse | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [commitResult, setCommitResult] = useState<ExcelImportCommitResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export default function ImportExcelModal({
     setSheets([]);
     setSelectedSheet("");
     setPreviewData(null);
+    setSelectedRows(new Set());
     setCommitResult(null);
     setLoading(false);
     setError(null);
@@ -93,6 +95,11 @@ export default function ImportExcelModal({
         setStage("select-sheet");
       } else {
         setPreviewData(result);
+        if (result.preview?.length) {
+          setSelectedRows(new Set(result.preview.map((r) => r.row)));
+        } else {
+          setSelectedRows(new Set());
+        }
         setStage("preview");
       }
     } catch (err: any) {
@@ -110,6 +117,11 @@ export default function ImportExcelModal({
     try {
       const result = await previewExcelImport(projectId, file, selectedSheet);
       setPreviewData(result);
+      if (result.preview?.length) {
+        setSelectedRows(new Set(result.preview.map((r) => r.row)));
+      } else {
+        setSelectedRows(new Set());
+      }
       setStage("preview");
     } catch (err: any) {
       setError(err.message || "Gagal memproses sheet terpilih.");
@@ -118,14 +130,41 @@ export default function ImportExcelModal({
     }
   };
 
+  const validRows = previewData?.preview || [];
+  const allSelected = validRows.length > 0 && selectedRows.size === validRows.length;
+  const noneSelected = selectedRows.size === 0;
+
+  const toggleRow = (rowNumber: number) => {
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowNumber)) {
+        next.delete(rowNumber);
+      } else {
+        next.add(rowNumber);
+      }
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedRows(new Set());
+    } else {
+      setSelectedRows(new Set(validRows.map((r) => r.row)));
+    }
+  };
+
   const handleCommit = async () => {
     if (!previewData || !previewData.preview || !file) return;
+    const rowsToImport = previewData.preview.filter((row) => selectedRows.has(row.row));
+    if (rowsToImport.length === 0) return;
+
     setLoading(true);
     setError(null);
 
     try {
       const result = await commitExcelImport(projectId, {
-        rows: previewData.preview,
+        rows: rowsToImport,
         fileName: file.name,
         sheetName: previewData.sheetName || "Sheet1",
       });
@@ -353,13 +392,39 @@ export default function ImportExcelModal({
 
               {/* Valid Rows Preview Table */}
               <div className="flex flex-col gap-1.5">
-                <span className="text-[12px] font-semibold text-foreground">
-                  Pratinjau Baris Valid yang Akan Diimpor ({previewData.preview?.length || 0})
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-foreground">
+                    Pratinjau Baris Valid yang Akan Diimpor ({validRows.length})
+                  </span>
+                  {validRows.length > 0 && (
+                    <div className="flex items-center gap-2.5 text-[11.5px] text-muted-foreground">
+                      <span>
+                        <strong className="font-semibold text-foreground">{selectedRows.size}</strong> dari {validRows.length} baris dipilih
+                      </span>
+                      <button
+                        type="button"
+                        onClick={toggleAll}
+                        className="text-primary hover:underline font-medium text-[11px]"
+                      >
+                        {allSelected ? "Batal Pilih Semua" : "Pilih Semua"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="rounded-lg border border-border max-h-56 overflow-y-auto">
                   <Table className="text-[12px]">
                     <TableHeader className="bg-muted/50 sticky top-0">
                       <TableRow className="h-8">
+                        <TableHead className="w-10 text-center text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={toggleAll}
+                            disabled={validRows.length === 0}
+                            className="h-3.5 w-3.5 rounded border-input accent-primary cursor-pointer align-middle"
+                          />
+                        </TableHead>
                         <TableHead className="w-12 text-center text-[11px]">#</TableHead>
                         <TableHead className="text-[11px]">Judul Tiket (Hasil Komposisi)</TableHead>
                         <TableHead className="w-24 text-[11px]">Prioritas</TableHead>
@@ -368,24 +433,38 @@ export default function ImportExcelModal({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {previewData.preview?.length === 0 ? (
+                      {validRows.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
+                          <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
                             Tidak ada baris valid yang dapat diimpor.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        previewData.preview?.map((row) => (
-                          <TableRow key={row.row} className="h-8">
-                            <TableCell className="text-center font-mono text-[11px] text-muted-foreground">{row.row}</TableCell>
-                            <TableCell className="font-medium truncate max-w-[280px]" title={row.title}>
-                              {row.title}
-                            </TableCell>
-                            <TableCell className="capitalize text-muted-foreground">{row.priority}</TableCell>
-                            <TableCell className="text-muted-foreground">{row.statusName}</TableCell>
-                            <TableCell className="font-mono text-muted-foreground">{row.dueDate || "-"}</TableCell>
-                          </TableRow>
-                        ))
+                        validRows.map((row) => {
+                          const isSelected = selectedRows.has(row.row);
+                          return (
+                            <TableRow
+                              key={row.row}
+                              className={`h-8 transition-colors ${isSelected ? "bg-card" : "opacity-60 bg-muted/20"}`}
+                            >
+                              <TableCell className="text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleRow(row.row)}
+                                  className="h-3.5 w-3.5 rounded border-input accent-primary cursor-pointer align-middle"
+                                />
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-[11px] text-muted-foreground">{row.row}</TableCell>
+                              <TableCell className="font-medium truncate max-w-[280px]" title={row.title}>
+                                {row.title}
+                              </TableCell>
+                              <TableCell className="capitalize text-muted-foreground">{row.priority}</TableCell>
+                              <TableCell className="text-muted-foreground">{row.statusName}</TableCell>
+                              <TableCell className="font-mono text-muted-foreground">{row.dueDate || "-"}</TableCell>
+                            </TableRow>
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>
@@ -407,11 +486,11 @@ export default function ImportExcelModal({
                   type="button"
                   size="sm"
                   onClick={handleCommit}
-                  disabled={loading || !previewData.validRows}
+                  disabled={loading || noneSelected}
                   className="gap-1.5 font-medium"
                 >
                   {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  <span>Import {previewData.validRows || 0} Tiket</span>
+                  <span>Import {selectedRows.size} Tiket</span>
                 </Button>
               </div>
             </div>
