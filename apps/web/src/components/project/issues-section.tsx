@@ -102,6 +102,7 @@ import {
   File,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   FileSpreadsheet,
 } from "lucide-react";
 import ImportExcelModal from "./import-excel-modal";
@@ -265,12 +266,14 @@ function KanbanColumn({
   isDragging,
   isDropAllowed,
   onCardClick,
+  maxHeight = "calc(100vh - 220px)",
 }: {
   status: IssueStatus;
   issues: Issue[];
   isDragging: boolean;
   isDropAllowed: boolean;
   onCardClick: (id: string) => void;
+  maxHeight?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: status.id,
@@ -286,9 +289,11 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col gap-3 p-3.5 rounded-xl border min-w-[280px] max-w-[300px] h-[calc(100vh-270px)] min-h-[480px] transition-all shrink-0 ${columnBg}`}
+      style={{ maxHeight }}
+      className={`flex flex-col rounded-xl border min-w-[280px] max-w-[300px] h-full transition-all shrink-0 overflow-hidden ${columnBg}`}
     >
-      <div className="flex items-center justify-between">
+      {/* Sticky Header */}
+      <div className="flex items-center justify-between p-3.5 border-b border-border/50 sticky top-0 bg-card z-10 rounded-t-xl shrink-0">
         <div className="flex items-center gap-2">
           <h3 className="text-[12px] font-semibold text-foreground truncate max-w-[150px]">
             {status.name}
@@ -304,7 +309,8 @@ function KanbanColumn({
         )}
       </div>
 
-      <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto pr-1 scrollbar-thin select-none">
+      {/* Scrollable Card Container */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-thin select-none">
         {issues.length === 0 ? (
           <div className="flex-1 flex items-center justify-center border border-dashed border-border/30 rounded-lg p-6 bg-card/10">
             <span className="text-[10.5px] text-muted-foreground/60 italic text-center">
@@ -1182,21 +1188,48 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
               className="h-8 pl-8 text-[12px]"
             />
           </div>
-          {canManageImport && (
+          {canManageImport ? (
+            <DropdownMenu>
+              <div className="flex items-center">
+                <Button
+                  size="sm"
+                  className="h-8 text-[12px] shrink-0 font-medium rounded-r-none"
+                  onClick={handleOpenCreateModal}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Buat Tiket
+                </Button>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      size="sm"
+                      className="h-8 text-[12px] shrink-0 font-medium rounded-l-none border-l border-primary-foreground/20 px-2"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                  }
+                />
+              </div>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  onClick={() => setIsImportOpen(true)}
+                  className="text-[12px] gap-2 cursor-pointer font-medium"
+                >
+                  <FileSpreadsheet className="h-4 w-4 text-primary" />
+                  <span>Import dari Excel</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
             <Button
-              variant="outline"
               size="sm"
-              className="h-8 text-[12px] shrink-0 font-medium gap-1 text-foreground border-border hover:bg-accent"
-              onClick={() => setIsImportOpen(true)}
+              className="h-8 text-[12px] shrink-0 font-medium"
+              onClick={handleOpenCreateModal}
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
-              <span>Import Excel</span>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Buat Tiket
             </Button>
           )}
-          <Button size="sm" className="h-8 text-[12px] shrink-0 font-medium" onClick={handleOpenCreateModal}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Buat Tiket
-          </Button>
         </div>
       </div>
 
@@ -1417,6 +1450,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                   isDragging={activeDragId !== null}
                   isDropAllowed={isDropAllowed(status)}
                   onCardClick={(id) => router.push(`/projects/${projectId}/issues/${id}`)}
+                  maxHeight="calc(100vh - 220px)"
                 />
               );
             })}

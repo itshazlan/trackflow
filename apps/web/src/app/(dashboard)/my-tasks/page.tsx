@@ -164,10 +164,12 @@ function KanbanColumn({
   status,
   issues,
   onCardClick,
+  maxHeight = "420px",
 }: {
   status: IssueStatus;
   issues: Issue[];
   onCardClick: (id: string) => void;
+  maxHeight?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: status.id,
@@ -180,9 +182,11 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col gap-3 p-3 rounded-xl border min-w-[260px] max-w-[280px] min-h-[380px] transition-all shrink-0 ${columnBg}`}
+      style={{ maxHeight }}
+      className={`flex flex-col rounded-xl border min-w-[260px] max-w-[280px] h-full transition-all shrink-0 overflow-hidden ${columnBg}`}
     >
-      <div className="flex items-center justify-between border-b border-border/40 pb-2">
+      {/* Sticky Header */}
+      <div className="flex items-center justify-between p-3 border-b border-border/50 sticky top-0 bg-card z-10 rounded-t-xl shrink-0">
         <div className="flex items-center gap-2">
           <h3 className="text-[12px] font-semibold text-foreground truncate max-w-[150px]">
             {status.name}
@@ -198,7 +202,8 @@ function KanbanColumn({
         )}
       </div>
 
-      <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto pr-0.5 scrollbar-thin select-none">
+      {/* Scrollable Card Container */}
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-2 scrollbar-thin select-none">
         {issues.length === 0 ? (
           <div className="flex-1 flex items-center justify-center border border-dashed border-border/30 rounded-lg p-4 bg-card/10">
             <span className="text-[10px] text-muted-foreground/60 italic text-center">
@@ -664,6 +669,7 @@ function MyTasksContent() {
                                     key={status.id}
                                     status={status}
                                     issues={columnIssues}
+                                    maxHeight="420px"
                                     onCardClick={(id) =>
                                       router.push(
                                         `/projects/${project.projectId}/issues/${id}`
