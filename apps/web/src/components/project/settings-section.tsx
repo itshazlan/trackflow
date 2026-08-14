@@ -17,12 +17,15 @@ import {
   updateProjectMemberRole,
   removeProjectMember,
   getSystemUsers,
+  getExcelImportHistory,
   IssueStatus,
   IssueTemplate,
   Tracker,
   TemplateField,
   ProjectMember,
 } from "@/lib/issues-service";
+import { useQuery } from "@tanstack/react-query";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getSession, UserSession } from "@/lib/auth-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +59,7 @@ import {
   Users,
   Settings,
   Webhook,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
@@ -549,6 +553,10 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
             <Webhook className="h-3.5 w-3.5" />
             Integrasi
           </TabsTrigger>
+          <TabsTrigger value="imports" className="text-[11.5px] font-medium px-3.5 rounded-md flex items-center gap-1.5">
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Riwayat Import
+          </TabsTrigger>
         </TabsList>
 
         {/* General Settings Content */}
@@ -940,6 +948,11 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
             onTest={() => testProjectDiscordWebhook(projectId)}
           />
         </TabsContent>
+
+        {/* Riwayat Import settings content */}
+        <TabsContent value="imports" className="mt-0 flex flex-col gap-4 pb-24">
+          <ImportHistoryTab projectId={projectId} />
+        </TabsContent>
       </Tabs>
 
       {/* Status Modal Dialog */}
@@ -1205,6 +1218,90 @@ export default function SettingsSection({ projectId }: SettingsSectionProps) {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function ImportHistoryTab({ projectId }: { projectId: string }) {
+  const { data: history = [], isLoading } = useQuery({
+    queryKey: ["import-history", projectId],
+    queryFn: () => getExcelImportHistory(projectId),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex h-32 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4.5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-[13.5px] font-semibold text-foreground">Riwayat Import Excel</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Daftar audit log proses import tiket dari file .xlsx pada proyek ini.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border overflow-hidden mt-1">
+        <Table className="text-[12px]">
+          <TableHeader className="bg-muted/50">
+            <TableRow className="h-8">
+              <TableHead className="text-[11px]">Tanggal Import</TableHead>
+              <TableHead className="text-[11px]">Pengimpor</TableHead>
+              <TableHead className="text-[11px]">Nama File</TableHead>
+              <TableHead className="text-[11px]">Sheet</TableHead>
+              <TableHead className="text-[11px] text-center">Total</TableHead>
+              <TableHead className="text-[11px] text-center text-emerald-600">Berhasil</TableHead>
+              <TableHead className="text-[11px] text-center text-destructive">Gagal</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {history.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-6 italic">
+                  Belum ada riwayat import pada proyek ini.
+                </TableCell>
+              </TableRow>
+            ) : (
+              history.map((item) => (
+                <TableRow key={item.id} className="h-9">
+                  <TableCell className="font-mono text-[11px] text-muted-foreground">
+                    {new Date(item.importedAt).toLocaleString("id-ID")}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-5 w-5">
+                        {item.importedBy?.image ? (
+                          <img src={item.importedBy.image} alt={item.importedBy.name} className="h-full w-full object-cover rounded-full" />
+                        ) : (
+                          <AvatarFallback className="text-[8px] font-bold">
+                            {item.importedBy?.name?.slice(0, 2).toUpperCase() || "US"}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <span className="font-medium">{item.importedBy?.name || "User"}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium text-foreground">{item.fileName}</TableCell>
+                  <TableCell className="text-muted-foreground">{item.sheetName}</TableCell>
+                  <TableCell className="text-center font-semibold">{item.totalRows}</TableCell>
+                  <TableCell className="text-center font-semibold text-emerald-600 dark:text-emerald-400">
+                    {item.successRows}
+                  </TableCell>
+                  <TableCell className="text-center font-semibold text-destructive">
+                    {item.errorRows}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

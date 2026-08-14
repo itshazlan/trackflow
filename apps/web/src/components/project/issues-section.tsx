@@ -102,7 +102,9 @@ import {
   File,
   ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
 } from "lucide-react";
+import ImportExcelModal from "./import-excel-modal";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const getFileIcon = (fileName: string) => {
@@ -406,6 +408,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   // Filter states
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPriority, setFilterPriority] = useState("all");
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -582,6 +585,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   );
   const userRole = currentMember?.role;
   const isAdmin = session?.user?.isAdmin;
+  const canManageImport = Boolean(isAdmin || userRole === "manager");
 
   // Determine if a status is allowed for dropping
   const isDropAllowed = useCallback((status: IssueStatus) => {
@@ -1178,6 +1182,17 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
               className="h-8 pl-8 text-[12px]"
             />
           </div>
+          {canManageImport && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-[12px] shrink-0 font-medium gap-1 text-foreground border-border hover:bg-accent"
+              onClick={() => setIsImportOpen(true)}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
+              <span>Import Excel</span>
+            </Button>
+          )}
           <Button size="sm" className="h-8 text-[12px] shrink-0 font-medium" onClick={handleOpenCreateModal}>
             <Plus className="mr-1 h-3.5 w-3.5" />
             Buat Tiket
@@ -2238,6 +2253,13 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Import Excel Modal */}
+      <ImportExcelModal
+        projectId={projectId}
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+      />
 
       {/* Floating Toast Notification Banner */}
       {toast && (

@@ -881,3 +881,120 @@ export async function removeIssueCollaborator(
   }
   return res.json();
 }
+
+export interface ExcelImportError {
+  row: number;
+  column: string;
+  value?: any;
+  message: string;
+}
+
+export interface ExcelImportParsedRow {
+  row: number;
+  title: string;
+  description: string;
+  trackerId: string;
+  trackerName: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  dueDate?: string | null;
+  statusId: string;
+  statusName: string;
+  assigneeId?: null;
+}
+
+export interface ExcelImportPreviewResponse {
+  requiresSheetSelection: boolean;
+  sheets?: string[];
+  sheetName?: string;
+  totalRows?: number;
+  validRows?: number;
+  errorRows?: number;
+  errors?: ExcelImportError[];
+  preview?: ExcelImportParsedRow[];
+}
+
+export interface ExcelImportCommitResult {
+  importedCount: number;
+  issueIds: string[];
+}
+
+export interface ExcelImportHistoryRecord {
+  id: string;
+  projectId: string;
+  fileName: string;
+  sheetName: string;
+  totalRows: number;
+  successRows: number;
+  errorRows: number;
+  importedAt: string;
+  importedBy: {
+    id: string;
+    name: string;
+    email: string;
+    image?: string | null;
+  };
+}
+
+export async function previewExcelImport(
+  projectId: string,
+  file: File,
+  sheetName?: string,
+): Promise<ExcelImportPreviewResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (sheetName) {
+    formData.append("sheetName", sheetName);
+  }
+
+  const res = await fetch(`/api/projects/${projectId}/issues/import/preview`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Gagal melakukan preview import Excel.");
+  }
+
+  return res.json();
+}
+
+export async function commitExcelImport(
+  projectId: string,
+  payload: {
+    rows: ExcelImportParsedRow[];
+    fileName: string;
+    sheetName: string;
+  },
+): Promise<ExcelImportCommitResult> {
+  const res = await fetch(`/api/projects/${projectId}/issues/import/commit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Gagal menyimpan hasil import Excel.");
+  }
+
+  return res.json();
+}
+
+export async function getExcelImportHistory(
+  projectId: string,
+): Promise<ExcelImportHistoryRecord[]> {
+  const res = await fetch(`/api/projects/${projectId}/issues/imports`, {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || "Gagal mengambil riwayat import.");
+  }
+
+  return res.json();
+}
