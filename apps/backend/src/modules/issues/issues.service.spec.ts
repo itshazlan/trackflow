@@ -5,6 +5,7 @@ describe('IssuesService - remove', () => {
   let service: IssuesService;
   let mockDb: any;
   let mockRealtimeGateway: any;
+  let mockNotificationsService: any;
 
   beforeEach(() => {
     mockDb = {
@@ -19,6 +20,7 @@ describe('IssuesService - remove', () => {
       delete: jest.fn().mockReturnThis(),
       insert: jest.fn().mockReturnThis(),
       values: jest.fn().mockReturnThis(),
+      onConflictDoNothing: jest.fn().mockReturnThis(),
       onConflictDoUpdate: jest.fn().mockResolvedValue([]),
       returning: jest.fn().mockResolvedValue([]),
     };
@@ -30,7 +32,9 @@ describe('IssuesService - remove', () => {
     };
 
     const mockR2Service = {} as any;
-    const mockNotificationsService = {} as any;
+    mockNotificationsService = {
+      createNotification: jest.fn().mockResolvedValue({}),
+    };
     const mockDiscordService = {} as any;
 
     service = new IssuesService(
@@ -150,18 +154,20 @@ describe('IssuesService - remove', () => {
       ]);
       // 2. Issues query
       mockDb.leftJoin.mockReturnValueOnce({
-        where: jest.fn().mockResolvedValue([
-          {
-            id: 'i1',
-            projectId: 'p1',
-            title: 'Task 1',
-            number: 1,
-            projectKey: 'PRJ',
-            projectName: 'Project 1',
-            assigneeId: 'u1',
-            dueDate: '2026-08-01',
-          },
-        ]),
+        where: jest.fn().mockReturnValue({
+          orderBy: jest.fn().mockResolvedValue([
+            {
+              id: 'i1',
+              projectId: 'p1',
+              title: 'Task 1',
+              number: 1,
+              projectKey: 'PRJ',
+              projectName: 'Project 1',
+              assigneeId: 'u1',
+              dueDate: '2026-08-01',
+            },
+          ]),
+        }),
       });
 
       const res = await service.findMyIssues(user, 'list');
@@ -188,30 +194,32 @@ describe('IssuesService - remove', () => {
         { id: 'p1', key: 'PRJ', name: 'Project 1' },
       ]);
       mockDb.leftJoin.mockReturnValueOnce({
-        where: jest.fn().mockResolvedValue([
-          {
-            id: 'i1',
-            projectId: 'p1',
-            title: 'Task 1',
-            number: 1,
-            projectKey: 'PRJ',
-            projectName: 'Project 1',
-            assigneeId: 'u1',
-            dueDate: '2026-08-01',
-            status: { id: 's1', name: 'New' },
-          },
-          {
-            id: 'i2',
-            projectId: 'p1',
-            title: 'Task 2 without due date',
-            number: 2,
-            projectKey: 'PRJ',
-            projectName: 'Project 1',
-            assigneeId: 'u1',
-            dueDate: null,
-            status: { id: 's1', name: 'New' },
-          },
-        ]),
+        where: jest.fn().mockReturnValue({
+          orderBy: jest.fn().mockResolvedValue([
+            {
+              id: 'i1',
+              projectId: 'p1',
+              title: 'Task 1',
+              number: 1,
+              projectKey: 'PRJ',
+              projectName: 'Project 1',
+              assigneeId: 'u1',
+              dueDate: '2026-08-01',
+              status: { id: 's1', name: 'New' },
+            },
+            {
+              id: 'i2',
+              projectId: 'p1',
+              title: 'Task 2 without due date',
+              number: 2,
+              projectKey: 'PRJ',
+              projectName: 'Project 1',
+              assigneeId: 'u1',
+              dueDate: null,
+              status: { id: 's1', name: 'New' },
+            },
+          ]),
+        }),
       });
 
       const res = await service.findMyIssues(user, 'calendar');
@@ -292,6 +300,167 @@ describe('IssuesService - remove', () => {
         ...commentsData[0],
         attachments: [],
       });
+    });
+  });
+
+  describe('IssuesService - Collaborators', () => {
+    it('should allow any project member to self-add as collaborator', async () => {
+      const actor = { id: 'user-dev', name: 'Dev User', isAdmin: false };
+      const issueData = {
+        id: 'issue-1',
+        projectId: 'proj-1',
+        assigneeId: 'user-assignee',
+        number: 1,
+        title: 'Test Issue',
+        projectKey: 'PRJ',
+        projectName: 'Project 1',
+      };
+      const membershipData = {
+        userId: 'user-dev',
+        projectId: 'proj-1',
+        role: 'developer',
+      };
+
+      mockDb.limit.mockResolvedValueOnce([issueData]);
+      mockDb.limit.mockResolvedValueOnce([membershipData]);
+      mockDb.returning.mockResolvedValueOnce([{ id: 'collab-1' }]);
+
+      const result = await service.addCollaborator(
+        'issue-1',
+        'user-dev',
+        actor,
+      );
+
+      expect(result).toEqual({ message: 'Collaborator added successfully' });
+      expect(
+        mockNotificationsService.createNotification,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should throw ForbiddenException if regular developer attempts to add another person as collaborator', async () => {
+      const actor = { id: 'user-dev', name: 'Dev User', isAdmin: false };
+      const issueData = {
+        id: 'issue-1',
+        projectId: 'proj-1',
+        assigneeId: 'user-assignee',
+        number: 1,
+        title: 'Test Issue',
+        projectKey: 'PRJ',
+        projectName: 'Project 1',
+      };
+      const membershipData = {
+        userId: 'user-dev',
+        projectId: 'proj-1',
+        role: 'developer',
+      };
+
+      mockDb.limit.mockResolvedValueOnce([issueData]);
+      mockDb.limit.mockResolvedValueOnce([membershipData]);
+
+      await expect(
+        service.addCollaborator('issue-1', 'user-other', actor),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should allow assignee to add another person as collaborator and notify them', async () => {
+      const actor = {
+        id: 'user-assignee',
+        name: 'Assignee User',
+        isAdmin: false,
+      };
+      const issueData = {
+        id: 'issue-1',
+        projectId: 'proj-1',
+        assigneeId: 'user-assignee',
+        number: 1,
+        title: 'Test Issue',
+        projectKey: 'PRJ',
+        projectName: 'Project 1',
+      };
+      const actorMembership = {
+        userId: 'user-assignee',
+        projectId: 'proj-1',
+        role: 'developer',
+      };
+      const targetUser = {
+        id: 'user-other',
+        name: 'Other User',
+        isAdmin: false,
+      };
+      const targetMembership = {
+        userId: 'user-other',
+        projectId: 'proj-1',
+        role: 'developer',
+      };
+
+      mockDb.limit.mockResolvedValueOnce([issueData]);
+      mockDb.limit.mockResolvedValueOnce([actorMembership]);
+      mockDb.limit.mockResolvedValueOnce([targetUser]);
+      mockDb.limit.mockResolvedValueOnce([targetMembership]);
+      mockDb.returning.mockResolvedValueOnce([{ id: 'collab-1' }]);
+
+      const result = await service.addCollaborator(
+        'issue-1',
+        'user-other',
+        actor,
+      );
+
+      expect(result).toEqual({ message: 'Collaborator added successfully' });
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith({
+        userId: 'user-other',
+        type: 'issue_collaborator_added',
+        title: 'Ditambahkan sebagai Collaborator',
+        body: 'Assignee User menambahkan Anda sebagai collaborator di PRJ-1',
+        entityType: 'issue',
+        entityId: 'issue-1',
+      });
+    });
+
+    it('should allow self-remove for any collaborator', async () => {
+      const actor = { id: 'user-dev', name: 'Dev User', isAdmin: false };
+      const issueData = {
+        id: 'issue-1',
+        projectId: 'proj-1',
+        assigneeId: 'user-assignee',
+      };
+      const membershipData = {
+        userId: 'user-dev',
+        projectId: 'proj-1',
+        role: 'developer',
+      };
+
+      mockDb.limit.mockResolvedValueOnce([issueData]);
+      mockDb.limit.mockResolvedValueOnce([membershipData]);
+
+      const result = await service.removeCollaborator(
+        'issue-1',
+        'user-dev',
+        actor,
+      );
+
+      expect(result).toEqual({ message: 'Collaborator removed successfully' });
+      expect(mockDb.delete).toHaveBeenCalled();
+    });
+
+    it('should throw ForbiddenException if regular developer attempts to remove another person from collaborators', async () => {
+      const actor = { id: 'user-dev', name: 'Dev User', isAdmin: false };
+      const issueData = {
+        id: 'issue-1',
+        projectId: 'proj-1',
+        assigneeId: 'user-assignee',
+      };
+      const membershipData = {
+        userId: 'user-dev',
+        projectId: 'proj-1',
+        role: 'developer',
+      };
+
+      mockDb.limit.mockResolvedValueOnce([issueData]);
+      mockDb.limit.mockResolvedValueOnce([membershipData]);
+
+      await expect(
+        service.removeCollaborator('issue-1', 'user-other', actor),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 });

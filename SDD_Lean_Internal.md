@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.9 (Lean Internal) |
+| **Versi Dokumen** | 4.0 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: §5.1 baru — penyatuan menu Issues dengan mode agregasi "Tugas Saya" sebelumnya, dropdown proyek inline untuk Time Book/Documents/Settings, shared state `activeProjectId`. Tidak ada perubahan backend/skema) |
+| **Tanggal** | 14 Juli 2026 (revisi: tabel `issue_collaborators`, endpoint dengan guard asimetris self-add vs tambah-orang-lain, notifikasi `issue_collaborator_added`, ditegaskan tidak masuk hitungan Tugas Saya/Workload/Dashboard) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -272,6 +272,8 @@ erDiagram
     ISSUE_STATUSES ||--o{ ISSUES : "current status"
     USERS ||--o{ ISSUES : "assigned to"
     ISSUES ||--o{ ISSUE_ATTACHMENTS : has
+    ISSUES ||--o{ ISSUE_COLLABORATORS : has
+    USERS ||--o{ ISSUE_COLLABORATORS : "collaborates on"
     ISSUES ||--o{ ISSUE_COMMENTS : has
     USERS ||--o{ ISSUE_COMMENTS : authors
     ISSUE_COMMENTS ||--o{ ISSUE_COMMENTS : "replies to"
@@ -480,6 +482,19 @@ erDiagram
 
 > Index disarankan: `documents (project_id, created_at DESC)` dan `document_files (document_id, uploaded_at ASC)`.
 
+#### `issue_collaborators` (Orang Tambahan Selain Assignee — Tidak Dihitung sebagai PIC)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| issue_id | uuid (FK → issues, `onDelete: cascade`) | |
+| user_id | uuid (FK → users) | |
+| added_by | uuid (FK → users) | Siapa yang menambahkan — sama dengan `user_id` kalau self-add (FR-026c) |
+| added_at | timestamptz | |
+
+> **Unique constraint** pada `(issue_id, user_id)` — satu orang tidak bisa jadi collaborator dobel di tiket yang sama.
+>
+> **Sengaja tidak dihitung** oleh: mode agregasi Issues (`/issues/mine`, FR-120), Workload Overview (`/projects/:id/workload`, FR-137), maupun Dashboard overdue count (`/dashboard/summary`, FR-130) — ketiganya tetap query murni berdasarkan `issues.assignee_id`, **tidak** ikut JOIN ke tabel ini (FR-026e). Collaborators tetap otomatis punya akses baca/komentar Issue Activity karena itu sudah terbuka untuk seluruh anggota proyek sejak awal (FR-028), tidak butuh mekanisme tambahan.
+
 #### `issue_attachments`
 | Kolom | Tipe | Keterangan |
 |---|---|---|
@@ -628,7 +643,7 @@ erDiagram
 |---|---|---|
 | id | uuid (PK) | |
 | user_id | uuid (FK → users) | Penerima notifikasi |
-| type | enum(`project_member_added`,`issue_assigned`,`issue_mentioned`,`timesheet_approved`,`timeblock_overridden`) | Jenis notifikasi (FR-100–104) |
+| type | enum(`project_member_added`,`issue_assigned`,`issue_collaborator_added`,`issue_mentioned`,`timesheet_approved`,`timeblock_overridden`) | Jenis notifikasi (FR-100–104, FR-101a) |
 | title | varchar | |
 | body | text | |
 | entity_type | enum(`project`,`issue`,`timesheet`,`time_block`) | Dipakai bersama `entity_id` untuk navigasi "klik → buka halaman terkait" (FR-106) |
@@ -704,6 +719,9 @@ erDiagram
 | Issues | `/issues/:id` | DELETE | Hapus tiket — **guard lebih ketat dari edit**: hanya pembuat tiket (`createdBy === currentUser`, peran apapun), Manager proyek terkait, atau Admin. Assignee yang bukan pembuat **ditolak** (403) (FR-026a). `time_blocks.issue_id` milik tiket yang dihapus di-set `NULL` (jadi kategori "Activity"), **bukan** ikut dihapus — data payroll tetap utuh |
 | Issues | `/issues/mine?view=list\|kanban\|calendar` | GET | Agregasi tiket assigned ke user saat ini lintas semua proyek yang diikuti — dipanggil frontend saat menu Issues dibuka **tanpa proyek aktif** (FR-150, §5.1). Response dikelompokkan per proyek (`list`/`kanban`) atau flat lintas-proyek (`calendar`) — lihat §10.17 untuk struktur detail (FR-120–125) |
 | Issues | `/issues/:id/status` | PATCH | Ubah status (dicek terhadap `restricted_to_role`) — **otomatis mencatat baris ke `issue_status_history`** dalam transaksi yang sama (FR-029c) |
+| Issue Collaborators | `/issues/:id/collaborators` | GET | List collaborator tiket ini — anggota proyek manapun |
+| Issue Collaborators | `/issues/:id/collaborators` | POST `{userId}` | Tambah collaborator. Guard: kalau `userId !== currentUser` → sama dengan guard edit (Assignee/Manager/Admin, FR-026); kalau self-add → anggota proyek manapun (FR-026c) |
+| Issue Collaborators | `/issues/:id/collaborators/:userId` | DELETE | Hapus collaborator. Guard: kalau `:userId === currentUser` → selalu boleh; kalau bukan → sama dengan guard edit (FR-026d) |
 | Issue Attachments | `/issues/:id/attachments` | GET/POST | List & upload lampiran (presigned URL R2) |
 | Issue Attachments | `/issues/:id/attachments/:attachmentId` | DELETE | Hapus lampiran (uploader atau Admin) |
 | Issue Comments | `/issues/:id/comments` | GET/POST | List & tambah komentar — **anggota proyek peran manapun** boleh akses. Body POST: `{ body, parentCommentId? }` — kalau `parentCommentId` diisi, backend validasi comment tersebut milik issue yang sama **dan** `parent_comment_id`-nya sendiri `NULL` (cegah reply-ke-reply, FR-029b) |
@@ -1468,6 +1486,45 @@ sequenceDiagram
 
 **Prinsip penting (konsisten dengan integrasi Discord §10.16):** kegagalan pengiriman push **tidak boleh** menggagalkan proses insert `notifications`/`issue_comments` itu sendiri — notification bell & data utama tetap berfungsi normal terlepas dari status push.
 
+### 10.21 Alur Collaborators — Self-Add Bebas vs Tambah Orang Lain (Guard Berbeda)
+
+```mermaid
+sequenceDiagram
+    participant QA as QA (bukan Assignee/Manager)
+    participant Dev as Developer (Assignee tiket ini)
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant Target as Developer Lain (ditambahkan)
+
+    Note over QA: Self-add — "Ikuti Tiket Ini", tanpa guard edit
+    QA->>A: POST /issues/:id/collaborators {userId: QA.id}
+    A->>A: userId === currentUser → izinkan (FR-026c), cukup cek anggota proyek
+    A->>PG: INSERT issue_collaborators (ON CONFLICT DO NOTHING — idempotent)
+    A-->>QA: 200 OK
+    Note over A: TIDAK kirim notifikasi — self-add tidak perlu memberi tahu diri sendiri
+
+    Note over Dev,Target: Assignee menambahkan orang lain — guard sama dengan edit tiket
+    Dev->>A: POST /issues/:id/collaborators {userId: Target.id}
+    A->>A: userId !== currentUser → cek guard edit (Assignee/Manager/Admin, FR-026)
+    A->>PG: INSERT issue_collaborators
+    A->>PG: INSERT notifications (type=issue_collaborator_added, userId=Target.id)
+    A-->>Dev: 200 OK
+    A->>Target: emit notification.created (via Socket.io & push, jalur yang sudah ada)
+
+    Note over QA: Skenario ditolak — Developer biasa (bukan Assignee/Manager) coba tambahkan ORANG LAIN
+    QA->>A: POST /issues/:id/collaborators {userId: Target.id}
+    A->>A: userId !== currentUser, DAN QA bukan Assignee/Manager/Admin
+    A-->>QA: 403 Forbidden ("Hanya Assignee, Manager, atau Admin yang dapat menambahkan collaborator lain")
+
+    Note over QA: Hapus diri sendiri — selalu boleh
+    QA->>A: DELETE /issues/:id/collaborators/:QA.id
+    A->>A: :userId === currentUser → selalu izinkan (FR-026d)
+    A->>PG: DELETE issue_collaborators
+    A-->>QA: 200 OK
+```
+
+**Catatan eksplisit — Collaborators tidak masuk hitungan fitur lain:** query `GET /issues/mine`, `GET /projects/:id/workload`, dan `GET /dashboard/summary` **tidak pernah** JOIN ke `issue_collaborators` — ketiganya tetap murni berdasarkan `issues.assignee_id` (FR-026e), tanpa perubahan logic apapun dari desain sebelumnya.
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -1492,6 +1549,7 @@ sequenceDiagram
 | Data komparatif antar-karyawan (Workload Overview, Live Status) | Dibatasi ketat: Manager hanya bisa lihat proyek yang dia kelola sendiri (bukan lintas semua proyek), Admin baru bisa lihat lintas proyek. Developer/QA/Reporter tidak punya akses ke kedua fitur ini sama sekali — mencegah kesalahpahaman "semua orang bisa lihat status semua orang" |
 | Integritas audit trail status tiket | `issue_status_history` sengaja tidak memiliki endpoint PATCH/DELETE sama sekali (FR-029c) — berbeda dari `issue_comments` yang bisa diedit/dihapus penulis/Admin. Ini memastikan riwayat perubahan status tidak bisa dimanipulasi oleh siapapun, termasuk Admin |
 | Push notification bersifat opt-in eksplisit | Tidak ada auto-prompt izin browser saat login (FR-107) — mencegah pola UX "spam permintaan izin" dan memastikan user sadar & menyetujui sebelum device-nya terdaftar untuk menerima push |
+| Guard Collaborators sengaja asimetris (self-add bebas, tambah-orang-lain dibatasi) | Self-add murni opt-in personal (mirip "Watch" GitHub) sehingga tidak perlu guard edit; menambahkan **orang lain** tetap memerlukan otorisasi (Assignee/Manager/Admin) untuk mencegah sembarang anggota proyek "menyeret" orang lain ke tiket tanpa sepengetahuan mereka |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
 ---
@@ -1653,6 +1711,7 @@ flowchart TB
 | Live Status berpotensi terasa seperti pengawasan berlebihan ("dipantau real-time terus-menerus") kalau tidak dikomunikasikan dengan baik ke tim | Ini murni saran penggunaan (bukan pembatasan teknis) — dokumentasikan ke Manager bahwa fitur ini untuk koordinasi kerja (mis. tahu siapa yang sedang available), bukan alat pengawasan mikro; status Idle bukan berarti pelanggaran, bisa jadi sedang meeting/telepon di luar aplikasi |
 | Heartbeat tiap 60 detik dari seluruh desktop client menambah beban koneksi Socket.io persisten | Untuk skala tim internal, dampaknya minor (payload sangat kecil); kalau jumlah user membesar signifikan, pertimbangkan interval lebih jarang (mis. 90-120 detik) sebelum menambah infrastruktur |
 | Status bisa "tersangkut" Aktif/Idle kalau baik graceful disconnect maupun cron fallback sama-sama gagal (skenario langka) | Cron job §10.18a berjalan tiap 2 menit sebagai jaring pengaman kedua — risiko status basi maksimal terbatas pada jendela waktu tersebut |
+| User berpotensi bingung kenapa tiket yang dia jadi Collaborator tidak muncul di Tugas Saya/Workload Overview | Beri label/tooltip yang jelas di UI (mis. "Collaborator — bukan penanggung jawab utama") saat menampilkan daftar Collaborators, supaya perbedaan dengan Assignee tidak ambigu bagi pengguna |
 | Progress bar proyek (`GET /projects`) menambah beban query JOIN+GROUP BY di endpoint yang sering diakses (project switcher) | Untuk skala tim internal, dampaknya minor; kalau jumlah proyek/tiket membesar signifikan, pertimbangkan cache hasil agregasi dengan TTL pendek (mis. 60 detik) alih-alih hitung ulang tiap request |
 | Push notification tidak berfungsi di Safari iOS kecuali app di-"Add to Home Screen" (FR-106d) | Diterima sebagai keterbatasan platform (bukan bug); ditampilkan sebagai catatan informatif di halaman Profil supaya user paham, bukan mengira fitur rusak |
 | `push_subscriptions` bisa menumpuk baris basi kalau device di-uninstall/browser di-reset tanpa sempat unsubscribe | Dibersihkan otomatis saat pengiriman gagal dengan status 410/404 (§10.20) — tidak perlu job pembersihan terjadwal terpisah untuk MVP |

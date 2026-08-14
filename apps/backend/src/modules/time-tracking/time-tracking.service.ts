@@ -25,8 +25,6 @@ import { RealtimeGateway } from '../../gateways/realtime.gateway';
 import { user } from '../../db/schema/auth';
 import { NotificationsService } from '../notifications/notifications.service';
 
-
-
 @Injectable()
 export class TimeTrackingService {
   constructor(
@@ -420,8 +418,8 @@ export class TimeTrackingService {
       dto.status === 'idle'
         ? 'idle'
         : dto.status === 'offline'
-        ? 'offline'
-        : 'active';
+          ? 'offline'
+          : 'active';
     const projectId = dto.projectId || null;
     const issueId = dto.issueId || null;
     const lastHeartbeatAt = new Date();
@@ -477,5 +475,3 @@ export class TimeTrackingService {
       );
   }
 }
-
-

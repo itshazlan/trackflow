@@ -118,4 +118,3 @@ export const userLiveStatus = pgTable('user_live_status', {
     .defaultNow()
     .notNull(),
 });
-

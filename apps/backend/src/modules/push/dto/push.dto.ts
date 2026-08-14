@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsObject, ValidateNested, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsObject,
+  ValidateNested,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class PushKeysDto {

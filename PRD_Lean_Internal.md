@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.7 (Lean Internal) |
+| **Versi Dokumen** | 3.8 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: menu "Tugas Saya" disatukan menjadi mode agregasi bawaan menu Issues; dropdown pemilihan proyek inline pada Time Book/Documents/Settings, satu state proyek aktif dipakai bersama sidebar) |
+| **Tanggal** | 14 Juli 2026 (revisi: fitur Collaborators pada tiket — orang tambahan selain Assignee, self-add bebas, tidak dihitung di Tugas Saya/Workload/Dashboard overdue) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -145,6 +145,10 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-025c | Klik tiket di Kanban maupun Calendar membuka detail/edit tiket yang sama seperti dari List — bukan tampilan terpisah |
 | FR-026 | Tiket dapat **diedit** setelah dibuat (judul, deskripsi, assignee, priority, tanggal, lampiran) oleh Assignee, Manager proyek terkait, atau Admin |
 | FR-026a | Tiket dapat **dihapus** hanya oleh **pembuatnya sendiri** (peran apapun: Developer/QA/Manager, selama dia yang membuat tiket tersebut), atau oleh Manager proyek terkait/Admin. **Assignee yang bukan pembuat tidak dapat menghapus tiket** — ini guard yang lebih ketat dari edit (FR-026), sengaja dipisah karena hapus bersifat destruktif sedangkan edit tidak |
+| FR-026b | Setiap tiket dapat memiliki **Collaborators** — orang tambahan selain Assignee utama, mis. untuk keperluan dilibatkan/diberi tahu tanpa menjadi penanggung jawab utama pengerjaan |
+| FR-026c | Menambahkan **orang lain** sebagai Collaborator memerlukan guard yang sama dengan edit tiket (FR-026: Assignee, Manager proyek, atau Admin). Menambahkan **diri sendiri** sebagai Collaborator ("Ikuti Tiket Ini") dapat dilakukan oleh **anggota proyek manapun**, tanpa guard edit |
+| FR-026d | Pengguna dapat **menghapus dirinya sendiri** dari daftar Collaborator kapan saja; menghapus **Collaborator lain** memerlukan guard yang sama dengan edit tiket |
+| FR-026e | Collaborators **tidak dihitung** sebagai penanggung jawab tiket pada mode agregasi Issues (FR-120), Workload Overview (FR-137), maupun jumlah tiket overdue di Dashboard (FR-130) — ketiganya tetap murni berbasis Assignee tunggal. Collaborators tetap menerima notifikasi terkait dan dapat berkomentar di Issue Activity seperti anggota proyek lainnya |
 | FR-027 | Pengguna dapat **melampirkan file** pada tiket, baik saat pembuatan maupun setelahnya, disimpan di Cloudflare R2 |
 | FR-028 | Setiap tiket memiliki panel **Aktivitas/Komentar** ala forum — **seluruh anggota proyek (peran manapun: Manager/Developer/Reporter-QA)** dapat menulis dan membaca komentar, tanpa dibatasi role tertentu (berbeda dari transisi status yang bisa dibatasi role) |
 | FR-029 | Komentar dapat diedit/dihapus oleh penulisnya sendiri; Admin dapat menghapus komentar siapapun untuk keperluan moderasi |
@@ -253,6 +257,7 @@ Field:
 |---|---|
 | FR-100 | Pengguna menerima notifikasi saat **ditambahkan sebagai anggota proyek baru** |
 | FR-101 | Pengguna menerima notifikasi saat **ditugaskan (assignee) pada tiket baru** |
+| FR-101a | Pengguna menerima notifikasi saat **ditambahkan sebagai Collaborator** pada tiket oleh orang lain (tidak berlaku saat menambahkan diri sendiri lewat "Ikuti Tiket Ini") |
 | FR-102 | Pengguna menerima notifikasi saat **di-mention** (`@username`) pada komentar Issue Activity |
 | FR-103 | Pemilik timesheet menerima notifikasi saat timesheet-nya **disetujui/ditolak** oleh Manager |
 | FR-104 | Pekerja menerima notifikasi saat blok waktunya **di-override** oleh Admin |
@@ -491,6 +496,13 @@ Field:
 2. Klik dropdown pada menu Documents, pilih salah satu proyek — langsung diarahkan ke Documents proyek tersebut.
 3. Menu Issues dan Time Book di sidebar ikut menunjuk ke proyek yang sama, tanpa perlu memilih ulang dari project switcher.
 4. Refresh browser — proyek yang tadi dipilih tetap aktif, tidak kembali ke kondisi kosong.
+
+### 9.23 Melibatkan Orang Lain sebagai Collaborator
+1. QA menemukan sebuah tiket yang relevan dengan pekerjaannya meski bukan assignee-nya — klik "Ikuti Tiket Ini" untuk ikut mendapat notifikasi dan bisa berkomentar.
+2. Assignee tiket tersebut menambahkan seorang Developer lain sebagai Collaborator karena butuh masukan teknis darinya.
+3. Developer yang ditambahkan menerima notifikasi "Ditambahkan sebagai Collaborator".
+4. Developer tersebut membuka halaman Tugas Saya — tiket ini **tidak muncul** di sana, karena dia bukan Assignee, hanya Collaborator.
+5. QA yang sudah tidak lagi relevan dengan tiket tersebut menghapus dirinya sendiri dari daftar Collaborator, tanpa perlu izin siapapun.
 
 ---
 

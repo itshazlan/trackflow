@@ -19,6 +19,7 @@ import {
   CreateIssueDto,
   UpdateIssueDto,
   UpdateIssueStatusDto,
+  AddCollaboratorDto,
 } from './dto/issue.dto';
 import {
   CreateCommentDto,
@@ -30,7 +31,6 @@ import {
 } from './dto/comment.dto';
 import { AuthGuard } from '../../common/guards/auth.guard';
 import { ProjectRoleGuard } from '../../common/guards/project-role.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
 
 // 1. User Dashboard Issues Controller
 @Controller('issues')
@@ -255,6 +255,33 @@ export class UserIssuesController {
       confirmDto,
       req,
     );
+  }
+
+  @Get(':id/collaborators')
+  getCollaborators(@Param('id') id: string, @Req() req: any) {
+    return this.issuesService.getCollaborators(id, req.user.id);
+  }
+
+  @Post(':id/collaborators')
+  addCollaborator(
+    @Param('id') id: string,
+    @Body() addCollaboratorDto: AddCollaboratorDto,
+    @Req() req: any,
+  ) {
+    return this.issuesService.addCollaborator(
+      id,
+      addCollaboratorDto.userId,
+      req.user,
+    );
+  }
+
+  @Delete(':id/collaborators/:userId')
+  removeCollaborator(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Req() req: any,
+  ) {
+    return this.issuesService.removeCollaborator(id, userId, req.user);
   }
 }
 

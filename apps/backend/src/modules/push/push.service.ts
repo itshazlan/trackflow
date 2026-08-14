@@ -87,7 +87,9 @@ export class PushService {
     const subject = process.env.VAPID_SUBJECT || 'mailto:admin@trackflow.app';
 
     if (!publicKey || !privateKey) {
-      this.logger.warn('VAPID keys not configured. Skipping push notification.');
+      this.logger.warn(
+        'VAPID keys not configured. Skipping push notification.',
+      );
       return;
     }
 
@@ -123,7 +125,6 @@ export class PushService {
       body: notification.body,
       url,
     });
-
 
     await Promise.allSettled(
       subscriptions.map(async (sub: any) => {

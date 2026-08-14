@@ -10,5 +10,4 @@ import { PushModule } from '../push/push.module';
   providers: [NotificationsService],
   exports: [NotificationsService],
 })
-
 export class NotificationsModule {}

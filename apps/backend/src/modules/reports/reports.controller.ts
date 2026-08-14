@@ -17,10 +17,7 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('live-status')
-  async getLiveStatus(
-    @Req() req: any,
-    @Query('projectId') projectId?: string,
-  ) {
+  async getLiveStatus(@Req() req: any, @Query('projectId') projectId?: string) {
     return this.reportsService.getLiveStatus(req.user, projectId);
   }
 
@@ -36,7 +33,6 @@ export class ReportsController {
       projectId,
     );
   }
-
 
   @Get('hours/preview')
   async getHoursReportPreview(

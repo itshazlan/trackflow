@@ -24,7 +24,8 @@ export type NotificationType =
   | 'issue_assigned'
   | 'issue_mentioned'
   | 'timesheet_approved'
-  | 'timeblock_overridden';
+  | 'timeblock_overridden'
+  | 'issue_collaborator_added';
 
 export type NotificationEntityType = 'project' | 'issue' | 'timesheet' | 'time_block';
 
@@ -38,6 +39,21 @@ export interface NotificationDto {
   entityId: string;
   isRead: boolean;
   createdAt: string;
+}
+
+export interface IssueCollaboratorDto {
+  id: string;
+  issueId: string;
+  userId: string;
+  addedBy: string;
+  addedAt: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    image?: string;
+    username?: string;
+  };
 }
 
 export type DocumentCategory = 'project_doc' | 'supporting_file' | 'third_party';

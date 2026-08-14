@@ -131,7 +131,6 @@ export class ReportsService {
         lastHeartbeatAt: r.lastHeartbeatAt || null,
       };
     });
-
   }
 
   async getActivityRanking(
@@ -141,7 +140,6 @@ export class ReportsService {
   ) {
     return this.getLiveStatus(currentUser, projectId);
   }
-
 
   private formatDateString(d: Date): string {
     return d.toISOString().split('T')[0];

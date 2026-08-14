@@ -175,3 +175,25 @@ export const issueStatusHistory = pgTable('issue_status_history', {
     .defaultNow()
     .notNull(),
 });
+
+export const issueCollaborators = pgTable(
+  'issue_collaborators',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    issueId: uuid('issue_id')
+      .notNull()
+      .references(() => issues.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    addedBy: text('added_by')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    addedAt: timestamp('added_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique('unique_issue_collaborator').on(table.issueId, table.userId),
+  ],
+);

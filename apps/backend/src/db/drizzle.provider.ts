@@ -37,11 +37,9 @@ export const DrizzleProvider: Provider = {
           "last_heartbeat_at" timestamp with time zone DEFAULT now() NOT NULL
         );
       `;
-
     } catch (err) {
       console.error('[DrizzleProvider] Auto migration error:', err);
     }
-
 
     return db;
   },

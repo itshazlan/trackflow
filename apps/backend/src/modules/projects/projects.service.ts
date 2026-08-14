@@ -14,7 +14,6 @@ import { userLiveStatus } from '../../db/schema/time-tracking';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { DiscordService } from '../discord/discord.service';
 
-
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -419,10 +418,8 @@ export class ProjectsService {
         status = 'offline';
       }
 
-      let currentTask:
-        | { issueKey: string; title: string }
-        | 'Activity'
-        | null = null;
+      let currentTask: { issueKey: string; title: string } | 'Activity' | null =
+        null;
 
       if (status !== 'offline') {
         if (m.liveIssueId && issuesMap.has(m.liveIssueId)) {
@@ -448,7 +445,6 @@ export class ProjectsService {
 
     return { members };
   }
-
 
   async hardDelete(projectId: string, confirmKey: string) {
     const [project] = await this.db

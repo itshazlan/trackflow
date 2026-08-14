@@ -19,6 +19,7 @@ import {
   commentAttachments,
   recentlyViewedIssues,
   issueStatusHistory,
+  issueCollaborators,
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
@@ -1551,5 +1552,206 @@ export class IssuesService {
     );
 
     return { activity };
+  }
+
+  async getCollaborators(issueId: string, actorId: string) {
+    await this.getIssueWithMemberAccess(issueId, actorId);
+
+    const collaborators = await this.db
+      .select({
+        id: issueCollaborators.id,
+        issueId: issueCollaborators.issueId,
+        userId: issueCollaborators.userId,
+        addedBy: issueCollaborators.addedBy,
+        addedAt: issueCollaborators.addedAt,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          username: user.username,
+        },
+      })
+      .from(issueCollaborators)
+      .innerJoin(user, eq(issueCollaborators.userId, user.id))
+      .where(eq(issueCollaborators.issueId, issueId))
+      .orderBy(desc(issueCollaborators.addedAt));
+
+    return collaborators;
+  }
+
+  async addCollaborator(
+    issueId: string,
+    targetUserId: string,
+    actor: { id: string; name?: string; isAdmin: boolean },
+  ) {
+    const [issue] = await this.db
+      .select({
+        id: issues.id,
+        projectId: issues.projectId,
+        assigneeId: issues.assigneeId,
+        number: issues.number,
+        title: issues.title,
+        projectKey: projects.key,
+        projectName: projects.name,
+      })
+      .from(issues)
+      .innerJoin(projects, eq(issues.projectId, projects.id))
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!issue) {
+      throw new NotFoundException(`Issue with ID ${issueId} not found`);
+    }
+
+    let actorProjectRole: string | null = null;
+    if (actor.isAdmin) {
+      actorProjectRole = 'manager';
+    } else {
+      const [actorMembership] = await this.db
+        .select()
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.projectId, issue.projectId),
+            eq(projectMemberships.userId, actor.id),
+          ),
+        )
+        .limit(1);
+
+      if (!actorMembership) {
+        throw new ForbiddenException('Not a member of this project');
+      }
+      actorProjectRole = actorMembership.role;
+    }
+
+    const isSelfAdd = targetUserId === actor.id;
+    const isAssignee = issue.assigneeId === actor.id;
+    const canEdit =
+      actor.isAdmin || actorProjectRole === 'manager' || isAssignee;
+
+    if (!isSelfAdd && !canEdit) {
+      throw new ForbiddenException(
+        'Hanya Assignee, Manager, atau Admin yang dapat menambahkan collaborator lain',
+      );
+    }
+
+    if (!isSelfAdd) {
+      const [targetUser] = await this.db
+        .select()
+        .from(user)
+        .where(eq(user.id, targetUserId))
+        .limit(1);
+
+      if (!targetUser) {
+        throw new NotFoundException(`User with ID ${targetUserId} not found`);
+      }
+
+      if (!targetUser.isAdmin) {
+        const [targetMembership] = await this.db
+          .select()
+          .from(projectMemberships)
+          .where(
+            and(
+              eq(projectMemberships.projectId, issue.projectId),
+              eq(projectMemberships.userId, targetUserId),
+            ),
+          )
+          .limit(1);
+
+        if (!targetMembership) {
+          throw new BadRequestException(
+            'Target user is not a member of this project',
+          );
+        }
+      }
+    }
+
+    const inserted = await this.db
+      .insert(issueCollaborators)
+      .values({
+        issueId,
+        userId: targetUserId,
+        addedBy: actor.id,
+        addedAt: new Date(),
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    if (!isSelfAdd && inserted.length > 0) {
+      await this.notificationsService.createNotification({
+        userId: targetUserId,
+        type: 'issue_collaborator_added',
+        title: 'Ditambahkan sebagai Collaborator',
+        body: `${actor.name || 'Seseorang'} menambahkan Anda sebagai collaborator di ${issue.projectKey}-${issue.number}`,
+        entityType: 'issue',
+        entityId: issueId,
+      });
+    }
+
+    return { message: 'Collaborator added successfully' };
+  }
+
+  async removeCollaborator(
+    issueId: string,
+    targetUserId: string,
+    actor: { id: string; name?: string; isAdmin: boolean },
+  ) {
+    const [issue] = await this.db
+      .select({
+        id: issues.id,
+        projectId: issues.projectId,
+        assigneeId: issues.assigneeId,
+      })
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .limit(1);
+
+    if (!issue) {
+      throw new NotFoundException(`Issue with ID ${issueId} not found`);
+    }
+
+    let actorProjectRole: string | null = null;
+    if (actor.isAdmin) {
+      actorProjectRole = 'manager';
+    } else {
+      const [actorMembership] = await this.db
+        .select()
+        .from(projectMemberships)
+        .where(
+          and(
+            eq(projectMemberships.projectId, issue.projectId),
+            eq(projectMemberships.userId, actor.id),
+          ),
+        )
+        .limit(1);
+
+      if (!actorMembership) {
+        throw new ForbiddenException('Not a member of this project');
+      }
+      actorProjectRole = actorMembership.role;
+    }
+
+    const isSelfRemove = targetUserId === actor.id;
+    const isAssignee = issue.assigneeId === actor.id;
+    const canEdit =
+      actor.isAdmin || actorProjectRole === 'manager' || isAssignee;
+
+    if (!isSelfRemove && !canEdit) {
+      throw new ForbiddenException(
+        'Hanya Assignee, Manager, atau Admin yang dapat menghapus collaborator lain',
+      );
+    }
+
+    await this.db
+      .delete(issueCollaborators)
+      .where(
+        and(
+          eq(issueCollaborators.issueId, issueId),
+          eq(issueCollaborators.userId, targetUserId),
+        ),
+      );
+
+    return { message: 'Collaborator removed successfully' };
   }
 }

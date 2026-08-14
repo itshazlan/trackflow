@@ -90,3 +90,9 @@ export class UpdateIssueStatusDto {
   @IsNotEmpty()
   statusId: string;
 }
+
+export class AddCollaboratorDto {
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+}

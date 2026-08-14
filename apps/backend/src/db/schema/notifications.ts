@@ -15,6 +15,7 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'issue_mentioned',
   'timesheet_approved',
   'timeblock_overridden',
+  'issue_collaborator_added',
 ]);
 
 export const notificationEntityTypeEnum = pgEnum('notification_entity_type', [

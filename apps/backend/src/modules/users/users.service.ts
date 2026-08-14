@@ -65,13 +65,13 @@ export class UsersService {
 
   async getAvatarUploadUrl(id: string) {
     const objectKey = `avatars/${id}.webp`;
-    const uploadUrl = await this.r2Service.getPresignedUploadUrl(objectKey, 'image/webp');
+    const uploadUrl = await this.r2Service.getPresignedUploadUrl(
+      objectKey,
+      'image/webp',
+    );
     const publicUrl = `/api/uploads/${objectKey}`;
 
-    await this.db
-      .update(user)
-      .set({ image: publicUrl })
-      .where(eq(user.id, id));
+    await this.db.update(user).set({ image: publicUrl }).where(eq(user.id, id));
 
     return {
       uploadUrl,

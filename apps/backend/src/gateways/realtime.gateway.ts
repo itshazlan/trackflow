@@ -161,7 +161,6 @@ export class RealtimeGateway
     return { status: 'ok', lastHeartbeatAt };
   }
 
-
   @SubscribeMessage('joinProject')
   handleJoinProject(
     @ConnectedSocket() client: Socket,

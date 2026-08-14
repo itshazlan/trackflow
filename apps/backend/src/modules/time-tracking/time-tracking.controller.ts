@@ -41,7 +41,6 @@ export class TimeTrackingController {
     return this.timeTrackingService.handleHeartbeat(req.user.id, dto);
   }
 
-
   @Post(':id/screenshot')
   uploadScreenshot(@Param('id') id: string) {
     return this.timeTrackingService.getScreenshotUploadUrl(id);

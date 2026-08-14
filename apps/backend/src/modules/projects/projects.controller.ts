@@ -59,7 +59,6 @@ export class ProjectsController {
     return this.projectsService.getLiveStatus(id);
   }
 
-
   @Get([':id/subprojects', ':id/sub-projects'])
   @UseGuards(ProjectRoleGuard)
   findSubProjects(@Param('id') id: string) {

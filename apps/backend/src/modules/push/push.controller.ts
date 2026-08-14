@@ -36,4 +36,3 @@ export class PushController {
     return this.pushService.unsubscribe(req.user.id, dto.endpoint);
   }
 }
-

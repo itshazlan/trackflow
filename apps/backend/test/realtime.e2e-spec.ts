@@ -15,7 +15,6 @@ jest.mock('better-auth/plugins', () => ({
   bearer: jest.fn().mockReturnValue({ id: 'bearer' }),
 }));
 
-
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   INestApplication,

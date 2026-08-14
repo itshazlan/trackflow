@@ -28,7 +28,8 @@ export class NotificationsService {
       | 'issue_assigned'
       | 'issue_mentioned'
       | 'timesheet_approved'
-      | 'timeblock_overridden';
+      | 'timeblock_overridden'
+      | 'issue_collaborator_added';
     title: string;
     body: string;
     entityType: 'project' | 'issue' | 'timesheet' | 'time_block';
@@ -62,7 +63,6 @@ export class NotificationsService {
 
     return newNotification;
   }
-
 
   async getNotifications(
     userId: string,
