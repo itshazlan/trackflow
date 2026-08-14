@@ -1,4 +1,8 @@
-CREATE TYPE "public"."user_status" AS ENUM('active', 'idle', 'offline');
+DO $$ BEGIN
+  CREATE TYPE "public"."user_status" AS ENUM('active', 'idle', 'offline');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 CREATE TABLE IF NOT EXISTS "user_live_status" (
 	"user_id" text PRIMARY KEY NOT NULL,
