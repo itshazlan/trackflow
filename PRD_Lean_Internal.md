@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 3.8 (Lean Internal) |
+| **Versi Dokumen** | 4.0 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: fitur Collaborators pada tiket — orang tambahan selain Assignee, self-add bebas, tidak dihitung di Tugas Saya/Workload/Dashboard overdue) |
+| **Tanggal** | 14 Juli 2026 (revisi: Import Tiket dari Excel — template header baku, validasi Tipe ketat tanpa sinonim, status & assignee otomatis, preview sebelum commit, Manager/Admin only) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -149,6 +149,7 @@ Prinsip ini mengurangi jumlah tabel, guard, dan endpoint yang perlu dibangun —
 | FR-026c | Menambahkan **orang lain** sebagai Collaborator memerlukan guard yang sama dengan edit tiket (FR-026: Assignee, Manager proyek, atau Admin). Menambahkan **diri sendiri** sebagai Collaborator ("Ikuti Tiket Ini") dapat dilakukan oleh **anggota proyek manapun**, tanpa guard edit |
 | FR-026d | Pengguna dapat **menghapus dirinya sendiri** dari daftar Collaborator kapan saja; menghapus **Collaborator lain** memerlukan guard yang sama dengan edit tiket |
 | FR-026e | Collaborators **tidak dihitung** sebagai penanggung jawab tiket pada mode agregasi Issues (FR-120), Workload Overview (FR-137), maupun jumlah tiket overdue di Dashboard (FR-130) — ketiganya tetap murni berbasis Assignee tunggal. Collaborators tetap menerima notifikasi terkait dan dapat berkomentar di Issue Activity seperti anggota proyek lainnya |
+| FR-026f | Pengguna dapat menetapkan **Collaborators sekaligus saat membuat tiket baru** (opsional, multi-select berdampingan dengan field Assignee). **Guard di momen ini lebih longgar** dari FR-026c — siapapun yang boleh membuat tiket (anggota proyek manapun) juga boleh menetapkan Collaborators awal tanpa perlu jadi Assignee/Manager/Admin terlebih dahulu, karena dia sedang menetapkan kondisi awal tiketnya sendiri, bukan mengedit tiket yang sudah ada milik orang lain |
 | FR-027 | Pengguna dapat **melampirkan file** pada tiket, baik saat pembuatan maupun setelahnya, disimpan di Cloudflare R2 |
 | FR-028 | Setiap tiket memiliki panel **Aktivitas/Komentar** ala forum — **seluruh anggota proyek (peran manapun: Manager/Developer/Reporter-QA)** dapat menulis dan membaca komentar, tanpa dibatasi role tertentu (berbeda dari transisi status yang bisa dibatasi role) |
 | FR-029 | Komentar dapat diedit/dihapus oleh penulisnya sendiri; Admin dapat menghapus komentar siapapun untuk keperluan moderasi |
@@ -346,6 +347,25 @@ Field:
 | FR-152 | Proyek aktif bersifat **satu state yang dipakai bersama** oleh project switcher (kiri atas) dan seluruh dropdown inline di sidebar — memilih proyek dari manapun (switcher maupun dropdown menu manapun) memperbarui proyek aktif secara serentak di semua menu |
 | FR-153 | Proyek aktif yang terakhir dipilih **tetap tersimpan** setelah pengguna me-refresh halaman atau membuka tab baru — tidak kembali ke kondisi kosong setiap kali |
 
+### 7.15 Import Tiket dari Excel
+
+> **Format wajib:** hanya file `.xlsx` yang diterima — `.xls`, `.csv`, `.ods`, atau tipe lain ditolak sebelum diproses. Ini bukan fitur "import fleksibel dengan mapping kolom bebas", melainkan **template dengan header baku** yang wajib diikuti persis, sesuai filosofi Lean (lebih murah dibangun & divalidasi).
+
+| ID | Requirement |
+|---|---|
+| FR-160 | Manager/Admin dapat **mengimpor banyak tiket sekaligus** dari file Excel (`.xlsx`) ke sebuah proyek — fitur ini **tidak tersedia** untuk Developer/QA/Reporter |
+| FR-161 | Template Excel wajib memiliki kolom **`Module`** (wajib), **`Issues / Bugs Description`** (wajib), **`Tipe`** (wajib), **`Priority`** (opsional), **`Assign To`** (opsional), **`Target Date`** (opsional). Kolom lain di luar daftar ini diabaikan (bukan error), sehingga file dengan kolom tambahan tetap bisa diproses |
+| FR-162 | Judul tiket hasil import disusun otomatis dengan pola **`[{TIPE}] {Module} - {Issues/Bugs Description}`** — kurung siku menyesuaikan nilai kolom Tipe pada baris tersebut (mis. `[BUG]`, `[FEATURE]`). Isi kolom `Issues / Bugs Description` juga disalin apa adanya ke field deskripsi tiket |
+| FR-163 | Kolom **`Tipe`** wajib diisi dan harus **cocok persis** (tidak case-sensitive) dengan salah satu tracker yang terdaftar di sistem (`Bug`/`Feature`/`Support`) — **tidak ada pemetaan sinonim otomatis** (mis. "Enhancement" dianggap error, bukan otomatis dianggap "Feature"). Pesan error menyebutkan daftar nilai valid yang diterima |
+| FR-164 | Kolom **`Priority`** opsional — kosong berarti default **Medium**; kalau diisi, harus salah satu dari `Low`/`Medium`/`High`/`Urgent` |
+| FR-165 | Kolom **`Assign To`** diterima dan disimpan dalam file, **namun tidak diproses** menjadi Assignee tiket pada versi ini — seluruh tiket hasil import selalu berstatus **Belum Ditugaskan (Unassigned)**, ditugaskan manual belakangan oleh tim. Pencocokan otomatis nama/email ke pengguna sistem ditunda ke fitur terpisah nanti |
+| FR-166 | Seluruh tiket hasil import otomatis mendapat **status pertama** pada urutan workflow proyek tujuan (`order_index` terkecil) — tidak bergantung pada nama status tersebut secara literal (mis. tetap benar walau Manager mengganti nama status pertamanya dari "New" menjadi nama lain) |
+| FR-167 | Kolom **`Target Date`** opsional, format `dd/mm/yyyy` — diisi ke tenggat waktu (`due_date`) tiket |
+| FR-168 | Jika file Excel memiliki **lebih dari satu sheet**, sistem meminta pengguna **memilih sheet** yang akan diproses sebelum lanjut ke validasi — tanpa perlu memilih ulang file yang sama |
+| FR-169 | Sebelum data benar-benar disimpan, sistem menampilkan **pratinjau (preview)**: jumlah baris valid vs error, rincian pesan error per baris, dan pratinjau judul hasil komposisi. Baris error **tidak menggagalkan** baris lain yang valid — pengguna dapat mengimpor baris valid saja sambil memperbaiki baris error secara terpisah |
+| FR-170 | Import dibatasi maksimal **500 baris data** dan ukuran file maksimal **5MB** per proses import |
+| FR-171 | Sistem mencatat **riwayat import** (siapa, kapan, nama file, jumlah berhasil/gagal) yang dapat dilihat Manager/Admin, untuk transparansi asal-usul tiket yang muncul secara massal |
+
 ---
 
 ## 8. Kebutuhan Non-Fungsional
@@ -498,11 +518,20 @@ Field:
 4. Refresh browser — proyek yang tadi dipilih tetap aktif, tidak kembali ke kondisi kosong.
 
 ### 9.23 Melibatkan Orang Lain sebagai Collaborator
-1. QA menemukan sebuah tiket yang relevan dengan pekerjaannya meski bukan assignee-nya — klik "Ikuti Tiket Ini" untuk ikut mendapat notifikasi dan bisa berkomentar.
-2. Assignee tiket tersebut menambahkan seorang Developer lain sebagai Collaborator karena butuh masukan teknis darinya.
-3. Developer yang ditambahkan menerima notifikasi "Ditambahkan sebagai Collaborator".
-4. Developer tersebut membuka halaman Tugas Saya — tiket ini **tidak muncul** di sana, karena dia bukan Assignee, hanya Collaborator.
-5. QA yang sudah tidak lagi relevan dengan tiket tersebut menghapus dirinya sendiri dari daftar Collaborator, tanpa perlu izin siapapun.
+1. Developer biasa membuat tiket baru, sekaligus menambahkan 2 rekan sebagai Collaborators lewat multi-select di modal "Buat Tiket Baru" — tidak perlu izin siapapun karena dia sedang menetapkan kondisi awal tiketnya sendiri.
+2. QA menemukan sebuah tiket lain yang relevan dengan pekerjaannya meski bukan assignee-nya — klik "Ikuti Tiket Ini" untuk ikut mendapat notifikasi dan bisa berkomentar.
+3. Assignee tiket tersebut menambahkan seorang Developer lain sebagai Collaborator karena butuh masukan teknis darinya.
+4. Developer yang ditambahkan menerima notifikasi "Ditambahkan sebagai Collaborator".
+5. Developer tersebut membuka halaman Tugas Saya — tiket ini **tidak muncul** di sana, karena dia bukan Assignee, hanya Collaborator.
+6. QA yang sudah tidak lagi relevan dengan tiket tersebut menghapus dirinya sendiri dari daftar Collaborator, tanpa perlu izin siapapun.
+
+### 9.24 Mengimpor Tiket dari Notulen Excel
+1. Manager punya notulen rapat mingguan dalam format Excel berisi puluhan catatan bug/enhancement, dengan kolom "Assign To" berisi banyak nama sekaligus.
+2. Manager menyalin data relevan ke template import TrackFlow (kolom Module, Issues/Bugs Description, Tipe, Priority, Target Date), lalu upload di halaman Issues proyek terkait.
+3. Karena file punya 3 sheet (per periode notulen), sistem meminta Manager memilih sheet "July 2026" tanpa perlu upload ulang.
+4. Sistem menampilkan pratinjau: 27 baris valid, 3 baris error (salah satunya karena Tipe diisi "Enhancement", bukan "Feature").
+5. Manager mengunduh laporan error untuk diperbaiki nanti, lalu klik "Import 27 Tiket".
+6. 27 tiket baru muncul di Issues dengan status "New" dan belum ada assignee — Manager menugaskan assignee-nya secara manual satu per satu setelahnya.
 
 ---
 
@@ -533,7 +562,7 @@ Field:
 |---|---|
 | **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view) + guard hapus tiket khusus pembuat + mode agregasi lintas proyek (tanpa proyek aktif dipilih), Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Sidebar dengan dropdown proyek inline (Time Book/Documents/Settings), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
 | **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, **Live Status Aktif/Idle Tim**, Web Push Notification |
-| **Fase 3** | Notifikasi lanjutan (email), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan |
+| **Fase 3** | Notifikasi lanjutan (email), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan, **Import Tiket dari Excel** |
 
 ---
 

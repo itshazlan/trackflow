@@ -176,6 +176,13 @@
       "when": 1784574000000,
       "tag": "0024_issue_collaborators",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784575000000,
+      "tag": "0025_issue_imports",
+      "breakpoints": true
     }
   ]
 }

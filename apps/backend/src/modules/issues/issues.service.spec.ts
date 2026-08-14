@@ -1,5 +1,5 @@
 import { IssuesService } from './issues.service';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('IssuesService - remove', () => {
   let service: IssuesService;
@@ -513,6 +513,120 @@ describe('IssuesService - remove', () => {
       await expect(
         service.removeCollaborator('issue-1', 'user-other', actor),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('IssuesService - Excel Import', () => {
+    it('should reject files that are not .xlsx', async () => {
+      const invalidFile = {
+        originalname: 'test.csv',
+        mimetype: 'text/csv',
+        size: 1000,
+        buffer: Buffer.from('test'),
+      } as any;
+
+      await expect(
+        service.previewImport('proj-1', invalidFile),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject files larger than 5MB', async () => {
+      const largeFile = {
+        originalname: 'test.xlsx',
+        mimetype:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        size: 6 * 1024 * 1024,
+        buffer: Buffer.from('test'),
+      } as any;
+
+      await expect(
+        service.previewImport('proj-1', largeFile),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should commit valid import rows and record audit log', async () => {
+      const commitDto = {
+        fileName: 'issues.xlsx',
+        sheetName: 'Sheet1',
+        rows: [
+          {
+            row: 2,
+            title: '[BUG] Auth - Login fails',
+            description: 'Login fails on Safari',
+            trackerId: 'tracker-1',
+            trackerName: 'Bug',
+            priority: 'high' as const,
+            dueDate: '2026-09-01',
+            statusId: 'status-1',
+            statusName: 'New',
+          },
+        ],
+      };
+
+      mockDb.from.mockResolvedValueOnce([{ id: 'tracker-1' }]);
+
+      const mockTx = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        returning: jest.fn().mockResolvedValue([
+          { issueSequence: 1, key: 'PRJ', name: 'Project 1' },
+        ]),
+        insert: jest.fn().mockReturnThis(),
+        values: jest.fn().mockReturnThis(),
+      };
+
+      mockTx.insert.mockImplementation(() => {
+        return {
+          values: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([
+              { id: 'issue-imported-1', number: 1, title: commitDto.rows[0].title },
+            ]),
+          }),
+        };
+      });
+
+      mockDb.transaction = jest
+        .fn()
+        .mockImplementation((cb: any) => cb(mockTx));
+
+      const result = await service.commitImport(
+        'proj-1',
+        commitDto as any,
+        'user-manager',
+      );
+
+      expect(result).toEqual({
+        importedCount: 1,
+        issueIds: ['issue-imported-1'],
+      });
+      expect(mockDb.transaction).toHaveBeenCalled();
+    });
+
+    it('should return import history records for a project', async () => {
+      const historyRecords = [
+        {
+          id: 'import-1',
+          projectId: 'proj-1',
+          fileName: 'issues.xlsx',
+          sheetName: 'Sheet1',
+          totalRows: 10,
+          successRows: 10,
+          errorRows: 0,
+          importedAt: new Date(),
+          importedBy: {
+            id: 'user-manager',
+            name: 'Manager User',
+            email: 'manager@example.com',
+            image: null,
+          },
+        },
+      ];
+
+      mockDb.orderBy.mockResolvedValueOnce(historyRecords);
+
+      const result = await service.getImportHistory('proj-1');
+      expect(result).toEqual(historyRecords);
     });
   });
 });

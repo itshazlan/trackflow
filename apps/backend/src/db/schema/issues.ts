@@ -197,3 +197,21 @@ export const issueCollaborators = pgTable(
     unique('unique_issue_collaborator').on(table.issueId, table.userId),
   ],
 );
+
+export const issueImports = pgTable('issue_imports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  importedBy: text('imported_by')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  sheetName: varchar('sheet_name', { length: 255 }).notNull(),
+  totalRows: integer('total_rows').notNull(),
+  successRows: integer('success_rows').notNull(),
+  errorRows: integer('error_rows').notNull(),
+  importedAt: timestamp('imported_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

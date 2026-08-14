@@ -10,6 +10,7 @@ import { eq, and, or, asc, desc, sql, inArray } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { randomUUID } from 'crypto';
 import { DRIZZLE } from '../../db/drizzle.provider';
+import * as ExcelJS from 'exceljs';
 import {
   issues,
   issueStatuses,
@@ -20,10 +21,11 @@ import {
   recentlyViewedIssues,
   issueStatusHistory,
   issueCollaborators,
+  issueImports,
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
-import { CreateIssueDto, UpdateIssueDto } from './dto/issue.dto';
+import { CreateIssueDto, UpdateIssueDto, CommitImportDto } from './dto/issue.dto';
 import {
   CreateCommentDto,
   UpdateCommentDto,
@@ -1797,5 +1799,395 @@ export class IssuesService {
       );
 
     return { message: 'Collaborator removed successfully' };
+  }
+
+  // --- Excel Import Methods ---
+
+  async previewImport(
+    projectId: string,
+    file: Express.Multer.File,
+    sheetName?: string,
+  ) {
+    // 1. Validasi file dasar
+    if (!file.originalname.toLowerCase().endsWith('.xlsx')) {
+      throw new BadRequestException('Hanya file .xlsx yang diterima');
+    }
+    if (
+      file.mimetype !==
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ) {
+      throw new BadRequestException('Tipe file tidak valid');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('Ukuran file maksimal 5MB');
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(file.buffer as any);
+
+    // 2. Deteksi multi-sheet — kalau sheetName belum dipilih dan sheet > 1, minta user pilih dulu
+    if (!sheetName && workbook.worksheets.length > 1) {
+      return {
+        requiresSheetSelection: true,
+        sheets: workbook.worksheets.map((ws) => ws.name),
+      };
+    }
+
+    const sheet = sheetName
+      ? workbook.getWorksheet(sheetName)
+      : workbook.worksheets[0];
+
+    if (!sheet) {
+      throw new BadRequestException(`Sheet "${sheetName}" tidak ditemukan`);
+    }
+
+    // 3. Validasi header wajib ada
+    const headerRow: string[] = [];
+    const row1 = sheet.getRow(1);
+    row1.eachCell({ includeEmpty: true }, (cell) => {
+      headerRow.push(this.getCellValueString(cell.value).trim());
+    });
+
+    const requiredHeaders = ['Module', 'Issues / Bugs Description', 'Tipe'];
+    const missing = requiredHeaders.filter((h) => !headerRow.includes(h));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Kolom wajib tidak ditemukan: ${missing.join(', ')}`,
+      );
+    }
+
+    // 4. Batas jumlah baris
+    const dataRowCount = sheet.rowCount - 1;
+    if (dataRowCount > 500) {
+      throw new BadRequestException('Maksimal 500 baris data per import');
+    }
+
+    // 5. Fetch master data sekali (dipakai berulang per baris, hindari N+1 query)
+    const trackers = await this.db.select().from(issueTrackers);
+    const [defaultStatus] = await this.db
+      .select()
+      .from(issueStatuses)
+      .where(eq(issueStatuses.projectId, projectId))
+      .orderBy(asc(issueStatuses.orderIndex))
+      .limit(1);
+
+    if (!defaultStatus) {
+      throw new BadRequestException('Proyek belum memiliki workflow status');
+    }
+
+    // 6. Validasi & parse tiap baris
+    const preview: any[] = [];
+    const errors: any[] = [];
+
+    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber === 1) return; // skip header
+      const rowData = this.mapRowToColumns(row, headerRow);
+      const result = this.validateAndParseRow(
+        rowData,
+        rowNumber,
+        trackers,
+        defaultStatus,
+      );
+      if (result.valid) {
+        preview.push(result.data);
+      } else {
+        errors.push(...(result.errors || []));
+      }
+    });
+
+    return {
+      requiresSheetSelection: false,
+      sheetName: sheet.name,
+      totalRows: Math.max(0, dataRowCount),
+      validRows: preview.length,
+      errorRows: errors.length > 0 ? new Set(errors.map((e) => e.row)).size : 0,
+      errors,
+      preview,
+    };
+  }
+
+  private validateAndParseRow(
+    row: Record<string, any>,
+    rowNumber: number,
+    trackers: Array<{ id: string; name: string }>,
+    defaultStatus: { id: string; name: string },
+  ) {
+    const errors: Array<{
+      row: number;
+      column: string;
+      value?: any;
+      message: string;
+    }> = [];
+
+    const moduleStr = row['Module']?.toString().trim() || '';
+    if (!moduleStr) {
+      errors.push({ row: rowNumber, column: 'Module', message: 'Wajib diisi' });
+    }
+
+    const description =
+      row['Issues / Bugs Description']?.toString().trim() || '';
+    if (!description) {
+      errors.push({
+        row: rowNumber,
+        column: 'Issues / Bugs Description',
+        message: 'Wajib diisi',
+      });
+    }
+
+    const tipeRaw = row['Tipe']?.toString().trim() || '';
+    const matchedTracker = trackers.find(
+      (t) => t.name.toLowerCase() === tipeRaw.toLowerCase(),
+    );
+
+    if (!tipeRaw) {
+      errors.push({ row: rowNumber, column: 'Tipe', message: 'Wajib diisi' });
+    } else if (!matchedTracker) {
+      errors.push({
+        row: rowNumber,
+        column: 'Tipe',
+        value: tipeRaw,
+        message: `Tidak dikenali — hanya menerima: ${trackers.map((t) => t.name).join(', ')}`,
+      });
+    }
+
+    const priorityRaw = row['Priority']?.toString().trim().toLowerCase() || '';
+    const validPriorities = ['low', 'medium', 'high', 'urgent'];
+    let priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium';
+
+    if (priorityRaw) {
+      if (!validPriorities.includes(priorityRaw)) {
+        errors.push({
+          row: rowNumber,
+          column: 'Priority',
+          value: priorityRaw,
+          message: 'Harus salah satu: Low/Medium/High/Urgent',
+        });
+      } else {
+        priority = priorityRaw as any;
+      }
+    }
+
+    let dueDate: string | null = null;
+    const targetDateRaw = row['Target Date'];
+    if (targetDateRaw) {
+      dueDate = this.parseExcelDate(targetDateRaw);
+      if (!dueDate) {
+        errors.push({
+          row: rowNumber,
+          column: 'Target Date',
+          value: String(targetDateRaw),
+          message: 'Format tanggal tidak valid, gunakan dd/mm/yyyy',
+        });
+      }
+    }
+
+    if (errors.length > 0) {
+      return { valid: false, errors };
+    }
+
+    return {
+      valid: true,
+      data: {
+        row: rowNumber,
+        title: `[${tipeRaw.toUpperCase()}] ${moduleStr} - ${description}`,
+        description,
+        trackerId: matchedTracker!.id,
+        trackerName: matchedTracker!.name,
+        priority,
+        dueDate,
+        statusId: defaultStatus.id,
+        statusName: defaultStatus.name,
+        assigneeId: null,
+      },
+    };
+  }
+
+  private mapRowToColumns(row: ExcelJS.Row, headerRow: string[]) {
+    const rowData: Record<string, any> = {};
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const headerName = headerRow[colNumber - 1];
+      if (headerName) {
+        rowData[headerName] = this.getCellValueString(cell.value);
+      }
+    });
+    return rowData;
+  }
+
+  private getCellValueString(val: any): string {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'object') {
+      if (val.richText && Array.isArray(val.richText)) {
+        return val.richText.map((rt: any) => rt.text || '').join('');
+      }
+      if (val.text !== undefined) return String(val.text);
+      if (val.result !== undefined) return String(val.result);
+    }
+    return String(val);
+  }
+
+  private parseExcelDate(dateRaw: any): string | null {
+    if (!dateRaw) return null;
+
+    if (dateRaw instanceof Date && !isNaN(dateRaw.getTime())) {
+      return dateRaw.toISOString().split('T')[0];
+    }
+
+    if (typeof dateRaw === 'object') {
+      if (dateRaw.result instanceof Date && !isNaN(dateRaw.result.getTime())) {
+        return dateRaw.result.toISOString().split('T')[0];
+      }
+      if (dateRaw.text) {
+        dateRaw = dateRaw.text;
+      }
+    }
+
+    const str = String(dateRaw).trim();
+    if (!str) return null;
+
+    const ddmmyyyyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (ddmmyyyyMatch) {
+      const day = parseInt(ddmmyyyyMatch[1], 10);
+      const month = parseInt(ddmmyyyyMatch[2], 10);
+      const year = parseInt(ddmmyyyyMatch[3], 10);
+
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year > 1900) {
+        const mm = String(month).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        return `${year}-${mm}-${dd}`;
+      }
+    }
+
+    const yyyymmddMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    if (yyyymmddMatch) {
+      const year = parseInt(yyyymmddMatch[1], 10);
+      const month = parseInt(yyyymmddMatch[2], 10);
+      const day = parseInt(yyyymmddMatch[3], 10);
+
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year > 1900) {
+        const mm = String(month).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        return `${year}-${mm}-${dd}`;
+      }
+    }
+
+    const num = Number(str);
+    if (!isNaN(num) && num > 1000 && num < 100000) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const dateMs = excelEpoch.getTime() + num * 86400000;
+      const parsedDate = new Date(dateMs);
+      if (!isNaN(parsedDate.getTime())) {
+        return parsedDate.toISOString().split('T')[0];
+      }
+    }
+
+    return null;
+  }
+
+  async commitImport(
+    projectId: string,
+    dto: CommitImportDto,
+    actorId: string,
+  ) {
+    const trackers = await this.db.select().from(issueTrackers);
+    const validTrackerIds = new Set(trackers.map((t: any) => t.id));
+    const validRows = dto.rows.filter((r) => validTrackerIds.has(r.trackerId));
+
+    if (validRows.length === 0) {
+      throw new BadRequestException('Tidak ada baris data valid untuk di-commit');
+    }
+
+    const insertedIssues = await this.db.transaction(async (tx: any) => {
+      const results = [];
+      for (const row of validRows) {
+        const [updatedProject] = await tx
+          .update(projects)
+          .set({ issueSequence: sql`${projects.issueSequence} + 1` })
+          .where(eq(projects.id, projectId))
+          .returning({
+            issueSequence: projects.issueSequence,
+            key: projects.key,
+            name: projects.name,
+          });
+
+        if (!updatedProject) {
+          throw new NotFoundException(`Project with ID ${projectId} not found`);
+        }
+
+        const [insertedIssue] = await tx
+          .insert(issues)
+          .values({
+            projectId,
+            trackerId: row.trackerId,
+            statusId: row.statusId,
+            title: row.title,
+            description: row.description,
+            assigneeId: null,
+            priority: row.priority || 'medium',
+            dueDate: row.dueDate || null,
+            createdBy: actorId,
+            number: updatedProject.issueSequence,
+          })
+          .returning();
+
+        await tx.insert(issueStatusHistory).values({
+          issueId: insertedIssue.id,
+          oldStatusId: null,
+          newStatusId: row.statusId,
+          changedBy: actorId,
+          changedAt: new Date(),
+        });
+
+        results.push({
+          ...insertedIssue,
+          projectKey: updatedProject.key,
+          projectName: updatedProject.name,
+          displayId: `${updatedProject.key}-${insertedIssue.number}`,
+        });
+      }
+
+      await tx.insert(issueImports).values({
+        projectId,
+        importedBy: actorId,
+        fileName: dto.fileName,
+        sheetName: dto.sheetName,
+        totalRows: dto.rows.length,
+        successRows: results.length,
+        errorRows: dto.rows.length - results.length,
+        importedAt: new Date(),
+      });
+
+      return results;
+    });
+
+    return {
+      importedCount: insertedIssues.length,
+      issueIds: insertedIssues.map((i: any) => i.id),
+    };
+  }
+
+  async getImportHistory(projectId: string) {
+    const records = await this.db
+      .select({
+        id: issueImports.id,
+        projectId: issueImports.projectId,
+        fileName: issueImports.fileName,
+        sheetName: issueImports.sheetName,
+        totalRows: issueImports.totalRows,
+        successRows: issueImports.successRows,
+        errorRows: issueImports.errorRows,
+        importedAt: issueImports.importedAt,
+        importedBy: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        },
+      })
+      .from(issueImports)
+      .innerJoin(user, eq(issueImports.importedBy, user.id))
+      .where(eq(issueImports.projectId, projectId))
+      .orderBy(desc(issueImports.importedAt));
+
+    return records;
   }
 }

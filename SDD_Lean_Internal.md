@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 4.0 (Lean Internal) |
+| **Versi Dokumen** | 4.2 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: tabel `issue_collaborators`, endpoint dengan guard asimetris self-add vs tambah-orang-lain, notifikasi `issue_collaborator_added`, ditegaskan tidak masuk hitungan Tugas Saya/Workload/Dashboard) |
+| **Tanggal** | 14 Juli 2026 (revisi: Import Tiket dari Excel — tabel `issue_imports`, 3 endpoint (preview/commit/riwayat), `exceljs` di tech stack, sequence diagram §10.22, tanpa file persisten di server) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -31,6 +31,7 @@ Menjadi acuan teknis tim engineering untuk membangun TrackFlow versi internal-ka
 | UI Component | Shadcn UI + TanStack Table | Konsistensi desain kelas Linear/Plane |
 | Drag & Drop | `@dnd-kit/core` | Kanban view — drag kartu antar kolom status |
 | Utilitas Tanggal | `date-fns` | Calendar view — grid bulan custom (bukan library kalender berat) |
+| Parsing Excel | `exceljs` (backend) | Import Tiket dari Excel — baca/validasi file `.xlsx` di NestJS |
 | Database Utama | PostgreSQL biasa | Tanpa TimescaleDB; index biasa sudah cukup di skala internal |
 | Desktop Client | Tauri | Ringan, cross-platform, akses OS-level |
 | File Storage | Cloudflare R2 | Screenshot & dokumen proyek |
@@ -273,6 +274,8 @@ erDiagram
     USERS ||--o{ ISSUES : "assigned to"
     ISSUES ||--o{ ISSUE_ATTACHMENTS : has
     ISSUES ||--o{ ISSUE_COLLABORATORS : has
+    PROJECTS ||--o{ ISSUE_IMPORTS : "imported via"
+    USERS ||--o{ ISSUE_IMPORTS : imports
     USERS ||--o{ ISSUE_COLLABORATORS : "collaborates on"
     ISSUES ||--o{ ISSUE_COMMENTS : has
     USERS ||--o{ ISSUE_COMMENTS : authors
@@ -495,6 +498,21 @@ erDiagram
 >
 > **Sengaja tidak dihitung** oleh: mode agregasi Issues (`/issues/mine`, FR-120), Workload Overview (`/projects/:id/workload`, FR-137), maupun Dashboard overdue count (`/dashboard/summary`, FR-130) — ketiganya tetap query murni berdasarkan `issues.assignee_id`, **tidak** ikut JOIN ke tabel ini (FR-026e). Collaborators tetap otomatis punya akses baca/komentar Issue Activity karena itu sudah terbuka untuk seluruh anggota proyek sejak awal (FR-028), tidak butuh mekanisme tambahan.
 
+#### `issue_imports` (Audit Log — Import Tiket dari Excel)
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | uuid (PK) | |
+| project_id | uuid (FK → projects) | |
+| imported_by | uuid (FK → users) | |
+| file_name | varchar | Nama file asli, murni untuk keterangan/audit |
+| sheet_name | varchar | Nama sheet yang diproses (FR-168) |
+| total_rows | int | Jumlah baris data (di luar header) yang dibaca dari file |
+| success_rows | int | Jumlah baris yang berhasil menjadi tiket |
+| error_rows | int | `total_rows - success_rows` |
+| imported_at | timestamptz | |
+
+> **Tidak ada tabel staging/temporary untuk file Excel** — file tidak pernah disimpan persisten di server (baik saat preview maupun commit). Browser menyimpan `File` object di state dan mengirim ulang saat sheet dipilih; endpoint commit menerima **data terstruktur hasil preview**, bukan file mentah lagi (lihat §10.22).
+
 #### `issue_attachments`
 | Kolom | Tipe | Keterangan |
 |---|---|---|
@@ -714,7 +732,7 @@ erDiagram
 | Projects | `/projects/:id/sub-projects` | GET/POST | Kelola sub-proyek — sub-proyek juga wajib punya `key` sendiri, independen dari induk |
 | Memberships | `/projects/:id/members` | GET/POST/PATCH | Undang & atur role anggota proyek — **Admin dapat mengakses meski belum jadi member proyek ini** (§4.1) |
 | Issue Statuses | `/projects/:id/issue-statuses` | GET/POST/PATCH/DELETE | CRUD status workflow (termasuk reorder & set `restricted_to_role`) — **Manager/Admin** |
-| Issues | `/projects/:id/issues` | GET/POST | List (view=list\|kanban\|calendar) & buat tiket — nomor issue (`number`) di-generate otomatis, atomik per proyek |
+| Issues | `/projects/:id/issues` | GET/POST | List (view=list\|kanban\|calendar) & buat tiket — nomor issue (`number`) di-generate otomatis, atomik per proyek. Body POST menerima `collaboratorIds?: string[]` opsional (FR-026f), guard lebih longgar dari endpoint Collaborators pasca-create |
 | Issues | `/issues/:id` | GET/PATCH | Detail & edit tiket — edit oleh Assignee, Manager proyek terkait, atau Admin (FR-026) |
 | Issues | `/issues/:id` | DELETE | Hapus tiket — **guard lebih ketat dari edit**: hanya pembuat tiket (`createdBy === currentUser`, peran apapun), Manager proyek terkait, atau Admin. Assignee yang bukan pembuat **ditolak** (403) (FR-026a). `time_blocks.issue_id` milik tiket yang dihapus di-set `NULL` (jadi kategori "Activity"), **bukan** ikut dihapus — data payroll tetap utuh |
 | Issues | `/issues/mine?view=list\|kanban\|calendar` | GET | Agregasi tiket assigned ke user saat ini lintas semua proyek yang diikuti — dipanggil frontend saat menu Issues dibuka **tanpa proyek aktif** (FR-150, §5.1). Response dikelompokkan per proyek (`list`/`kanban`) atau flat lintas-proyek (`calendar`) — lihat §10.17 untuk struktur detail (FR-120–125) |
@@ -722,6 +740,9 @@ erDiagram
 | Issue Collaborators | `/issues/:id/collaborators` | GET | List collaborator tiket ini — anggota proyek manapun |
 | Issue Collaborators | `/issues/:id/collaborators` | POST `{userId}` | Tambah collaborator. Guard: kalau `userId !== currentUser` → sama dengan guard edit (Assignee/Manager/Admin, FR-026); kalau self-add → anggota proyek manapun (FR-026c) |
 | Issue Collaborators | `/issues/:id/collaborators/:userId` | DELETE | Hapus collaborator. Guard: kalau `:userId === currentUser` → selalu boleh; kalau bukan → sama dengan guard edit (FR-026d) |
+| Excel Import | `/projects/:id/issues/import/preview` | POST | Upload file `.xlsx` (multipart) + `sheetName?` opsional. Kalau file >1 sheet dan `sheetName` belum dikirim → response `{requiresSheetSelection: true, sheets: [...]}` tanpa parsing. Kalau `sheetName` terisi (atau file cuma 1 sheet) → validasi & parse tiap baris, kembalikan preview + daftar error (FR-160–170). **Manager/Admin only** |
+| Excel Import | `/projects/:id/issues/import/commit` | POST | Body JSON (bukan file lagi) — `{rows: ParsedRow[], fileName, sheetName}` hasil preview yang sudah difilter ke baris valid. Insert tiap baris via logic penomoran atomik yang sama dengan create issue biasa (§10.6), dalam satu transaksi. **Manager/Admin only** |
+| Excel Import | `/projects/:id/issues/imports` | GET | Riwayat import (audit) — siapa, kapan, nama file, jumlah berhasil/gagal (FR-171). **Manager/Admin only** |
 | Issue Attachments | `/issues/:id/attachments` | GET/POST | List & upload lampiran (presigned URL R2) |
 | Issue Attachments | `/issues/:id/attachments/:attachmentId` | DELETE | Hapus lampiran (uploader atau Admin) |
 | Issue Comments | `/issues/:id/comments` | GET/POST | List & tambah komentar — **anggota proyek peran manapun** boleh akses. Body POST: `{ body, parentCommentId? }` — kalau `parentCommentId` diisi, backend validasi comment tersebut milik issue yang sama **dan** `parent_comment_id`-nya sendiri `NULL` (cegah reply-ke-reply, FR-029b) |
@@ -786,10 +807,13 @@ POST /projects/:id/issues
   "title": "[BUG] Login Page - Tombol submit tidak responsif",
   "description": "Role User: Karyawan (staff biasa)\nCurrent Condition: Tombol submit tidak bereaksi saat diklik di halaman login\nExpected Result: Form ter-submit dan redirect ke dashboard\nLink Halaman: https://app.trackflow.local/login\nStep to Reproduce: 1. Buka halaman login 2. Isi email & password 3. Klik Submit\nEvidence: https://r2.trackflow.local/docs/screenshot-bug-001.png\nEnvironment: Chrome 126, Windows 11, resolusi 1366x768",
   "assigneeId": "<uuid-user>",
-  "priority": "high"
+  "priority": "high",
+  "collaboratorIds": ["<uuid-user-2>", "<uuid-user-3>"]
 }
 ```
 Backend **tidak lagi memvalidasi** kelengkapan field di dalam `description` (lihat §16 untuk trade-off). Backend hanya bertanggung jawab men-generate `number` secara atomik dan menyusun Issue ID tampilan `{projects.key}-{number}` (mis. `TRACK-142`) — lihat §10.6.
+
+**`collaboratorIds` bersifat opsional** (FR-026f) — kalau diisi, backend insert baris `issue_collaborators` untuk tiap ID dalam **transaksi yang sama** dengan insert `issues`, dan kirim notifikasi ke tiap collaborator (kecuali kalau `userId` sama dengan pembuat tiket). **Guard di endpoint ini lebih longgar** dari `POST /issues/:id/collaborators` pasca-create (FR-026c) — cukup guard create issue yang sudah ada (anggota proyek manapun), tidak perlu jadi Assignee/Manager/Admin terlebih dahulu karena pembuat sedang menetapkan kondisi awal tiketnya sendiri (lihat §10.21a).
 
 ### 8.2 Contoh Payload — Upload Lampiran & Tambah Komentar
 
@@ -1525,6 +1549,74 @@ sequenceDiagram
 
 **Catatan eksplisit — Collaborators tidak masuk hitungan fitur lain:** query `GET /issues/mine`, `GET /projects/:id/workload`, dan `GET /dashboard/summary` **tidak pernah** JOIN ke `issue_collaborators` — ketiganya tetap murni berdasarkan `issues.assignee_id` (FR-026e), tanpa perubahan logic apapun dari desain sebelumnya.
 
+### 10.21a Alur Menetapkan Collaborators Sekaligus Saat Pembuatan Tiket (Guard Lebih Longgar)
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer (anggota proyek manapun)
+    participant A as Backend API
+    participant PG as PostgreSQL
+    participant C1 as Collaborator 1
+    participant C2 as Collaborator 2
+
+    Dev->>Dev: Isi form "Buat Tiket Baru" — pilih Assignee + 2 Collaborators dari multi-select
+    Dev->>A: POST /projects/:id/issues {title, description, assigneeId, collaboratorIds: [C1.id, C2.id]}
+    A->>A: Guard: anggota proyek manapun boleh create issue (TIDAK perlu jadi Assignee/Manager/Admin — beda dari FR-026c)
+    A->>PG: BEGIN TRANSACTION
+    A->>PG: Generate number atomik, INSERT issues (§10.6 — tidak berubah)
+    A->>PG: INSERT issue_collaborators untuk tiap collaboratorIds (addedBy=Dev.id)
+    A->>PG: COMMIT
+    A-->>Dev: 201 Created {issue, collaborators}
+    A->>C1: emit notification.created (type=issue_collaborator_added)
+    A->>C2: emit notification.created (type=issue_collaborator_added)
+    Note over A: Notifikasi TIDAK dikirim kalau salah satu collaboratorIds sama dengan Dev.id sendiri (self-add saat create)
+```
+
+**Perbedaan kunci dari §10.21:** endpoint ini (`POST /projects/:id/issues`) tidak pernah mengecek apakah pembuat adalah Assignee/Manager/Admin sebelum menambahkan Collaborators — karena pembuat **sedang menetapkan kondisi awal tiketnya sendiri**, bukan mengedit tiket yang sudah ada milik orang lain. Guard ketat FR-026c baru berlaku untuk penambahan Collaborator **setelah** tiket sudah tercipta, lewat endpoint `POST /issues/:id/collaborators` yang terpisah.
+
+### 10.22 Alur Import Tiket dari Excel — Preview Multi-Sheet, Validasi, Commit
+
+```mermaid
+sequenceDiagram
+    participant M as Manager
+    participant FE as Frontend (state: File object)
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    M->>FE: Pilih file .xlsx (3 sheet: "July 2026", "December 2025", "Ags 2024")
+    FE->>A: POST /projects/:id/issues/import/preview (file, TANPA sheetName)
+    A->>A: Validasi ekstensi .xlsx, mimetype, ukuran <=5MB
+    A->>A: Load workbook — deteksi jumlah sheet
+    A-->>FE: { requiresSheetSelection: true, sheets: ["July 2026", "December 2025", "Ags 2024"] }
+    FE-->>M: Tampilkan dropdown pilih sheet
+
+    M->>FE: Pilih "July 2026"
+    FE->>A: POST /projects/:id/issues/import/preview (file YANG SAMA dari state, sheetName="July 2026")
+    A->>A: Validasi header wajib ada (Module, Issues/Bugs Description, Tipe)
+    A->>A: Validasi jumlah baris <=500
+    A->>PG: Fetch issue_trackers + status pertama proyek (sekali, bukan per-baris)
+    loop Tiap baris data
+        A->>A: Validasi Module/Description wajib, Tipe cocok persis master, Priority enum, Target Date format
+        A->>A: Compose title = "[{TIPE}] {Module} - {Description}"
+    end
+    A-->>FE: { totalRows: 30, validRows: 27, errorRows: 3, errors: [...], preview: [...] }
+    FE-->>M: Tabel preview (hijau=valid, merah=error dengan pesan spesifik) + tombol "Unduh Laporan Error"
+
+    M->>FE: Klik "Import 27 Tiket"
+    FE->>A: POST /projects/:id/issues/import/commit {rows: [27 baris valid], fileName, sheetName}
+    A->>A: Re-validasi ringan (trackerId memang masih ada di master — defense in depth)
+    A->>PG: BEGIN TRANSACTION
+    loop Tiap baris valid (27x)
+        A->>PG: Generate number atomik + INSERT issues (reuse logic §10.6, assigneeId selalu NULL)
+    end
+    A->>PG: INSERT issue_imports (audit log: 30 total, 27 sukses, 3 gagal)
+    A->>PG: COMMIT
+    A-->>FE: { importedCount: 27, issueIds: [...] }
+    FE-->>M: Toast "27 tiket berhasil diimpor" + refresh Issues list
+```
+
+**Prinsip penting:** file Excel **hanya diunggah ke server saat preview**, tidak pernah tersimpan persisten — endpoint commit menerima **data terstruktur** hasil preview (JSON), bukan file mentah lagi. Ini menghindari kebutuhan infrastruktur staging/temporary storage sama sekali, konsisten dengan filosofi Lean.
+
 ---
 
 ## 11. Keamanan & Privasi
@@ -1550,6 +1642,9 @@ sequenceDiagram
 | Integritas audit trail status tiket | `issue_status_history` sengaja tidak memiliki endpoint PATCH/DELETE sama sekali (FR-029c) — berbeda dari `issue_comments` yang bisa diedit/dihapus penulis/Admin. Ini memastikan riwayat perubahan status tidak bisa dimanipulasi oleh siapapun, termasuk Admin |
 | Push notification bersifat opt-in eksplisit | Tidak ada auto-prompt izin browser saat login (FR-107) — mencegah pola UX "spam permintaan izin" dan memastikan user sadar & menyetujui sebelum device-nya terdaftar untuk menerima push |
 | Guard Collaborators sengaja asimetris (self-add bebas, tambah-orang-lain dibatasi) | Self-add murni opt-in personal (mirip "Watch" GitHub) sehingga tidak perlu guard edit; menambahkan **orang lain** tetap memerlukan otorisasi (Assignee/Manager/Admin) untuk mencegah sembarang anggota proyek "menyeret" orang lain ke tiket tanpa sepengetahuan mereka |
+| Pengecualian guard Collaborators saat pembuatan tiket (FR-026f) | Saat `POST /projects/:id/issues`, siapapun pembuat tiket boleh menetapkan Collaborators awal tanpa guard Assignee/Manager/Admin — konsisten dengan pola FR-019 (tambah member saat membuat proyek baru): menetapkan kondisi awal sesuatu yang baru dibuat sendiri dianggap berbeda dari mengedit sesuatu yang sudah ada milik orang lain |
+| Import Excel dibatasi Manager/Admin only, bukan anggota proyek manapun | Bulk operation berdampak besar (bisa insert ratusan tiket sekaligus) — berbeda dari create issue tunggal yang terbuka untuk semua anggota proyek (FR-020), sengaja lebih ketat |
+| File Excel tidak pernah disimpan persisten di server | Baik saat preview maupun commit — menghindari kebutuhan infrastruktur staging/cleanup, dan mengurangi permukaan risiko kebocoran data dari file yang ter-upload |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
 ---
@@ -1712,6 +1807,9 @@ flowchart TB
 | Heartbeat tiap 60 detik dari seluruh desktop client menambah beban koneksi Socket.io persisten | Untuk skala tim internal, dampaknya minor (payload sangat kecil); kalau jumlah user membesar signifikan, pertimbangkan interval lebih jarang (mis. 90-120 detik) sebelum menambah infrastruktur |
 | Status bisa "tersangkut" Aktif/Idle kalau baik graceful disconnect maupun cron fallback sama-sama gagal (skenario langka) | Cron job §10.18a berjalan tiap 2 menit sebagai jaring pengaman kedua — risiko status basi maksimal terbatas pada jendela waktu tersebut |
 | User berpotensi bingung kenapa tiket yang dia jadi Collaborator tidak muncul di Tugas Saya/Workload Overview | Beri label/tooltip yang jelas di UI (mis. "Collaborator — bukan penanggung jawab utama") saat menampilkan daftar Collaborators, supaya perbedaan dengan Assignee tidak ambigu bagi pengguna |
+| Commit import 500 baris sekaligus (insert loop per-baris dalam 1 transaksi) berpotensi lambat/timeout pada volume maksimal | Diterima untuk skala tim internal — 500 baris adalah batas atas yang jarang tercapai; kalau jadi masalah nyata, pertimbangkan batch insert (`INSERT ... VALUES (...), (...)`) alih-alih loop sekuensial, dengan tetap mempertahankan penomoran atomik per baris |
+| Kolom "Assign To" diterima di file tapi diam-diam tidak diproses (FR-165) — berpotensi bikin user mengira assignee sudah terisi otomatis | Tampilkan catatan eksplisit di UI modal import ("Assignee akan ditugaskan manual setelah import") supaya tidak jadi asumsi keliru; pratinjau juga tidak menampilkan kolom Assignee terisi apapun |
+| Validasi Tipe yang ketat tanpa sinonim (FR-163) berarti file dengan banyak baris "Enhancement" (pola umum di notulen tim) akan menghasilkan banyak error sekaligus | Diterima sebagai keputusan sengaja — mencegah pemetaan otomatis yang bisa salah kategori data secara diam-diam; user diarahkan menyeragamkan istilah di sumber data sebelum import |
 | Progress bar proyek (`GET /projects`) menambah beban query JOIN+GROUP BY di endpoint yang sering diakses (project switcher) | Untuk skala tim internal, dampaknya minor; kalau jumlah proyek/tiket membesar signifikan, pertimbangkan cache hasil agregasi dengan TTL pendek (mis. 60 detik) alih-alih hitung ulang tiap request |
 | Push notification tidak berfungsi di Safari iOS kecuali app di-"Add to Home Screen" (FR-106d) | Diterima sebagai keterbatasan platform (bukan bug); ditampilkan sebagai catatan informatif di halaman Profil supaya user paham, bukan mengira fitur rusak |
 | `push_subscriptions` bisa menumpuk baris basi kalau device di-uninstall/browser di-reset tanpa sempat unsubscribe | Dibersihkan otomatis saat pengiriman gagal dengan status 410/404 (§10.20) — tidak perlu job pembersihan terjadwal terpisah untuk MVP |

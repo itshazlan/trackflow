@@ -6,7 +6,9 @@ import {
   IsIn,
   IsNumber,
   IsArray,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateIssueDto {
   @IsUUID()
@@ -101,4 +103,61 @@ export class AddCollaboratorDto {
   @IsString()
   @IsNotEmpty()
   userId: string;
+}
+
+export class CommitImportRowDto {
+  @IsNumber()
+  @IsNotEmpty()
+  row: number;
+
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
+  @IsString()
+  @IsNotEmpty()
+  description: string;
+
+  @IsUUID()
+  @IsNotEmpty()
+  trackerId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  trackerName: string;
+
+  @IsString()
+  @IsIn(['low', 'medium', 'high', 'urgent'])
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+
+  @IsString()
+  @IsOptional()
+  dueDate?: string | null;
+
+  @IsUUID()
+  @IsNotEmpty()
+  statusId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  statusName: string;
+
+  @IsString()
+  @IsOptional()
+  assigneeId?: string | null;
+}
+
+export class CommitImportDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CommitImportRowDto)
+  rows: CommitImportRowDto[];
+
+  @IsString()
+  @IsNotEmpty()
+  fileName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  sheetName: string;
 }

@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { IssuesService } from './issues.service';
@@ -20,6 +21,7 @@ import {
   UpdateIssueDto,
   UpdateIssueStatusDto,
   AddCollaboratorDto,
+  CommitImportDto,
 } from './dto/issue.dto';
 import {
   CreateCommentDto,
@@ -290,6 +292,45 @@ export class UserIssuesController {
 @UseGuards(AuthGuard, ProjectRoleGuard)
 export class IssuesController {
   constructor(private readonly issuesService: IssuesService) {}
+
+  private checkManagerOrAdmin(req: any) {
+    if (!req.user?.isAdmin && req.projectRole !== 'manager') {
+      throw new ForbiddenException(
+        'Hanya Manager proyek atau Admin yang dapat mengelola import tiket',
+      );
+    }
+  }
+
+  @Post('import/preview')
+  @UseInterceptors(FileInterceptor('file'))
+  previewImport(
+    @Param('projectId') projectId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('sheetName') sheetName: string | undefined,
+    @Req() req: any,
+  ) {
+    this.checkManagerOrAdmin(req);
+    if (!file) {
+      throw new BadRequestException('File Excel wajib diunggah');
+    }
+    return this.issuesService.previewImport(projectId, file, sheetName);
+  }
+
+  @Post('import/commit')
+  commitImport(
+    @Param('projectId') projectId: string,
+    @Body() commitDto: CommitImportDto,
+    @Req() req: any,
+  ) {
+    this.checkManagerOrAdmin(req);
+    return this.issuesService.commitImport(projectId, commitDto, req.user.id);
+  }
+
+  @Get('imports')
+  getImportHistory(@Param('projectId') projectId: string, @Req() req: any) {
+    this.checkManagerOrAdmin(req);
+    return this.issuesService.getImportHistory(projectId);
+  }
 
   @Post()
   create(
