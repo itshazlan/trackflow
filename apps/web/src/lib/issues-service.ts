@@ -216,6 +216,7 @@ export async function createIssue(
     priority?: 'low' | 'medium' | 'high' | 'urgent';
     assigneeId?: string | null;
     dueDate?: string | null;
+    collaboratorIds?: string[];
   }
 ): Promise<Issue> {
   const res = await fetch(`/api/projects/${projectId}/issues`, {

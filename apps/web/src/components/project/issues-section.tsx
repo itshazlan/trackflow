@@ -77,11 +77,12 @@ import {
   AvatarFallback,
 } from "@/components/ui/avatar";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   Loader2,
   Plus,
@@ -90,7 +91,6 @@ import {
   Filter,
   AlertCircle,
   Trash2,
-  Calendar,
   Paperclip,
   X,
   FileImage,
@@ -100,9 +100,6 @@ import {
   FileCode,
   Archive,
   File,
-  MessageSquare,
-  Send,
-  Edit2,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -365,6 +362,8 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
   const [statusId, setStatusId] = useState("");
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>("medium");
   const [assigneeId, setAssigneeId] = useState("");
+  const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
+  const [collaboratorSearchTerm, setCollaboratorSearchTerm] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -847,6 +846,8 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       setDescription("");
     }
     setSelectedFiles([]);
+    setSelectedCollaboratorIds([]);
+    setCollaboratorSearchTerm("");
     setCreateError("");
     if (statuses.length > 0) {
       setStatusId(statuses[0].id);
@@ -873,6 +874,7 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
         priority,
         assigneeId: assigneeId || null,
         dueDate: dueDate || null,
+        collaboratorIds: selectedCollaboratorIds.length > 0 ? selectedCollaboratorIds : undefined,
       });
 
       // Upload selected files sequentially
@@ -886,6 +888,8 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
       setDescription("");
       setPriority("medium");
       setAssigneeId("");
+      setSelectedCollaboratorIds([]);
+      setCollaboratorSearchTerm("");
       setDueDate("");
       setSelectedFiles([]);
       if (statuses.length > 0) {
@@ -1756,6 +1760,118 @@ export default function IssuesSection({ projectId }: IssuesSectionProps) {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Collaborators (opsional) */}
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-[11px] font-medium text-muted-foreground">
+                  Collaborators (opsional)
+                </Label>
+                <div className="flex items-center gap-1.5 py-1 px-2.5 min-h-[36px] rounded-md border border-input bg-card flex-wrap">
+                  {selectedCollaboratorIds.map((cId) => {
+                    const m = members.find((mem) => mem.id === cId);
+                    if (!m) return null;
+                    return (
+                      <div
+                        key={cId}
+                        className="inline-flex items-center gap-1.5 bg-muted/60 hover:bg-muted text-foreground text-[11.5px] pl-1 pr-1.5 py-0.5 rounded-full border border-border/60 transition-colors"
+                      >
+                        <Avatar className="h-4 w-4">
+                          {m.image ? (
+                            <img src={m.image} alt={m.name} className="h-full w-full object-cover rounded-full" />
+                          ) : (
+                            <AvatarFallback className="text-[8px] font-bold">
+                              {m.name.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <span className="font-medium max-w-[120px] truncate">{m.name}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedCollaboratorIds((prev) => prev.filter((id) => id !== cId))
+                          }
+                          className="text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
+                          disabled={createLoading}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[11px] font-medium px-2 gap-1 rounded-full border-dashed border-border/80 hover:border-primary hover:text-primary transition-colors"
+                          disabled={createLoading}
+                        >
+                          <Plus className="h-3 w-3" />
+                          Tambah
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="start" className="w-60 p-2">
+                      <div className="p-1 mb-1">
+                        <Input
+                          type="text"
+                          placeholder="Cari anggota proyek..."
+                          value={collaboratorSearchTerm}
+                          onChange={(e) => setCollaboratorSearchTerm(e.target.value)}
+                          className="h-7 text-[11.5px] px-2 bg-card"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <DropdownMenuSeparator />
+                      <div className="max-h-40 overflow-y-auto space-y-0.5">
+                        {members
+                          .filter(
+                            (m) =>
+                              !selectedCollaboratorIds.includes(m.id) &&
+                              (m.name.toLowerCase().includes(collaboratorSearchTerm.toLowerCase()) ||
+                                m.email.toLowerCase().includes(collaboratorSearchTerm.toLowerCase()))
+                          )
+                          .map((m) => (
+                            <DropdownMenuItem
+                              key={m.id}
+                              onClick={() => {
+                                setSelectedCollaboratorIds((prev) => [...prev, m.id]);
+                                setCollaboratorSearchTerm("");
+                              }}
+                              className="flex items-center gap-2 p-1.5 text-[11.5px] cursor-pointer rounded-md hover:bg-accent"
+                            >
+                              <Avatar className="h-5 w-5">
+                                {m.image ? (
+                                  <img src={m.image} alt={m.name} className="h-full w-full object-cover rounded-full" />
+                                ) : (
+                                  <AvatarFallback className="text-[8px] font-bold">
+                                    {m.name.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                )}
+                              </Avatar>
+                              <span className="font-medium text-foreground truncate flex-1">{m.name}</span>
+                              <Plus className="h-3 w-3 text-muted-foreground shrink-0" />
+                            </DropdownMenuItem>
+                          ))}
+
+                        {members.filter(
+                          (m) =>
+                            !selectedCollaboratorIds.includes(m.id) &&
+                            (m.name.toLowerCase().includes(collaboratorSearchTerm.toLowerCase()) ||
+                              m.email.toLowerCase().includes(collaboratorSearchTerm.toLowerCase()))
+                        ).length === 0 && (
+                          <div className="p-2 text-center text-[11px] text-muted-foreground">
+                            Tidak ada anggota lain.
+                          </div>
+                        )}
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 
