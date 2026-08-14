@@ -1841,23 +1841,20 @@ export class IssuesService {
       throw new BadRequestException(`Sheet "${sheetName}" tidak ditemukan`);
     }
 
-    // 3. Validasi header wajib ada
-    const headerRow: string[] = [];
-    const row1 = sheet.getRow(1);
-    row1.eachCell({ includeEmpty: true }, (cell) => {
-      headerRow.push(this.getCellValueString(cell.value).trim());
-    });
-
+    // 3. Cari baris header secara dinamis (maksimal 10 baris pertama)
     const requiredHeaders = ['Module', 'Issues / Bugs Description', 'Tipe'];
-    const missing = requiredHeaders.filter((h) => !headerRow.includes(h));
-    if (missing.length > 0) {
+    const headerInfo = this.findHeaderRow(sheet, requiredHeaders);
+
+    if (!headerInfo) {
       throw new BadRequestException(
-        `Kolom wajib tidak ditemukan: ${missing.join(', ')}`,
+        `Kolom wajib (${requiredHeaders.join(', ')}) tidak ditemukan dalam 10 baris pertama`,
       );
     }
 
+    const { rowNumber: headerRowNumber, headerRow } = headerInfo;
+
     // 4. Batas jumlah baris
-    const dataRowCount = sheet.rowCount - 1;
+    const dataRowCount = sheet.rowCount - headerRowNumber;
     if (dataRowCount > 500) {
       throw new BadRequestException('Maksimal 500 baris data per import');
     }
@@ -1880,7 +1877,7 @@ export class IssuesService {
     const errors: any[] = [];
 
     sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      if (rowNumber === 1) return; // skip header
+      if (rowNumber <= headerRowNumber) return; // skip baris sampai & termasuk header
       const rowData = this.mapRowToColumns(row, headerRow);
       const result = this.validateAndParseRow(
         rowData,
@@ -2000,6 +1997,31 @@ export class IssuesService {
         assigneeId: null,
       },
     };
+  }
+
+  private findHeaderRow(
+    sheet: ExcelJS.Worksheet,
+    requiredHeaders: string[],
+  ): { rowNumber: number; headerRow: string[] } | null {
+    const maxScanRows = 10;
+    const scanLimit = Math.min(maxScanRows, sheet.rowCount);
+
+    for (let rowNum = 1; rowNum <= scanLimit; rowNum++) {
+      const row = sheet.getRow(rowNum);
+      const rowHeaders: string[] = [];
+
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        rowHeaders.push(this.getCellValueString(cell.value).trim());
+      });
+
+      const hasAllRequired = requiredHeaders.every((h) =>
+        rowHeaders.includes(h),
+      );
+      if (hasAllRequired) {
+        return { rowNumber: rowNum, headerRow: rowHeaders };
+      }
+    }
+    return null;
   }
 
   private mapRowToColumns(row: ExcelJS.Row, headerRow: string[]) {
