@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { eq, and, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, gt, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../db/drizzle.provider';
 import {
   manualTimeEntries,
@@ -18,6 +18,7 @@ import { user } from '../../db/schema/auth';
 import { CreateManualEntryDto } from './dto/create-manual-entry.dto';
 import { CreateTimesheetDto, ApproveTimesheetDto } from './dto/timesheet.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { calculateTotalMinutes } from './timesheet-calc';
 
 @Injectable()
 export class TimesheetsService {
@@ -105,8 +106,10 @@ export class TimesheetsService {
           eq(timeBlocks.userId, userId),
           eq(timeBlocks.projectId, dto.projectId),
           eq(timeBlocks.isDeleted, false),
-          gte(timeBlocks.blockStart, start),
-          lte(timeBlocks.blockEnd, end),
+          // Ambil block yang beririsan dengan periode, termasuk yang
+          // melewati batasnya — durasinya dipotong di calculateTotalMinutes.
+          lt(timeBlocks.blockStart, end),
+          gt(timeBlocks.blockEnd, start),
         ),
       );
 
@@ -123,17 +126,10 @@ export class TimesheetsService {
         ),
       );
 
-    // Calculate total minutes from time blocks
-    let totalMinutes = 0;
-    for (const row of timeBlockRows) {
-      const diffMs =
-        new Date(row.blockEnd).getTime() - new Date(row.blockStart).getTime();
-      totalMinutes += Math.round(diffMs / 60000);
-    }
-    // Add manual entries
-    for (const row of manualRows) {
-      totalMinutes += row.durationMinutes;
-    }
+    const totalMinutes = calculateTotalMinutes(timeBlockRows, manualRows, {
+      start,
+      end,
+    });
 
     const [timesheet] = await this.db
       .insert(timesheets)

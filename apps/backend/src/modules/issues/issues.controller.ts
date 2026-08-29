@@ -53,6 +53,20 @@ export class UserIssuesController {
     return this.issuesService.findMyIssues(req.user, view || 'list');
   }
 
+  @Get('team')
+  findTeamIssues(
+    @Req() req: any,
+    @Query('view') view: 'list' | 'kanban' | 'calendar' = 'list',
+    @Query('includeEmpty') includeEmpty?: string,
+  ) {
+    const shouldIncludeEmpty = includeEmpty === 'true';
+    return this.issuesService.findTeamIssuesGlobal(
+      req.user,
+      view || 'list',
+      shouldIncludeEmpty,
+    );
+  }
+
   @Get('recently-viewed')
   findRecentlyViewed(@Req() req: any) {
     return this.issuesService.findRecentlyViewed(req.user.id);

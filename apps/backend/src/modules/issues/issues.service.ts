@@ -25,7 +25,11 @@ import {
 } from '../../db/schema/issues';
 import { projects, projectMemberships } from '../../db/schema/projects';
 import { user } from '../../db/schema/auth';
-import { CreateIssueDto, UpdateIssueDto, CommitImportDto } from './dto/issue.dto';
+import {
+  CreateIssueDto,
+  UpdateIssueDto,
+  CommitImportDto,
+} from './dto/issue.dto';
 import {
   CreateCommentDto,
   UpdateCommentDto,
@@ -412,6 +416,167 @@ export class IssuesService {
     const activeProjects = Array.from(projectMap.values()).filter(
       (p) => p.issues.length > 0,
     );
+
+    if (view === 'kanban') {
+      await Promise.all(
+        activeProjects.map(async (proj) => {
+          const statuses = await this.db
+            .select({
+              id: issueStatuses.id,
+              projectId: issueStatuses.projectId,
+              name: issueStatuses.name,
+              orderIndex: issueStatuses.orderIndex,
+              restrictedToRole: issueStatuses.restrictedToRole,
+            })
+            .from(issueStatuses)
+            .where(eq(issueStatuses.projectId, proj.projectId))
+            .orderBy(asc(issueStatuses.orderIndex));
+
+          proj.statuses = statuses;
+        }),
+      );
+    }
+
+    return { projects: activeProjects };
+  }
+
+  async findTeamIssuesGlobal(
+    currentUser: { id: string; isAdmin?: boolean },
+    view: 'list' | 'kanban' | 'calendar' = 'list',
+    includeEmpty: boolean = false,
+  ) {
+    let managedProjects: { id: string; key: string; name: string }[] = [];
+
+    if (currentUser.isAdmin) {
+      managedProjects = await this.db
+        .select({
+          id: projects.id,
+          key: projects.key,
+          name: projects.name,
+        })
+        .from(projects)
+        .orderBy(asc(projects.name));
+    } else {
+      managedProjects = await this.db
+        .select({
+          id: projects.id,
+          key: projects.key,
+          name: projects.name,
+        })
+        .from(projectMemberships)
+        .innerJoin(projects, eq(projectMemberships.projectId, projects.id))
+        .where(
+          and(
+            eq(projectMemberships.userId, currentUser.id),
+            eq(projectMemberships.role, 'manager'),
+          ),
+        )
+        .orderBy(asc(projects.name));
+    }
+
+    if (!managedProjects || managedProjects.length === 0) {
+      throw new ForbiddenException(
+        'Anda tidak mengelola proyek manapun sebagai Manager',
+      );
+    }
+
+    const projectIds = managedProjects.map((p) => p.id);
+
+    const list = await this.db
+      .select({
+        id: issues.id,
+        projectId: issues.projectId,
+        trackerId: issues.trackerId,
+        statusId: issues.statusId,
+        title: issues.title,
+        description: issues.description,
+        assigneeId: issues.assigneeId,
+        priority: issues.priority,
+        startDate: issues.startDate,
+        dueDate: issues.dueDate,
+        estimatedHours: issues.estimatedHours,
+        createdBy: issues.createdBy,
+        createdAt: issues.createdAt,
+        number: issues.number,
+        projectKey: projects.key,
+        projectName: projects.name,
+        tracker: {
+          id: issueTrackers.id,
+          name: issueTrackers.name,
+        },
+        status: {
+          id: issueStatuses.id,
+          name: issueStatuses.name,
+          orderIndex: issueStatuses.orderIndex,
+        },
+        assignee: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        },
+      })
+      .from(issues)
+      .innerJoin(issueTrackers, eq(issues.trackerId, issueTrackers.id))
+      .innerJoin(issueStatuses, eq(issues.statusId, issueStatuses.id))
+      .innerJoin(projects, eq(issues.projectId, projects.id))
+      .leftJoin(user, eq(issues.assigneeId, user.id))
+      .where(inArray(issues.projectId, projectIds))
+      .orderBy(desc(issues.createdAt));
+
+    const formattedIssues = list.map((item: any) => ({
+      ...item,
+      displayId: `${item.projectKey}-${item.number}`,
+    }));
+
+    if (view === 'calendar') {
+      const calendarIssues = formattedIssues
+        .filter(
+          (item: any) =>
+            item.dueDate !== null &&
+            item.dueDate !== undefined &&
+            item.dueDate !== '',
+        )
+        .map((item: any) => ({
+          id: item.id,
+          projectId: item.projectId,
+          projectKey: item.projectKey,
+          number: item.number,
+          displayId: item.displayId,
+          title: item.title,
+          dueDate: item.dueDate,
+          priority: item.priority,
+          statusName: item.status?.name || '',
+          status: item.status,
+          tracker: item.tracker,
+          assignee: item.assignee,
+        }));
+
+      return { issues: calendarIssues };
+    }
+
+    // Group issues by project
+    const projectMap = new Map<string, any>();
+    managedProjects.forEach((p) => {
+      projectMap.set(p.id, {
+        projectId: p.id,
+        projectKey: p.key,
+        projectName: p.name,
+        issues: [],
+      });
+    });
+
+    formattedIssues.forEach((issueItem: any) => {
+      const proj = projectMap.get(issueItem.projectId);
+      if (proj) {
+        proj.issues.push(issueItem);
+      }
+    });
+
+    let activeProjects = Array.from(projectMap.values());
+    if (!includeEmpty) {
+      activeProjects = activeProjects.filter((p) => p.issues.length > 0);
+    }
 
     if (view === 'kanban') {
       await Promise.all(
@@ -1960,7 +2125,7 @@ export class IssuesService {
           message: 'Harus salah satu: Low/Medium/High/Urgent',
         });
       } else {
-        priority = priorityRaw as any;
+        priority = priorityRaw;
       }
     }
 
@@ -2105,17 +2270,15 @@ export class IssuesService {
     return null;
   }
 
-  async commitImport(
-    projectId: string,
-    dto: CommitImportDto,
-    actorId: string,
-  ) {
+  async commitImport(projectId: string, dto: CommitImportDto, actorId: string) {
     const trackers = await this.db.select().from(issueTrackers);
     const validTrackerIds = new Set(trackers.map((t: any) => t.id));
     const validRows = dto.rows.filter((r) => validTrackerIds.has(r.trackerId));
 
     if (validRows.length === 0) {
-      throw new BadRequestException('Tidak ada baris data valid untuk di-commit');
+      throw new BadRequestException(
+        'Tidak ada baris data valid untuk di-commit',
+      );
     }
 
     const insertedIssues = await this.db.transaction(async (tx: any) => {

@@ -1,5 +1,9 @@
 import { IssuesService } from './issues.service';
-import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 
 describe('IssuesService - remove', () => {
   let service: IssuesService;
@@ -320,18 +324,22 @@ describe('IssuesService - remove', () => {
         update: jest.fn().mockReturnThis(),
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([
-          { issueSequence: 5, key: 'PRJ', name: 'Project 1' },
-        ]),
+        returning: jest
+          .fn()
+          .mockResolvedValue([
+            { issueSequence: 5, key: 'PRJ', name: 'Project 1' },
+          ]),
         insert: jest.fn().mockReturnThis(),
         values: jest.fn().mockReturnThis(),
       };
       mockTx.insert.mockImplementation(() => {
         return {
           values: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([
-              { id: 'issue-new', number: 5, title: dto.title },
-            ]),
+            returning: jest
+              .fn()
+              .mockResolvedValue([
+                { id: 'issue-new', number: 5, title: dto.title },
+              ]),
           }),
         };
       });
@@ -341,19 +349,17 @@ describe('IssuesService - remove', () => {
         .mockImplementation((cb: any) => cb(mockTx));
       mockDb.limit.mockResolvedValueOnce([{ name: 'Creator User' }]);
 
-      const result = await service.create('proj-1', dto as any, creatorUserId);
+      const result = await service.create('proj-1', dto, creatorUserId);
 
       expect(result).toBeDefined();
-      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith(
-        {
-          userId: collaboratorUserId,
-          type: 'issue_collaborator_added',
-          title: 'Ditambahkan sebagai Collaborator',
-          body: 'Creator User menambahkan Anda sebagai collaborator di PRJ-5',
-          entityType: 'issue',
-          entityId: 'issue-new',
-        },
-      );
+      expect(mockNotificationsService.createNotification).toHaveBeenCalledWith({
+        userId: collaboratorUserId,
+        type: 'issue_collaborator_added',
+        title: 'Ditambahkan sebagai Collaborator',
+        body: 'Creator User menambahkan Anda sebagai collaborator di PRJ-5',
+        entityType: 'issue',
+        entityId: 'issue-new',
+      });
     });
 
     it('should allow any project member to self-add as collaborator', async () => {
@@ -539,9 +545,9 @@ describe('IssuesService - remove', () => {
         buffer: Buffer.from('test'),
       } as any;
 
-      await expect(
-        service.previewImport('proj-1', largeFile),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.previewImport('proj-1', largeFile)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should commit valid import rows and record audit log', async () => {
@@ -569,9 +575,11 @@ describe('IssuesService - remove', () => {
         update: jest.fn().mockReturnThis(),
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
-        returning: jest.fn().mockResolvedValue([
-          { issueSequence: 1, key: 'PRJ', name: 'Project 1' },
-        ]),
+        returning: jest
+          .fn()
+          .mockResolvedValue([
+            { issueSequence: 1, key: 'PRJ', name: 'Project 1' },
+          ]),
         insert: jest.fn().mockReturnThis(),
         values: jest.fn().mockReturnThis(),
       };
@@ -580,7 +588,11 @@ describe('IssuesService - remove', () => {
         return {
           values: jest.fn().mockReturnValue({
             returning: jest.fn().mockResolvedValue([
-              { id: 'issue-imported-1', number: 1, title: commitDto.rows[0].title },
+              {
+                id: 'issue-imported-1',
+                number: 1,
+                title: commitDto.rows[0].title,
+              },
             ]),
           }),
         };
@@ -592,7 +604,7 @@ describe('IssuesService - remove', () => {
 
       const result = await service.commitImport(
         'proj-1',
-        commitDto as any,
+        commitDto,
         'user-manager',
       );
 
@@ -627,6 +639,192 @@ describe('IssuesService - remove', () => {
 
       const result = await service.getImportHistory('proj-1');
       expect(result).toEqual(historyRecords);
+    });
+  });
+
+  describe('findTeamIssuesGlobal', () => {
+    it('should throw ForbiddenException if user is not a manager in any project and not admin', async () => {
+      mockDb.orderBy.mockResolvedValueOnce([]); // No managed projects found
+
+      await expect(
+        service.findTeamIssuesGlobal({ id: 'user-dev', isAdmin: false }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should query all projects for admin and return grouped issues in list view', async () => {
+      const adminUser = { id: 'user-admin', isAdmin: true };
+      const allProjects = [
+        { id: 'proj-1', key: 'PRJ1', name: 'Project 1' },
+        { id: 'proj-2', key: 'PRJ2', name: 'Project 2' },
+      ];
+      const allIssues = [
+        {
+          id: 'issue-1',
+          projectId: 'proj-1',
+          projectKey: 'PRJ1',
+          number: 1,
+          title: 'Issue 1',
+          assignee: { id: 'u1', name: 'Alice' },
+          tracker: { id: 't1', name: 'Bug' },
+          status: { id: 's1', name: 'To Do' },
+          createdAt: new Date(),
+        },
+      ];
+
+      mockDb.orderBy
+        .mockResolvedValueOnce(allProjects) // Projects list
+        .mockResolvedValueOnce(allIssues); // Issues list
+
+      const result = await service.findTeamIssuesGlobal(
+        adminUser,
+        'list',
+        false,
+      );
+
+      expect(result).toEqual({
+        projects: [
+          {
+            projectId: 'proj-1',
+            projectKey: 'PRJ1',
+            projectName: 'Project 1',
+            issues: [
+              expect.objectContaining({
+                id: 'issue-1',
+                displayId: 'PRJ1-1',
+              }),
+            ],
+          },
+        ],
+      });
+    });
+
+    it('should include empty projects when includeEmpty is true', async () => {
+      const managerUser = { id: 'user-manager', isAdmin: false };
+      const managedProjects = [
+        { id: 'proj-1', key: 'PRJ1', name: 'Project 1' },
+        { id: 'proj-2', key: 'PRJ2', name: 'Project 2' },
+      ];
+      const issues = [
+        {
+          id: 'issue-1',
+          projectId: 'proj-1',
+          projectKey: 'PRJ1',
+          number: 1,
+          title: 'Issue 1',
+          assignee: { id: 'u1', name: 'Alice' },
+          tracker: { id: 't1', name: 'Bug' },
+          status: { id: 's1', name: 'To Do' },
+          createdAt: new Date(),
+        },
+      ];
+
+      mockDb.orderBy
+        .mockResolvedValueOnce(managedProjects)
+        .mockResolvedValueOnce(issues);
+
+      const result = await service.findTeamIssuesGlobal(
+        managerUser,
+        'list',
+        true,
+      );
+
+      expect(result.projects).toHaveLength(2);
+      expect(result.projects[0].projectId).toBe('proj-1');
+      expect(result.projects[0].issues).toHaveLength(1);
+      expect(result.projects[1].projectId).toBe('proj-2');
+      expect(result.projects[1].issues).toHaveLength(0);
+    });
+
+    it('should return flat list of issues with dueDate for calendar view', async () => {
+      const managerUser = { id: 'user-manager', isAdmin: false };
+      const managedProjects = [
+        { id: 'proj-1', key: 'PRJ1', name: 'Project 1' },
+      ];
+      const issues = [
+        {
+          id: 'issue-1',
+          projectId: 'proj-1',
+          projectKey: 'PRJ1',
+          number: 1,
+          title: 'Issue with Due Date',
+          dueDate: '2026-09-01',
+          priority: 'high',
+          status: { id: 's1', name: 'Open' },
+          tracker: { id: 't1', name: 'Task' },
+          assignee: { id: 'u1', name: 'Alice' },
+          createdAt: new Date(),
+        },
+        {
+          id: 'issue-2',
+          projectId: 'proj-1',
+          projectKey: 'PRJ1',
+          number: 2,
+          title: 'Issue without Due Date',
+          dueDate: null,
+          priority: 'low',
+          status: { id: 's1', name: 'Open' },
+          tracker: { id: 't1', name: 'Task' },
+          assignee: { id: 'u2', name: 'Bob' },
+          createdAt: new Date(),
+        },
+      ];
+
+      mockDb.orderBy
+        .mockResolvedValueOnce(managedProjects)
+        .mockResolvedValueOnce(issues);
+
+      const result = await service.findTeamIssuesGlobal(
+        managerUser,
+        'calendar',
+      );
+
+      expect(result).toEqual({
+        issues: [
+          expect.objectContaining({
+            id: 'issue-1',
+            displayId: 'PRJ1-1',
+            dueDate: '2026-09-01',
+            title: 'Issue with Due Date',
+          }),
+        ],
+      });
+    });
+
+    it('should populate statuses per project in kanban view', async () => {
+      const managerUser = { id: 'user-manager', isAdmin: false };
+      const managedProjects = [
+        { id: 'proj-1', key: 'PRJ1', name: 'Project 1' },
+      ];
+      const issues = [
+        {
+          id: 'issue-1',
+          projectId: 'proj-1',
+          projectKey: 'PRJ1',
+          number: 1,
+          title: 'Issue 1',
+          status: { id: 's1', name: 'Backlog' },
+          tracker: { id: 't1', name: 'Feature' },
+          assignee: { id: 'u1', name: 'Alice' },
+          createdAt: new Date(),
+        },
+      ];
+      const statuses = [
+        { id: 's1', projectId: 'proj-1', name: 'Backlog', orderIndex: 0 },
+        { id: 's2', projectId: 'proj-1', name: 'Done', orderIndex: 1 },
+      ];
+
+      mockDb.orderBy
+        .mockResolvedValueOnce(managedProjects) // Projects
+        .mockResolvedValueOnce(issues) // Issues
+        .mockResolvedValueOnce(statuses); // Statuses for proj-1
+
+      const result = await service.findTeamIssuesGlobal(
+        managerUser,
+        'kanban',
+      );
+
+      expect(result.projects).toHaveLength(1);
+      expect(result.projects[0].statuses).toEqual(statuses);
     });
   });
 });

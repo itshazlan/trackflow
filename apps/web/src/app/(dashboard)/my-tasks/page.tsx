@@ -27,6 +27,9 @@ import {
   Folder,
   Filter,
   X,
+  Users,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   startOfMonth,
@@ -44,6 +47,11 @@ import { id as idLocale } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
 import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Table,
   TableHeader,
   TableHead,
@@ -52,13 +60,21 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "@/components/ui/avatar";
+import {
   getMyIssues,
+  getTeamIssuesGlobal,
   updateIssueStatus,
   Issue,
   IssueStatus,
   MyTaskProject,
   MyTasksCalendarIssue,
 } from "@/lib/issues-service";
+import { getSession } from "@/lib/auth-service";
+import { getProjects } from "@/lib/projects-service";
 
 // Project Color Map Helper for Badges
 const COLOR_PALETTES = [
@@ -87,7 +103,15 @@ function getProjectColor(projectKey: string): string {
 }
 
 // Draggable Kanban Card Component
-function KanbanCard({ issue, onClick }: { issue: Issue; onClick: () => void }) {
+function KanbanCard({
+  issue,
+  onClick,
+  showAssignee = false,
+}: {
+  issue: Issue;
+  onClick: () => void;
+  showAssignee?: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: issue.id,
@@ -141,18 +165,37 @@ function KanbanCard({ issue, onClick }: { issue: Issue; onClick: () => void }) {
         {issue.title}
       </h4>
 
-      <div className="flex items-center justify-between border-t border-border/40 pt-2 mt-1">
-        <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[9px] font-medium bg-muted/20 text-muted-foreground select-none">
-          {issue.tracker?.name || "Task"}
-        </span>
-
-        {issue.dueDate && (
-          <span className="text-[10px] text-muted-foreground">
-            {new Date(issue.dueDate).toLocaleDateString("id-ID", {
-              day: "numeric",
-              month: "short",
-            })}
+      <div className="flex items-center justify-between border-t border-border/40 pt-2 mt-1 gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[9px] font-medium bg-muted/20 text-muted-foreground select-none shrink-0">
+            {issue.tracker?.name || "Task"}
           </span>
+
+          {issue.dueDate && (
+            <span className="text-[10px] text-muted-foreground truncate">
+              {new Date(issue.dueDate).toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "short",
+              })}
+            </span>
+          )}
+        </div>
+
+        {showAssignee && issue.assignee && (
+          <div
+            className="flex items-center gap-1 shrink-0 ml-auto"
+            title={`Assignee: ${issue.assignee.name || issue.assignee.email}`}
+          >
+            <Avatar className="h-4.5 w-4.5 border border-border/80 shadow-2xs">
+              <AvatarImage src={issue.assignee.image || undefined} alt={issue.assignee.name} />
+              <AvatarFallback className="text-[8px] font-bold bg-muted text-muted-foreground">
+                {issue.assignee.name ? issue.assignee.name.slice(0, 2).toUpperCase() : "U"}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-[9.5px] font-medium text-muted-foreground truncate max-w-[65px]">
+              {issue.assignee.name?.split(" ")[0]}
+            </span>
+          </div>
         )}
       </div>
     </div>
@@ -164,11 +207,13 @@ function KanbanColumn({
   status,
   issues,
   onCardClick,
+  showAssignee = false,
   maxHeight = "420px",
 }: {
   status: IssueStatus;
   issues: Issue[];
   onCardClick: (id: string) => void;
+  showAssignee?: boolean;
   maxHeight?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -216,6 +261,7 @@ function KanbanColumn({
               key={issue.id}
               issue={issue}
               onClick={() => onCardClick(issue.id)}
+              showAssignee={showAssignee}
             />
           ))
         )}
@@ -233,10 +279,28 @@ function MyTasksContent() {
     searchParams.get("filter") === "overdue" ||
     searchParams.get("overdue") === "true";
 
+  const [scope, setScope] = useState<"mine" | "team">("mine");
+  const [includeEmpty, setIncludeEmpty] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban" | "calendar">("list");
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(new Date());
   const [activeDragIssue, setActiveDragIssue] = useState<Issue | null>(null);
+
+  // Fetch current user session & project memberships to determine manager/admin role
+  const { data: session } = useQuery({
+    queryKey: ["auth-session"],
+    queryFn: getSession,
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects", session?.user?.id],
+    queryFn: getProjects,
+    enabled: !!session?.user,
+  });
+
+  const isManagerOrAdmin = Boolean(
+    session?.user?.isAdmin || projects.some((p: any) => p.role === "manager")
+  );
 
   // Initialize view mode from localStorage
   useEffect(() => {
@@ -255,10 +319,13 @@ function MyTasksContent() {
     }
   };
 
-  // Fetch My Tasks
+  // Fetch Tasks (My Issues vs Global Team Issues)
   const { data, isLoading, error } = useQuery({
-    queryKey: ["my-tasks", viewMode],
-    queryFn: () => getMyIssues(viewMode),
+    queryKey: ["aggregated-issues", scope, viewMode, includeEmpty],
+    queryFn: () =>
+      scope === "team"
+        ? getTeamIssuesGlobal(viewMode, includeEmpty)
+        : getMyIssues(viewMode),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -357,6 +424,7 @@ function MyTasksContent() {
 
     try {
       await updateIssueStatus(issueId, targetStatusId);
+      queryClient.invalidateQueries({ queryKey: ["aggregated-issues"] });
       queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
     } catch (err: any) {
@@ -383,54 +451,120 @@ function MyTasksContent() {
   );
 
   return (
-    <div className="flex flex-col h-full w-full max-w-[1400px] mx-auto p-6 gap-6 pb-16">
-      {/* Header & View Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20">
-              <ListTodo className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">
-                Tugas Saya
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Agregasi tugas yang ditugaskan ke Anda di semua proyek
-              </p>
-            </div>
+    <div className="flex flex-col min-h-full w-full max-w-[1400px] mx-auto p-6 gap-5 pb-24">
+      {/* Header Row (Baris 1) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20">
+            <ListTodo className="h-4.5 w-4.5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">
+              Issues
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {scope === "team"
+                ? "Agregasi semua tiket dari proyek yang Anda kelola (Manager/Admin)"
+                : "Agregasi tugas yang ditugaskan ke Anda di semua proyek"}
+            </p>
           </div>
         </div>
+      </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center border border-border rounded-lg bg-card p-1 shadow-2xs self-start sm:self-auto">
-          <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 text-xs gap-1.5 px-3 font-medium cursor-pointer"
-            onClick={() => changeViewMode("list")}
+      {/* Tab Bar & Action Toolbar (Baris 2 - Gaya Linear/Plane) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+        {/* Left: Scope Switcher Tabs */}
+        {isManagerOrAdmin ? (
+          <Tabs
+            value={scope}
+            onValueChange={(val) => setScope(val as "mine" | "team")}
           >
-            <LayoutList className="h-3.5 w-3.5" />
-            List
-          </Button>
-          <Button
-            variant={viewMode === "kanban" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 text-xs gap-1.5 px-3 font-medium cursor-pointer"
-            onClick={() => changeViewMode("kanban")}
-          >
-            <Kanban className="h-3.5 w-3.5" />
-            Kanban
-          </Button>
-          <Button
-            variant={viewMode === "calendar" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 text-xs gap-1.5 px-3 font-medium cursor-pointer"
-            onClick={() => changeViewMode("calendar")}
-          >
-            <CalendarIcon className="h-3.5 w-3.5" />
-            Calendar
-          </Button>
+            <TabsList className="h-8.5 bg-muted/40 border border-border p-0.5 rounded-lg">
+              <TabsTrigger
+                value="mine"
+                className="text-xs font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5 cursor-pointer data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+              >
+                <ListTodo className="h-3.5 w-3.5" />
+                Tugas Saya
+              </TabsTrigger>
+              <TabsTrigger
+                value="team"
+                className="text-xs font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5 cursor-pointer data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+              >
+                <Users className="h-3.5 w-3.5" />
+                Semua Tim
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground bg-muted/30 border border-border px-3 py-1.5 rounded-lg">
+            <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>Tugas Saya</span>
+          </div>
+        )}
+
+        {/* Right: Controls Cluster (Toggle Proyek Kosong + View Mode Switcher) */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {/* Toggle Proyek Kosong (khusus mode Semua Tim) */}
+          {scope === "team" && viewMode !== "calendar" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-8 text-xs gap-1.5 px-2.5 font-medium cursor-pointer border-border shadow-2xs transition-all ${
+                includeEmpty
+                  ? "bg-accent text-accent-foreground border-accent-foreground/30 font-semibold"
+                  : "bg-card text-muted-foreground hover:text-foreground hover:bg-muted/40"
+              }`}
+              onClick={() => setIncludeEmpty(!includeEmpty)}
+              title={
+                includeEmpty
+                  ? "Klik untuk menyembunyikan proyek tanpa tiket"
+                  : "Klik untuk menampilkan proyek tanpa tiket"
+              }
+            >
+              {includeEmpty ? (
+                <Eye className="h-3.5 w-3.5 text-primary" />
+              ) : (
+                <EyeOff className="h-3.5 w-3.5" />
+              )}
+              <span>
+                {includeEmpty
+                  ? "Proyek Kosong: Muncul"
+                  : "Proyek Kosong: Sembunyi"}
+              </span>
+            </Button>
+          )}
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center border border-border rounded-lg bg-card p-0.5 shadow-2xs">
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2.5 font-medium cursor-pointer"
+              onClick={() => changeViewMode("list")}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              List
+            </Button>
+            <Button
+              variant={viewMode === "kanban" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2.5 font-medium cursor-pointer"
+              onClick={() => changeViewMode("kanban")}
+            >
+              <Kanban className="h-3.5 w-3.5" />
+              Kanban
+            </Button>
+            <Button
+              variant={viewMode === "calendar" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2.5 font-medium cursor-pointer"
+              onClick={() => changeViewMode("calendar")}
+            >
+              <CalendarIcon className="h-3.5 w-3.5" />
+              Calendar
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -475,11 +609,15 @@ function MyTasksContent() {
               <h3 className="text-base font-semibold text-foreground">
                 {isOverdueFiltered
                   ? "Tidak Ada Tugas Overdue"
+                  : scope === "team"
+                  ? "Tidak Ada Tiket Tim"
                   : "Belum Ada Tugas"}
               </h3>
               <p className="text-xs text-muted-foreground mt-1 max-w-sm">
                 {isOverdueFiltered
-                  ? "Tidak ada tugas assigned ke Anda yang melewati tenggat waktu."
+                  ? "Tidak ada tugas yang melewati tenggat waktu."
+                  : scope === "team"
+                  ? "Belum ada tiket di proyek yang Anda kelola, atau semua proyek saat ini kosong."
                   : "Belum ada tugas yang ditugaskan ke Anda saat ini."}
               </p>
               {isOverdueFiltered && (
@@ -494,7 +632,7 @@ function MyTasksContent() {
               )}
             </div>
           ) : (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-6 pb-16">
               {projectsList.map((project) => {
                 const isCollapsed = !!collapsedProjects[project.projectId];
                 const badgeColor = getProjectColor(project.projectKey);
@@ -556,16 +694,21 @@ function MyTasksContent() {
                                   <TableHead className="w-20 pl-4 whitespace-nowrap">
                                     ID
                                   </TableHead>
-                                  <TableHead className="min-w-[280px]">
+                                  <TableHead className="min-w-[240px]">
                                     Title
                                   </TableHead>
-                                  <TableHead className="w-32 whitespace-nowrap">
+                                  {scope === "team" && (
+                                    <TableHead className="w-36 whitespace-nowrap">
+                                      Assignee
+                                    </TableHead>
+                                  )}
+                                  <TableHead className="w-28 whitespace-nowrap">
                                     Tracker
                                   </TableHead>
-                                  <TableHead className="w-32 whitespace-nowrap">
+                                  <TableHead className="w-28 whitespace-nowrap">
                                     Status
                                   </TableHead>
-                                  <TableHead className="w-28 whitespace-nowrap">
+                                  <TableHead className="w-24 whitespace-nowrap">
                                     Priority
                                   </TableHead>
                                   <TableHead className="w-32 pr-4 whitespace-nowrap">
@@ -588,7 +731,7 @@ function MyTasksContent() {
                                       #{issue.id.slice(0, 6)}
                                     </TableCell>
                                     <TableCell className="font-medium text-foreground">
-                                      <div className="flex items-center gap-1.5 max-w-[600px]">
+                                      <div className="flex items-center gap-1.5 max-w-[500px]">
                                         {issue.displayId && (
                                           <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
                                             {issue.displayId}
@@ -599,6 +742,36 @@ function MyTasksContent() {
                                         </span>
                                       </div>
                                     </TableCell>
+                                    {scope === "team" && (
+                                      <TableCell className="whitespace-nowrap">
+                                        {issue.assignee ? (
+                                          <div className="flex items-center gap-1.5">
+                                            <Avatar className="h-5 w-5 border border-border/80">
+                                              <AvatarImage
+                                                src={
+                                                  issue.assignee.image ||
+                                                  undefined
+                                                }
+                                              />
+                                              <AvatarFallback className="text-[9px] font-bold bg-muted text-muted-foreground">
+                                                {issue.assignee.name
+                                                  ? issue.assignee.name
+                                                      .slice(0, 2)
+                                                      .toUpperCase()
+                                                  : "U"}
+                                              </AvatarFallback>
+                                            </Avatar>
+                                            <span className="text-xs text-foreground truncate max-w-[110px]">
+                                              {issue.assignee.name}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground italic">
+                                            Belum ada
+                                          </span>
+                                        )}
+                                      </TableCell>
+                                    )}
                                     <TableCell className="whitespace-nowrap">
                                       <span className="inline-flex items-center rounded border border-border px-2 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground whitespace-nowrap">
                                         {issue.tracker?.name || "Task"}
@@ -670,6 +843,7 @@ function MyTasksContent() {
                                     status={status}
                                     issues={columnIssues}
                                     maxHeight="420px"
+                                    showAssignee={scope === "team"}
                                     onCardClick={(id) =>
                                       router.push(
                                         `/projects/${project.projectId}/issues/${id}`
@@ -705,7 +879,7 @@ function MyTasksContent() {
 
       {/* CALENDAR VIEW */}
       {viewMode === "calendar" && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 pb-16">
           {/* Calendar Month Controls */}
           <div className="flex items-center justify-between border border-border bg-card p-3 rounded-xl shadow-2xs select-none">
             <div className="flex items-center gap-2">
@@ -750,16 +924,22 @@ function MyTasksContent() {
           <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
             {/* Days of Week Header */}
             <div className="grid grid-cols-7 border-b border-border bg-muted/30 select-none">
-              {["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"].map(
-                (dayName) => (
-                  <div
-                    key={dayName}
-                    className="py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border last:border-r-0"
-                  >
-                    {dayName}
-                  </div>
-                )
-              )}
+              {[
+                "Minggu",
+                "Senin",
+                "Selasa",
+                "Rabu",
+                "Kamis",
+                "Jumat",
+                "Sabtu",
+              ].map((dayName) => (
+                <div
+                  key={dayName}
+                  className="py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-r border-border last:border-r-0"
+                >
+                  {dayName}
+                </div>
+              ))}
             </div>
 
             {/* Calendar Days */}
@@ -807,13 +987,24 @@ function MyTasksContent() {
                               )
                             }
                             className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border/80 bg-muted/40 hover:bg-accent transition-colors cursor-pointer text-[10px] truncate shadow-2xs group"
-                            title={`${issue.displayId}: ${issue.title} (${issue.statusName})`}
+                            title={`${issue.displayId}: ${issue.title} (${
+                              issue.statusName
+                            })${
+                              issue.assignee?.name
+                                ? ` • ${issue.assignee.name}`
+                                : ""
+                            }`}
                           >
                             <span
                               className={`px-1 py-0.25 rounded text-[8.5px] font-mono font-bold shrink-0 border ${badgeColor}`}
                             >
                               {issue.displayId}
                             </span>
+                            {scope === "team" && issue.assignee && (
+                              <span className="text-[8.5px] px-1 py-0.2 rounded bg-muted border border-border/60 text-muted-foreground font-semibold shrink-0 truncate max-w-[55px]">
+                                {issue.assignee.name?.split(" ")[0]}
+                              </span>
+                            )}
                             <span className="truncate font-medium text-foreground">
                               {issue.title}
                             </span>

@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 4.2 (Lean Internal) |
+| **Versi Dokumen** | 4.5 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Import Tiket dari Excel — tabel `issue_imports`, 3 endpoint (preview/commit/riwayat), `exceljs` di tech stack, sequence diagram §10.22, tanpa file persisten di server) |
+| **Tanggal** | 14 Juli 2026 (koreksi total: endpoint `/projects/:id/team-issues` dibatalkan — diganti `GET /issues/team` sebagai toggle lintas proyek di §5.2, tanpa perlu buka proyek apapun) |
 | **Dokumen Terkait** | PRD_Lean_Internal.md |
 | **Menggantikan** | SDD.md v1.1 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -198,6 +198,29 @@ Better Auth secara default memakai **session cookie httpOnly**, cocok untuk `app
   ```
   Dipakai untuk ketiga menu (Time Book, Documents, Settings) dengan komponen yang sama — cuma beda `hrefSuffix`/`icon`/`label`.
 - **Tidak ada perubahan backend** untuk revisi ini — `GET /issues/mine` dan `GET /projects/:id/issues` sudah ada persis dari desain sebelumnya; yang berubah murni titik masuk & state management di sisi frontend.
+
+### 5.2 Toggle "Semua Tim" — Perluasan Mode Agregasi Issues (Revisi Total dari "Team Issues")
+
+> **Koreksi total dari draft sebelumnya:** desain awal (v4.2 dokumen ini) merancang fitur ini sebagai halaman **project-scoped** terpisah (`/projects/:id/team-issues`) yang mengharuskan Manager membuka 1 proyek dulu. Ini keliru — begitu Manager membuka Kanban/List sebuah proyek, tiket **semua anggota** proyek itu **sudah otomatis terlihat** (Kanban/List proyek memang tidak pernah difilter ke satu assignee). Kebutuhan yang sesungguhnya ada di **lintas-proyek tanpa membuka proyek apapun** — karena itu, fitur ini digabung sebagai **toggle kedua** di dalam mode agregasi Issues (§5.1), bukan halaman/endpoint terpisah.
+
+```
+Menu Issues (activeProjectId kosong)
+┌───────────────────────────────┐
+│ [Tugas Saya]   [Semua Tim]      │  ← toggle "Semua Tim" hanya dirender kalau user.isAdmin || user.managedProjectIds.length > 0
+└───────────────────────────────┘
+```
+
+| | "Tugas Saya" | "Semua Tim" |
+|---|---|---|
+| Endpoint | `GET /issues/mine` | `GET /issues/team` |
+| Filter tiket | `assignee_id = currentUser` | **Tidak difilter assignee** — semua anggota |
+| Cakupan proyek | Semua proyek yang **diikuti** user (peran apapun) | Admin: **semua proyek** di instalasi. Manager: **hanya proyek yang dia kelola sebagai Manager** |
+| Sumbu mini-board | Per **proyek** | Per **proyek** (sama — bukan per-anggota) |
+| Kolom status Kanban | Bisa berbeda antar mini-board (tiap proyek beda workflow) | **Sama seperti "Tugas Saya"** — bisa berbeda antar mini-board, **bukan** identik seperti asumsi keliru di draft sebelumnya |
+| Info tambahan di kartu | Tidak perlu avatar (pasti milik sendiri) | **Avatar assignee** ditampilkan di tiap kartu — kartu berasal dari berbagai anggota |
+| Guard toggle terlihat | Selalu terlihat (semua role) | Hanya terlihat: `isAdmin` atau Manager di **minimal 1** proyek |
+
+**Komponen mini-board 100% reuse** dari "Tugas Saya" — cuma menambahkan render avatar assignee saat mode "Semua Tim" aktif, dan endpoint yang dipanggil berbeda.
 
 ---
 
@@ -740,7 +763,7 @@ erDiagram
 | Issue Collaborators | `/issues/:id/collaborators` | GET | List collaborator tiket ini — anggota proyek manapun |
 | Issue Collaborators | `/issues/:id/collaborators` | POST `{userId}` | Tambah collaborator. Guard: kalau `userId !== currentUser` → sama dengan guard edit (Assignee/Manager/Admin, FR-026); kalau self-add → anggota proyek manapun (FR-026c) |
 | Issue Collaborators | `/issues/:id/collaborators/:userId` | DELETE | Hapus collaborator. Guard: kalau `:userId === currentUser` → selalu boleh; kalau bukan → sama dengan guard edit (FR-026d) |
-| Excel Import | `/projects/:id/issues/import/preview` | POST | Upload file `.xlsx` (multipart) + `sheetName?` opsional. Kalau file >1 sheet dan `sheetName` belum dikirim → response `{requiresSheetSelection: true, sheets: [...]}` tanpa parsing. Kalau `sheetName` terisi (atau file cuma 1 sheet) → validasi & parse tiap baris, kembalikan preview + daftar error (FR-160–170). **Manager/Admin only** |
+| Excel Import | `/projects/:id/issues/import/preview` | POST | Upload file `.xlsx` (multipart) + `sheetName?` opsional. Kalau file >1 sheet dan `sheetName` belum dikirim → response `{requiresSheetSelection: true, sheets: [...]}` tanpa parsing. Kalau `sheetName` terisi (atau file cuma 1 sheet) → deteksi baris header otomatis dalam 10 baris pertama (FR-168a, bukan hardcode baris 1), lalu validasi & parse tiap baris setelahnya, kembalikan preview + daftar error (FR-160–170). **Manager/Admin only** |
 | Excel Import | `/projects/:id/issues/import/commit` | POST | Body JSON (bukan file lagi) — `{rows: ParsedRow[], fileName, sheetName}` hasil preview yang sudah difilter ke baris valid. Insert tiap baris via logic penomoran atomik yang sama dengan create issue biasa (§10.6), dalam satu transaksi. **Manager/Admin only** |
 | Excel Import | `/projects/:id/issues/imports` | GET | Riwayat import (audit) — siapa, kapan, nama file, jumlah berhasil/gagal (FR-171). **Manager/Admin only** |
 | Issue Attachments | `/issues/:id/attachments` | GET/POST | List & upload lampiran (presigned URL R2) |
@@ -783,6 +806,7 @@ erDiagram
 | Recently Viewed | `/issues/recently-viewed` | GET | 10 issue terakhir dilihat user ini, lintas proyek, urut terbaru |
 | Project Progress | `/projects` | GET | **Diperluas** — tiap item disertai `issueStats: { total, completed }` berdasarkan `issue_statuses.is_final` (FR-135–136) |
 | Workload | `/projects/:id/workload` | GET | Distribusi tiket per anggota proyek, dipecah per status + jumlah overdue — Manager proyek terkait atau Admin (FR-137–139) |
+| Issues | `/issues/team?view=list\|kanban\|calendar&includeEmpty=false` | GET | **Revisi total dari `/projects/:id/team-issues`** — tiket **seluruh anggota**, lintas proyek, **tanpa** perlu buka proyek apapun (§5.2). Cakupan proyek: Admin → semua proyek; Manager → hanya proyek yang dia kelola sebagai Manager. Guard: tolak (403) kalau bukan Admin dan bukan Manager di proyek manapun. Struktur response identik `GET /issues/mine`, ditambah `assignee` per issue untuk render avatar (FR-180–185) |
 | Live Status | `/projects/:id/live-status` | GET | **Revisi total dari "Activity Ranking"** — status langsung (Aktif/Idle/Offline) seluruh anggota proyek beserta tugas yang sedang dikerjakan. Guard identik Workload Overview: Manager proyek terkait, atau Admin (FR-140–144) |
 
 ### 8.1 Contoh Payload — Buat Tiket dari Template Bug (Sebagai Filler Teks)
@@ -1574,7 +1598,7 @@ sequenceDiagram
 
 **Perbedaan kunci dari §10.21:** endpoint ini (`POST /projects/:id/issues`) tidak pernah mengecek apakah pembuat adalah Assignee/Manager/Admin sebelum menambahkan Collaborators — karena pembuat **sedang menetapkan kondisi awal tiketnya sendiri**, bukan mengedit tiket yang sudah ada milik orang lain. Guard ketat FR-026c baru berlaku untuk penambahan Collaborator **setelah** tiket sudah tercipta, lewat endpoint `POST /issues/:id/collaborators` yang terpisah.
 
-### 10.22 Alur Import Tiket dari Excel — Preview Multi-Sheet, Validasi, Commit
+### 10.22 Alur Import Tiket dari Excel — Preview Multi-Sheet, Deteksi Header, Validasi, Commit
 
 ```mermaid
 sequenceDiagram
@@ -1592,15 +1616,20 @@ sequenceDiagram
 
     M->>FE: Pilih "July 2026"
     FE->>A: POST /projects/:id/issues/import/preview (file YANG SAMA dari state, sheetName="July 2026")
-    A->>A: Validasi header wajib ada (Module, Issues/Bugs Description, Tipe)
-    A->>A: Validasi jumlah baris <=500
-    A->>PG: Fetch issue_trackers + status pertama proyek (sekali, bukan per-baris)
-    loop Tiap baris data
-        A->>A: Validasi Module/Description wajib, Tipe cocok persis master, Priority enum, Target Date format
-        A->>A: Compose title = "[{TIPE}] {Module} - {Description}"
+    A->>A: findHeaderRow() — scan 10 baris pertama, cari baris yang memuat SEMUA header wajib (Module, Issues/Bugs Description, Tipe)
+    Note over A: TIDAK mengasumsikan header selalu di baris 1 — file sumber (mis. notulen) sering punya baris judul grup ("LOCAL DEV (WEB)") sebelum header sesungguhnya
+    alt Header tidak ditemukan dalam 10 baris
+        A-->>FE: 400 Bad Request ("Kolom wajib tidak ditemukan dalam 10 baris pertama")
+    else Header ditemukan di baris ke-N
+        A->>A: Validasi jumlah baris data (setelah baris ke-N) <=500
+        A->>PG: Fetch issue_trackers + status pertama proyek (sekali, bukan per-baris)
+        loop Tiap baris data (mulai dari baris N+1)
+            A->>A: Validasi Module/Description wajib, Tipe cocok persis master, Priority enum, Target Date format
+            A->>A: Compose title = "[{TIPE}] {Module} - {Description}"
+        end
+        A-->>FE: { totalRows: 30, validRows: 27, errorRows: 3, errors: [...], preview: [...] }
+        FE-->>M: Tabel preview (hijau=valid, merah=error dengan pesan spesifik) + tombol "Unduh Laporan Error"
     end
-    A-->>FE: { totalRows: 30, validRows: 27, errorRows: 3, errors: [...], preview: [...] }
-    FE-->>M: Tabel preview (hijau=valid, merah=error dengan pesan spesifik) + tombol "Unduh Laporan Error"
 
     M->>FE: Klik "Import 27 Tiket"
     FE->>A: POST /projects/:id/issues/import/commit {rows: [27 baris valid], fileName, sheetName}
@@ -1616,6 +1645,42 @@ sequenceDiagram
 ```
 
 **Prinsip penting:** file Excel **hanya diunggah ke server saat preview**, tidak pernah tersimpan persisten — endpoint commit menerima **data terstruktur** hasil preview (JSON), bukan file mentah lagi. Ini menghindari kebutuhan infrastruktur staging/temporary storage sama sekali, konsisten dengan filosofi Lean.
+
+### 10.23 Alur "Semua Tim" — Lintas Proyek Tanpa Buka Proyek Apapun (Revisi Total)
+
+```mermaid
+sequenceDiagram
+    participant M as Manager (mengelola 3 proyek)
+    participant Adm as Admin
+    participant FE as Frontend
+    participant A as Backend API
+    participant PG as PostgreSQL
+
+    Note over M,FE: Menu Issues TANPA proyek aktif — toggle "Semua Tim" dirender kondisional
+    FE->>FE: Render toggle "Semua Tim" HANYA JIKA user.isAdmin || user.managedProjectIds.length > 0
+    M->>FE: Klik toggle "Semua Tim"
+    FE->>A: GET /issues/team?view=kanban&includeEmpty=false
+
+    A->>A: currentUser bukan Admin — tentukan cakupan: proyek dengan role='manager' saja
+    A->>PG: SELECT project_id FROM project_memberships WHERE user_id=:M AND role='manager'
+    A->>A: Cakupan kosong? → 403 Forbidden ("Anda tidak mengelola proyek manapun sebagai Manager")
+    A->>PG: SELECT issues WHERE project_id IN (:managedProjectIds) — TIDAK difilter assignee_id (beda dari /issues/mine)
+    A->>A: Group issues by project_id (SAMA seperti /issues/mine, BUKAN by assignee_id)
+    loop Tiap proyek yang punya >=1 issue
+        A->>PG: SELECT issue_statuses WHERE project_id=:projectId ORDER BY order_index
+    end
+    A-->>FE: { projects: [{ projectId, projectKey, statuses, issues: [...dengan info assignee] }, ...] }
+    FE->>FE: Render mini-board per proyek (3 board) — SAMA seperti "Tugas Saya", TAMBAH avatar assignee di tiap kartu
+
+    Note over Adm: Admin membuka toggle yang sama
+    Adm->>A: GET /issues/team?view=kanban
+    A->>A: currentUser.isAdmin === true → cakupan = SEMUA proyek, skip query project_memberships
+    A-->>Adm: Mini-board dari SELURUH proyek di instalasi
+
+    Note over M: Drag-and-drop tetap reuse endpoint & validasi yang sama, tidak ada logic baru
+    M->>A: PATCH /issues/:id/status {statusId}
+    Note over A: Validasi restricted_to_role identik dengan Kanban proyek biasa (§10.10)
+```
 
 ---
 
@@ -1644,6 +1709,7 @@ sequenceDiagram
 | Guard Collaborators sengaja asimetris (self-add bebas, tambah-orang-lain dibatasi) | Self-add murni opt-in personal (mirip "Watch" GitHub) sehingga tidak perlu guard edit; menambahkan **orang lain** tetap memerlukan otorisasi (Assignee/Manager/Admin) untuk mencegah sembarang anggota proyek "menyeret" orang lain ke tiket tanpa sepengetahuan mereka |
 | Pengecualian guard Collaborators saat pembuatan tiket (FR-026f) | Saat `POST /projects/:id/issues`, siapapun pembuat tiket boleh menetapkan Collaborators awal tanpa guard Assignee/Manager/Admin — konsisten dengan pola FR-019 (tambah member saat membuat proyek baru): menetapkan kondisi awal sesuatu yang baru dibuat sendiri dianggap berbeda dari mengedit sesuatu yang sudah ada milik orang lain |
 | Import Excel dibatasi Manager/Admin only, bukan anggota proyek manapun | Bulk operation berdampak besar (bisa insert ratusan tiket sekaligus) — berbeda dari create issue tunggal yang terbuka untuk semua anggota proyek (FR-020), sengaja lebih ketat |
+| Toggle "Semua Tim" menampilkan data komparatif antar-karyawan lintas proyek | Cakupan **dibedakan** — Manager hanya melihat proyek yang dia kelola **sebagai Manager** (bukan seluruh proyek yang dia ikuti dengan role apapun), Admin melihat semua proyek. Developer/QA/Reporter tidak pernah melihat toggle ini sama sekali (dirender kondisional di frontend, bukan cuma disabled), konsisten dengan prinsip yang sudah ditetapkan sejak Live Status/Workload Overview |
 | File Excel tidak pernah disimpan persisten di server | Baik saat preview maupun commit — menghindari kebutuhan infrastruktur staging/cleanup, dan mengurangi permukaan risiko kebocoran data dari file yang ter-upload |
 | Proteksi data historis | Hard-delete proyek maupun user **selalu memerlukan konfirmasi eksplisit** (ketik ulang Kode Proyek untuk proyek; validasi 0 riwayat kerja untuk user) — mencegah kehilangan data payroll/laporan secara tidak sengaja. Default aksi "hapus" di UI adalah soft-delete/nonaktifkan, bukan hard-delete |
 
@@ -1810,6 +1876,8 @@ flowchart TB
 | Commit import 500 baris sekaligus (insert loop per-baris dalam 1 transaksi) berpotensi lambat/timeout pada volume maksimal | Diterima untuk skala tim internal — 500 baris adalah batas atas yang jarang tercapai; kalau jadi masalah nyata, pertimbangkan batch insert (`INSERT ... VALUES (...), (...)`) alih-alih loop sekuensial, dengan tetap mempertahankan penomoran atomik per baris |
 | Kolom "Assign To" diterima di file tapi diam-diam tidak diproses (FR-165) — berpotensi bikin user mengira assignee sudah terisi otomatis | Tampilkan catatan eksplisit di UI modal import ("Assignee akan ditugaskan manual setelah import") supaya tidak jadi asumsi keliru; pratinjau juga tidak menampilkan kolom Assignee terisi apapun |
 | Validasi Tipe yang ketat tanpa sinonim (FR-163) berarti file dengan banyak baris "Enhancement" (pola umum di notulen tim) akan menghasilkan banyak error sekaligus | Diterima sebagai keputusan sengaja — mencegah pemetaan otomatis yang bisa salah kategori data secara diam-diam; user diarahkan menyeragamkan istilah di sumber data sebelum import |
+| Merged cells di baris judul grup (mis. "LOCAL DEV (WEB)" yang membentang beberapa kolom) berpotensi membuat `row.values` mengembalikan `undefined`/index bergeser pada sebagian posisi kolom | `findHeaderRow()` (FR-168a) membaca berdasarkan **kecocokan nilai header**, bukan posisi index kolom tetap — mengurangi risiko ini, tapi tetap perlu diuji dengan file nyata yang punya merged cells kompleks sebelum dianggap sepenuhnya aman |
+| Posisi baris header bisa berbeda antar sheet dalam satu file yang sama (mis. sheet "Ags 2024" punya struktur judul grup berbeda dari "July 2026") | `findHeaderRow()` dijalankan ulang tiap kali `sheetName` dipilih — tidak mengasumsikan posisi header sama di semua sheet dalam satu file |
 | Progress bar proyek (`GET /projects`) menambah beban query JOIN+GROUP BY di endpoint yang sering diakses (project switcher) | Untuk skala tim internal, dampaknya minor; kalau jumlah proyek/tiket membesar signifikan, pertimbangkan cache hasil agregasi dengan TTL pendek (mis. 60 detik) alih-alih hitung ulang tiap request |
 | Push notification tidak berfungsi di Safari iOS kecuali app di-"Add to Home Screen" (FR-106d) | Diterima sebagai keterbatasan platform (bukan bug); ditampilkan sebagai catatan informatif di halaman Profil supaya user paham, bukan mengira fitur rusak |
 | `push_subscriptions` bisa menumpuk baris basi kalau device di-uninstall/browser di-reset tanpa sempat unsubscribe | Dibersihkan otomatis saat pengiriman gagal dengan status 410/404 (§10.20) — tidak perlu job pembersihan terjadwal terpisah untuk MVP |

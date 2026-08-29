@@ -172,6 +172,30 @@ export async function getMyIssues(
   return res.json();
 }
 
+export async function getTeamIssuesGlobal(
+  view: 'list' | 'kanban' | 'calendar' = 'list',
+  includeEmpty: boolean = false,
+): Promise<MyTasksResponse> {
+  const params = new URLSearchParams({
+    view,
+    includeEmpty: String(includeEmpty),
+  });
+
+  const res = await fetch(`/api/issues/team?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Failed to fetch team issues');
+  }
+
+  return res.json();
+}
+
 export async function getIssues(projectId: string): Promise<Issue[]> {
   const res = await fetch(`/api/projects/${projectId}/issues`, {
     method: "GET",

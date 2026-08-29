@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi Dokumen** | 4.0 (Lean Internal) |
+| **Versi Dokumen** | 4.3 (Lean Internal) |
 | **Status** | Draft |
-| **Tanggal** | 14 Juli 2026 (revisi: Import Tiket dari Excel — template header baku, validasi Tipe ketat tanpa sinonim, status & assignee otomatis, preview sebelum commit, Manager/Admin only) |
+| **Tanggal** | 14 Juli 2026 (koreksi total: "Team Issues" v4.2 dibatalkan — diganti toggle "Semua Tim" lintas proyek di dalam mode agregasi Issues, tanpa perlu buka proyek apapun) |
 | **Dokumen Terkait** | SDD_Lean_Internal.md |
 | **Menggantikan** | PRD.md v1.0 (disimpan sebagai referensi bila di masa depan produk ini akan dikembangkan menjadi produk multi-klien) |
 
@@ -362,9 +362,23 @@ Field:
 | FR-166 | Seluruh tiket hasil import otomatis mendapat **status pertama** pada urutan workflow proyek tujuan (`order_index` terkecil) — tidak bergantung pada nama status tersebut secara literal (mis. tetap benar walau Manager mengganti nama status pertamanya dari "New" menjadi nama lain) |
 | FR-167 | Kolom **`Target Date`** opsional, format `dd/mm/yyyy` — diisi ke tenggat waktu (`due_date`) tiket |
 | FR-168 | Jika file Excel memiliki **lebih dari satu sheet**, sistem meminta pengguna **memilih sheet** yang akan diproses sebelum lanjut ke validasi — tanpa perlu memilih ulang file yang sama |
+| FR-168a | Sistem **mendeteksi otomatis** posisi baris header (baris berisi `Module`, `Issues / Bugs Description`, `Tipe`) dalam **10 baris pertama** sheet — tidak mengasumsikan header selalu berada di baris pertama. Ini mengakomodasi file sumber seperti notulen tim yang punya baris judul grup (mis. "LOCAL DEV (WEB)") di atas baris header sesungguhnya. Baris data mulai diproses tepat setelah baris header yang terdeteksi. Kalau header tidak ditemukan dalam 10 baris pertama, tampilkan error yang jelas |
 | FR-169 | Sebelum data benar-benar disimpan, sistem menampilkan **pratinjau (preview)**: jumlah baris valid vs error, rincian pesan error per baris, dan pratinjau judul hasil komposisi. Baris error **tidak menggagalkan** baris lain yang valid — pengguna dapat mengimpor baris valid saja sambil memperbaiki baris error secara terpisah |
 | FR-170 | Import dibatasi maksimal **500 baris data** dan ukuran file maksimal **5MB** per proses import |
 | FR-171 | Sistem mencatat **riwayat import** (siapa, kapan, nama file, jumlah berhasil/gagal) yang dapat dilihat Manager/Admin, untuk transparansi asal-usul tiket yang muncul secara massal |
+
+### 7.16 "Semua Tim": Tiket Seluruh Anggota Lintas Proyek Tanpa Buka Proyek (Manager/Admin)
+
+> **Revisi dari desain sebelumnya:** draft awal fitur ini dirancang sebagai halaman terpisah yang **project-scoped** (harus buka 1 proyek dulu). Direvisi total setelah klarifikasi — begitu Manager sudah membuka satu proyek, Kanban/List proyek tersebut **sudah otomatis** menampilkan tiket semua anggota di proyek itu (bukan cuma tiket sendiri), sehingga kebutuhan "lihat per-anggota dalam 1 proyek yang sudah dibuka" sebenarnya redundan. Gap sesungguhnya ada di **lintas-proyek** — melihat tiket semua orang di semua proyek yang dikelola, **tanpa perlu membuka proyek apapun terlebih dahulu**, mirip mode agregasi Issues ("Tugas Saya") tapi untuk semua anggota, bukan cuma diri sendiri.
+
+| ID | Requirement |
+|---|---|
+| FR-180 | Menu **Issues** (mode agregasi, tanpa proyek aktif dipilih — FR-120) memiliki **toggle tambahan "Semua Tim"** di samping "Tugas Saya" — toggle ini **hanya terlihat untuk Manager (di proyek manapun dia menjadi Manager) atau Admin**, tidak pernah muncul untuk Developer/QA/Reporter |
+| FR-181 | Mode **"Semua Tim"** menampilkan tiket **seluruh anggota** (bukan cuma milik sendiri), dikelompokkan sebagai mini-board **per proyek** — untuk **Admin**, mencakup **semua proyek** dalam instalasi; untuk **Manager**, hanya mencakup **proyek yang dia kelola sebagai Manager** (bukan seluruh proyek yang dia ikuti dengan role apapun) |
+| FR-182 | Mendukung mode tampilan **List, Kanban, dan Calendar**, reuse komponen yang sama persis dengan mode "Tugas Saya" (FR-121–123) — perbedaan utama: tiap kartu tiket menampilkan **avatar assignee**, karena kartu berasal dari berbagai anggota, bukan diri sendiri |
+| FR-183 | Kolom status pada mode Kanban mengikuti workflow **masing-masing proyek** (bisa berbeda antar mini-board) — sama seperti mode "Tugas Saya", **bukan** identik di semua mini-board seperti asumsi pada draft sebelumnya |
+| FR-184 | Anggota/proyek tanpa tiket sama sekali **tidak ditampilkan** sebagai mini-board kosong — konsisten dengan aturan FR-125 pada mode "Tugas Saya" |
+| FR-185 | Drag-and-drop pada mini-board Kanban di mode "Semua Tim" mengubah status tiket dengan validasi yang **sama persis** seperti Kanban proyek biasa (termasuk pembatasan status ke role tertentu) |
 
 ---
 
@@ -533,6 +547,13 @@ Field:
 5. Manager mengunduh laporan error untuk diperbaiki nanti, lalu klik "Import 27 Tiket".
 6. 27 tiket baru muncul di Issues dengan status "New" dan belum ada assignee — Manager menugaskan assignee-nya secara manual satu per satu setelahnya.
 
+### 9.25 Meninjau Tiket Seluruh Tim Tanpa Membuka Proyek Manapun
+1. Manager yang mengelola 3 proyek berbeda membuka menu Issues **tanpa memilih proyek aktif**.
+2. Melihat toggle "Tugas Saya" dan "Semua Tim" — klik "Semua Tim" untuk beralih dari tiket miliknya sendiri ke tiket seluruh anggota.
+3. Muncul 3 mini-board (satu per proyek yang dia kelola), masing-masing berisi tiket **semua anggota** proyek tersebut, dengan avatar assignee di tiap kartu.
+4. Drag salah satu tiket milik seorang Developer dari kolom "In Progress" ke "Testing" langsung dari mini-board tersebut, tanpa perlu membuka proyeknya satu per satu.
+5. Admin yang login terpisah membuka menu yang sama — toggle "Semua Tim" miliknya menampilkan **seluruh proyek** di instalasi, bukan cuma yang dia kelola langsung.
+
 ---
 
 ## 10. Metrik Keberhasilan
@@ -561,7 +582,7 @@ Field:
 | Fase | Cakupan |
 |---|---|
 | **MVP** | Auth (Better Auth) & role proyek, Proyek & Sub-proyek (dengan Kode Proyek & penomoran issue independen, edit/arsip/hapus permanen, tambah member saat create), Sistem tiket + status default (list view) + guard hapus tiket khusus pembuat + mode agregasi lintas proyek (tanpa proyek aktif dipilih), Issue Template Bug preset (filler judul/deskripsi), Edit issue, Lampiran issue, Issue Activity (komentar ala forum), Sidebar dengan dropdown proyek inline (Time Book/Documents/Settings), Desktop Client (tracking + screenshot + sync + tray icon + widget preview/submit/discard + default task Activity), Time Book dasar, Reporting PDF/CSV, Notifikasi esensial (member baru, assignment, mention, approval, override) |
-| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, **Live Status Aktif/Idle Tim**, Web Push Notification |
+| **Fase 2** | Kanban & Calendar view, kustomisasi status tiket (tambah/hapus/urutkan), template tambahan (Feature/Support), kontrol privasi (hapus blok waktu sendiri), override Admin, offline time manual, Dashboard Ringkasan Hari Ini, Dilihat Baru-baru Ini, Progress Bar Proyek, Workload Overview, **toggle "Semua Tim" lintas proyek (mode agregasi Issues)**, **Live Status Aktif/Idle Tim**, Web Push Notification |
 | **Fase 3** | Notifikasi lanjutan (email), **integrasi Discord (webhook — notifikasi proyek/tiket baru)**, dashboard analitik lanjutan, **Import Tiket dari Excel** |
 
 ---
