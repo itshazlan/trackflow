@@ -298,9 +298,7 @@ function MyTasksContent() {
     enabled: !!session?.user,
   });
 
-  const isManagerOrAdmin = Boolean(
-    session?.user?.isAdmin || projects.some((p: any) => p.role === "manager")
-  );
+
 
   // Initialize view mode from localStorage
   useEffect(() => {
@@ -380,6 +378,17 @@ function MyTasksContent() {
       })
       .filter((proj) => proj.issues.length > 0);
   }, [rawProjectsList, isOverdueFiltered, isIssueOverdue]);
+
+  const allIssuesList = useMemo(() => {
+    return projectsList.flatMap((proj) =>
+      (proj.issues || []).map((issue) => ({
+        ...issue,
+        projectId: issue.projectId || proj.projectId,
+        projectName: issue.projectName || proj.projectName,
+        projectKey: issue.projectKey || proj.projectKey,
+      }))
+    );
+  }, [projectsList]);
 
   // Calendar dates calculation
   const calendarDays = useMemo(() => {
@@ -464,7 +473,7 @@ function MyTasksContent() {
             </h1>
             <p className="text-xs text-muted-foreground">
               {scope === "team"
-                ? "Agregasi semua tiket dari proyek yang Anda kelola (Manager/Admin)"
+                ? "Agregasi semua tiket dari seluruh anggota tim di proyek yang Anda ikuti"
                 : "Agregasi tugas yang ditugaskan ke Anda di semua proyek"}
             </p>
           </div>
@@ -473,35 +482,28 @@ function MyTasksContent() {
 
       {/* Tab Bar & Action Toolbar (Baris 2 - Gaya Linear/Plane) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
-        {/* Left: Scope Switcher Tabs */}
-        {isManagerOrAdmin ? (
-          <Tabs
-            value={scope}
-            onValueChange={(val) => setScope(val as "mine" | "team")}
-          >
-            <TabsList className="h-8.5 bg-muted/40 border border-border p-0.5 rounded-lg">
-              <TabsTrigger
-                value="mine"
-                className="text-xs font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5 cursor-pointer data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
-              >
-                <ListTodo className="h-3.5 w-3.5" />
-                Tugas Saya
-              </TabsTrigger>
-              <TabsTrigger
-                value="team"
-                className="text-xs font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5 cursor-pointer data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
-              >
-                <Users className="h-3.5 w-3.5" />
-                Semua Tim
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        ) : (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground bg-muted/30 border border-border px-3 py-1.5 rounded-lg">
-            <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>Tugas Saya</span>
-          </div>
-        )}
+        {/* Left: Scope Switcher Tabs (Accessible for all roles) */}
+        <Tabs
+          value={scope}
+          onValueChange={(val) => setScope(val as "mine" | "team")}
+        >
+          <TabsList className="h-8.5 bg-muted/40 border border-border p-0.5 rounded-lg">
+            <TabsTrigger
+              value="mine"
+              className="text-xs font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5 cursor-pointer data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+            >
+              <ListTodo className="h-3.5 w-3.5" />
+              Tugas Saya
+            </TabsTrigger>
+            <TabsTrigger
+              value="team"
+              className="text-xs font-medium px-3.5 h-7.5 rounded-md flex items-center gap-1.5 cursor-pointer data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Semua Tim
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {/* Right: Controls Cluster (Toggle Proyek Kosong + View Mode Switcher) */}
         <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
@@ -631,7 +633,181 @@ function MyTasksContent() {
                 </Button>
               )}
             </div>
+          ) : viewMode === "list" ? (
+            /* Single Unified Table for All Project Issues */
+            <div className="rounded-xl border border-border bg-card shadow-2xs overflow-hidden pb-16">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent bg-muted/20 border-b border-border/60">
+                      <TableHead className="w-20 pl-4 whitespace-nowrap">
+                        ID
+                      </TableHead>
+                      <TableHead className="min-w-[240px]">
+                        Title
+                      </TableHead>
+                      <TableHead className="w-40 whitespace-nowrap">
+                        Project
+                      </TableHead>
+                      <TableHead className="w-36 whitespace-nowrap">
+                        Assignee
+                      </TableHead>
+                      <TableHead className="w-28 whitespace-nowrap">
+                        Tracker
+                      </TableHead>
+                      <TableHead className="w-28 whitespace-nowrap">
+                        Status
+                      </TableHead>
+                      <TableHead className="w-24 whitespace-nowrap">
+                        Priority
+                      </TableHead>
+                      <TableHead className="w-32 pr-4 whitespace-nowrap">
+                        Due Date
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allIssuesList.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={8}
+                          className="h-32 text-center text-muted-foreground text-xs"
+                        >
+                          Tidak ada tiket yang ditemukan
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      allIssuesList.map((issue) => {
+                        const badgeColor = getProjectColor(issue.projectKey);
+                        return (
+                          <TableRow
+                            key={issue.id}
+                            className="cursor-pointer hover:bg-muted/40 transition-colors"
+                            onClick={() =>
+                              router.push(
+                                `/projects/${issue.projectId}/issues/${issue.id}`
+                              )
+                            }
+                          >
+                            <TableCell className="font-mono text-[11px] text-muted-foreground pl-4 whitespace-nowrap">
+                              #{issue.id.slice(0, 6)}
+                            </TableCell>
+                            <TableCell className="font-medium text-foreground">
+                              <div className="flex items-center gap-1.5 max-w-[500px]">
+                                {issue.displayId && (
+                                  <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
+                                    {issue.displayId}
+                                  </span>
+                                )}
+                                <span className="truncate">
+                                  {issue.title}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/projects/${issue.projectId}`);
+                                }}
+                                className="inline-flex items-center gap-1.5 hover:underline text-left group cursor-pointer"
+                                title={issue.projectName}
+                              >
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold border ${badgeColor}`}
+                                >
+                                  {issue.projectKey}
+                                </span>
+                                <span className="text-xs text-muted-foreground group-hover:text-foreground truncate max-w-[120px]">
+                                  {issue.projectName}
+                                </span>
+                              </button>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {issue.assignee ? (
+                                <div className="flex items-center gap-1.5">
+                                  <Avatar className="h-5 w-5 border border-border/80">
+                                    <AvatarImage
+                                      src={
+                                        issue.assignee.image ||
+                                        undefined
+                                      }
+                                    />
+                                    <AvatarFallback className="text-[9px] font-bold bg-muted text-muted-foreground">
+                                      {issue.assignee.name
+                                        ? issue.assignee.name
+                                            .slice(0, 2)
+                                            .toUpperCase()
+                                        : "U"}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-xs text-foreground truncate max-w-[110px]">
+                                    {issue.assignee.name}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">
+                                  Belum ada
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span className="inline-flex items-center rounded border border-border px-2 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground whitespace-nowrap">
+                                {issue.tracker?.name || "Task"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold border border-border text-muted-foreground whitespace-nowrap">
+                                {issue.status?.name || "New"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span
+                                className={`text-[11px] font-semibold capitalize whitespace-nowrap ${
+                                  issue.priority === "urgent"
+                                    ? "text-red-500 font-bold"
+                                    : issue.priority === "high"
+                                    ? "text-red-400"
+                                    : issue.priority === "medium"
+                                    ? "text-amber-500 dark:text-amber-400"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {issue.priority}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-[12px] pr-4 whitespace-nowrap">
+                              <span
+                                className={
+                                  isIssueOverdue(
+                                    issue.dueDate,
+                                    issue.status?.isFinal
+                                  )
+                                    ? "text-destructive font-bold"
+                                    : "text-muted-foreground"
+                                }
+                              >
+                                {issue.dueDate
+                                  ? new Date(
+                                      issue.dueDate
+                                    ).toLocaleDateString("id-ID", {
+                                      day: "numeric",
+                                      month: "short",
+                                    })
+                                  : "—"}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           ) : (
+            /* Kanban View Per-Project Boards */
             <div className="flex flex-col gap-6 pb-16">
               {projectsList.map((project) => {
                 const isCollapsed = !!collapsedProjects[project.projectId];
@@ -685,188 +861,47 @@ function MyTasksContent() {
                     {/* Section Body */}
                     {!isCollapsed && (
                       <div className="p-4">
-                        {viewMode === "list" ? (
-                          /* List View Table */
-                          <div className="overflow-x-auto rounded-lg border border-border/60">
-                            <Table>
-                              <TableHeader>
-                                <TableRow className="hover:bg-transparent">
-                                  <TableHead className="w-20 pl-4 whitespace-nowrap">
-                                    ID
-                                  </TableHead>
-                                  <TableHead className="min-w-[240px]">
-                                    Title
-                                  </TableHead>
-                                  {scope === "team" && (
-                                    <TableHead className="w-36 whitespace-nowrap">
-                                      Assignee
-                                    </TableHead>
-                                  )}
-                                  <TableHead className="w-28 whitespace-nowrap">
-                                    Tracker
-                                  </TableHead>
-                                  <TableHead className="w-28 whitespace-nowrap">
-                                    Status
-                                  </TableHead>
-                                  <TableHead className="w-24 whitespace-nowrap">
-                                    Priority
-                                  </TableHead>
-                                  <TableHead className="w-32 pr-4 whitespace-nowrap">
-                                    Due Date
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {project.issues.map((issue) => (
-                                  <TableRow
-                                    key={issue.id}
-                                    className="cursor-pointer hover:bg-muted/40 transition-colors"
-                                    onClick={() =>
-                                      router.push(
-                                        `/projects/${project.projectId}/issues/${issue.id}`
-                                      )
-                                    }
-                                  >
-                                    <TableCell className="font-mono text-[11px] text-muted-foreground pl-4 whitespace-nowrap">
-                                      #{issue.id.slice(0, 6)}
-                                    </TableCell>
-                                    <TableCell className="font-medium text-foreground">
-                                      <div className="flex items-center gap-1.5 max-w-[500px]">
-                                        {issue.displayId && (
-                                          <span className="shrink-0 inline-flex items-center rounded bg-muted/80 border border-border px-1.5 py-0.5 text-[9.5px] font-mono font-semibold text-muted-foreground uppercase">
-                                            {issue.displayId}
-                                          </span>
-                                        )}
-                                        <span className="truncate">
-                                          {issue.title}
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                    {scope === "team" && (
-                                      <TableCell className="whitespace-nowrap">
-                                        {issue.assignee ? (
-                                          <div className="flex items-center gap-1.5">
-                                            <Avatar className="h-5 w-5 border border-border/80">
-                                              <AvatarImage
-                                                src={
-                                                  issue.assignee.image ||
-                                                  undefined
-                                                }
-                                              />
-                                              <AvatarFallback className="text-[9px] font-bold bg-muted text-muted-foreground">
-                                                {issue.assignee.name
-                                                  ? issue.assignee.name
-                                                      .slice(0, 2)
-                                                      .toUpperCase()
-                                                  : "U"}
-                                              </AvatarFallback>
-                                            </Avatar>
-                                            <span className="text-xs text-foreground truncate max-w-[110px]">
-                                              {issue.assignee.name}
-                                            </span>
-                                          </div>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground italic">
-                                            Belum ada
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    )}
-                                    <TableCell className="whitespace-nowrap">
-                                      <span className="inline-flex items-center rounded border border-border px-2 py-0.5 text-[10px] font-medium bg-muted/30 text-muted-foreground whitespace-nowrap">
-                                        {issue.tracker?.name || "Task"}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="whitespace-nowrap">
-                                      <span className="inline-flex items-center rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold border border-border text-muted-foreground whitespace-nowrap">
-                                        {issue.status?.name || "New"}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="whitespace-nowrap">
-                                      <span
-                                        className={`text-[11px] font-semibold capitalize whitespace-nowrap ${
-                                          issue.priority === "urgent"
-                                            ? "text-red-500 font-bold"
-                                            : issue.priority === "high"
-                                            ? "text-red-400"
-                                            : issue.priority === "medium"
-                                            ? "text-amber-500 dark:text-amber-400"
-                                            : "text-muted-foreground"
-                                        }`}
-                                      >
-                                        {issue.priority}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="text-[12px] pr-4 whitespace-nowrap">
-                                      <span
-                                        className={
-                                          isIssueOverdue(
-                                            issue.dueDate,
-                                            issue.status?.isFinal
-                                          )
-                                            ? "text-destructive font-bold"
-                                            : "text-muted-foreground"
-                                        }
-                                      >
-                                        {issue.dueDate
-                                          ? new Date(
-                                              issue.dueDate
-                                            ).toLocaleDateString("id-ID", {
-                                              day: "numeric",
-                                              month: "short",
-                                            })
-                                          : "—"}
-                                      </span>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                        <DndContext
+                          sensors={sensors}
+                          onDragStart={handleDragStart}
+                          onDragEnd={(e) => handleDragEnd(e, project)}
+                        >
+                          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin max-w-full">
+                            {(project.statuses || []).map((status) => {
+                              const columnIssues = project.issues.filter(
+                                (iss) =>
+                                  iss.statusId === status.id ||
+                                  iss.status?.id === status.id
+                              );
+                              return (
+                                <KanbanColumn
+                                  key={status.id}
+                                  status={status}
+                                  issues={columnIssues}
+                                  maxHeight="420px"
+                                  showAssignee={true}
+                                  onCardClick={(id) =>
+                                    router.push(
+                                      `/projects/${project.projectId}/issues/${id}`
+                                    )
+                                  }
+                                />
+                              );
+                            })}
                           </div>
-                        ) : (
-                          /* Kanban View Mini-Board */
-                          <DndContext
-                            sensors={sensors}
-                            onDragStart={handleDragStart}
-                            onDragEnd={(e) => handleDragEnd(e, project)}
-                          >
-                            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin max-w-full">
-                              {(project.statuses || []).map((status) => {
-                                const columnIssues = project.issues.filter(
-                                  (iss) =>
-                                    iss.statusId === status.id ||
-                                    iss.status?.id === status.id
-                                );
-                                return (
-                                  <KanbanColumn
-                                    key={status.id}
-                                    status={status}
-                                    issues={columnIssues}
-                                    maxHeight="420px"
-                                    showAssignee={scope === "team"}
-                                    onCardClick={(id) =>
-                                      router.push(
-                                        `/projects/${project.projectId}/issues/${id}`
-                                      )
-                                    }
-                                  />
-                                );
-                              })}
-                            </div>
-                            <DragOverlay>
-                              {activeDragIssue ? (
-                                <div className="p-3 rounded-lg border border-border bg-card shadow-lg w-[260px] opacity-90 rotate-2">
-                                  <span className="font-mono text-[9.5px] font-semibold text-muted-foreground bg-muted border px-1.5 py-0.5 rounded">
-                                    {activeDragIssue.displayId}
-                                  </span>
-                                  <h4 className="text-[12px] font-medium text-foreground mt-1 truncate">
-                                    {activeDragIssue.title}
-                                  </h4>
-                                </div>
-                              ) : null}
-                            </DragOverlay>
-                          </DndContext>
-                        )}
+                          <DragOverlay>
+                            {activeDragIssue ? (
+                              <div className="p-3 rounded-lg border border-border bg-card shadow-lg w-[260px] opacity-90 rotate-2">
+                                <span className="font-mono text-[9.5px] font-semibold text-muted-foreground bg-muted border px-1.5 py-0.5 rounded">
+                                  {activeDragIssue.displayId}
+                                </span>
+                                <h4 className="text-[12px] font-medium text-foreground mt-1 truncate">
+                                  {activeDragIssue.title}
+                                </h4>
+                              </div>
+                            ) : null}
+                          </DragOverlay>
+                        </DndContext>
                       </div>
                     )}
                   </div>

@@ -643,12 +643,14 @@ describe('IssuesService - remove', () => {
   });
 
   describe('findTeamIssuesGlobal', () => {
-    it('should throw ForbiddenException if user is not a manager in any project and not admin', async () => {
-      mockDb.orderBy.mockResolvedValueOnce([]); // No managed projects found
+    it('should return empty projects array if user is not in any project and not admin', async () => {
+      mockDb.orderBy.mockResolvedValueOnce([]); // No projects found
 
-      await expect(
-        service.findTeamIssuesGlobal({ id: 'user-dev', isAdmin: false }),
-      ).rejects.toThrow(ForbiddenException);
+      const result = await service.findTeamIssuesGlobal({
+        id: 'user-dev',
+        isAdmin: false,
+      });
+      expect(result).toEqual({ projects: [] });
     });
 
     it('should query all projects for admin and return grouped issues in list view', async () => {
