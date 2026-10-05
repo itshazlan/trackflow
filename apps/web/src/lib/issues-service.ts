@@ -6,6 +6,8 @@ export interface Issue {
   title: string;
   number?: number;
   displayId?: string;
+  projectName?: string;
+  projectKey?: string;
   description: string | null;
   assigneeId: string | null;
   priority: 'low' | 'medium' | 'high' | 'urgent';

@@ -465,19 +465,15 @@ export class IssuesService {
         })
         .from(projectMemberships)
         .innerJoin(projects, eq(projectMemberships.projectId, projects.id))
-        .where(
-          and(
-            eq(projectMemberships.userId, currentUser.id),
-            eq(projectMemberships.role, 'manager'),
-          ),
-        )
+        .where(eq(projectMemberships.userId, currentUser.id))
         .orderBy(asc(projects.name));
     }
 
     if (!managedProjects || managedProjects.length === 0) {
-      throw new ForbiddenException(
-        'Anda tidak mengelola proyek manapun sebagai Manager',
-      );
+      if (view === 'calendar') {
+        return { issues: [] };
+      }
+      return { projects: [] };
     }
 
     const projectIds = managedProjects.map((p) => p.id);
