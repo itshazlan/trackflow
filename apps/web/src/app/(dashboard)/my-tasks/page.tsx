@@ -380,7 +380,7 @@ function MyTasksContent() {
   }, [rawProjectsList, isOverdueFiltered, isIssueOverdue]);
 
   const allIssuesList = useMemo(() => {
-    return projectsList.flatMap((proj) =>
+    const list = projectsList.flatMap((proj) =>
       (proj.issues || []).map((issue) => ({
         ...issue,
         projectId: issue.projectId || proj.projectId,
@@ -388,6 +388,12 @@ function MyTasksContent() {
         projectKey: issue.projectKey || proj.projectKey,
       }))
     );
+
+    return list.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
   }, [projectsList]);
 
   // Calendar dates calculation
