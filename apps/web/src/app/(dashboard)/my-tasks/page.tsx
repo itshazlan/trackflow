@@ -30,6 +30,9 @@ import {
   Users,
   Eye,
   EyeOff,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import {
   startOfMonth,
@@ -77,6 +80,32 @@ import { getSession } from "@/lib/auth-service";
 import { getProjects } from "@/lib/projects-service";
 
 // Project Color Map Helper for Badges
+const PRIORITY_ORDER: Record<string, number> = {
+  urgent: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+};
+
+const getTimestamp = (dateStr?: string | null | Date) => {
+  if (!dateStr) return 0;
+  const t = new Date(dateStr).getTime();
+  return isNaN(t) ? 0 : t;
+};
+
+type SortField =
+  | "id"
+  | "title"
+  | "project"
+  | "assignee"
+  | "tracker"
+  | "status"
+  | "priority"
+  | "dueDate"
+  | "createdAt";
+
+type SortDirection = "asc" | "desc";
+
 const COLOR_PALETTES = [
   "bg-indigo-500/10 text-indigo-600 border-indigo-500/30 dark:bg-indigo-500/20 dark:text-indigo-400 dark:border-indigo-500/40",
   "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/40",
@@ -285,6 +314,34 @@ function MyTasksContent() {
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(new Date());
   const [activeDragIssue, setActiveDragIssue] = useState<Issue | null>(null);
+  const [sortField, setSortField] = useState<SortField>("createdAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection(
+        field === "createdAt" || field === "dueDate" || field === "priority"
+          ? "desc"
+          : "asc"
+      );
+    }
+  };
+
+  const renderSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return (
+        <ArrowUpDown className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+      );
+    }
+    return sortDirection === "asc" ? (
+      <ArrowUp className="h-3 w-3 text-foreground" />
+    ) : (
+      <ArrowDown className="h-3 w-3 text-foreground" />
+    );
+  };
 
   // Fetch current user session & project memberships to determine manager/admin role
   const { data: session } = useQuery({
@@ -390,11 +447,77 @@ function MyTasksContent() {
     );
 
     return list.sort((a, b) => {
-      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return timeB - timeA;
+      let result = 0;
+
+      switch (sortField) {
+        case "id": {
+          const numA = a.number || 0;
+          const numB = b.number || 0;
+          result = numA - numB;
+          if (result === 0) {
+            result = (a.displayId || a.id).localeCompare(b.displayId || b.id);
+          }
+          break;
+        }
+        case "title": {
+          result = (a.title || "").localeCompare(b.title || "");
+          break;
+        }
+        case "project": {
+          result = (a.projectName || "").localeCompare(b.projectName || "");
+          if (result === 0) {
+            result = (a.projectKey || "").localeCompare(b.projectKey || "");
+          }
+          break;
+        }
+        case "assignee": {
+          const nameA = a.assignee?.name || "";
+          const nameB = b.assignee?.name || "";
+          result = nameA.localeCompare(nameB);
+          break;
+        }
+        case "tracker": {
+          const trackerA = a.tracker?.name || "";
+          const trackerB = b.tracker?.name || "";
+          result = trackerA.localeCompare(trackerB);
+          break;
+        }
+        case "status": {
+          const orderA = a.status?.orderIndex ?? 999;
+          const orderB = b.status?.orderIndex ?? 999;
+          result = orderA - orderB;
+          if (result === 0) {
+            result = (a.status?.name || "").localeCompare(b.status?.name || "");
+          }
+          break;
+        }
+        case "priority": {
+          const rankA = PRIORITY_ORDER[a.priority] || 0;
+          const rankB = PRIORITY_ORDER[b.priority] || 0;
+          result = rankA - rankB;
+          break;
+        }
+        case "dueDate": {
+          const timeA = getTimestamp(a.dueDate);
+          const timeB = getTimestamp(b.dueDate);
+          result = timeA - timeB;
+          break;
+        }
+        case "createdAt":
+        default: {
+          const timeA = getTimestamp(a.createdAt);
+          const timeB = getTimestamp(b.createdAt);
+          result = timeA - timeB;
+          if (result === 0) {
+            result = (a.number || 0) - (b.number || 0);
+          }
+          break;
+        }
+      }
+
+      return sortDirection === "asc" ? result : -result;
     });
-  }, [projectsList]);
+  }, [projectsList, sortField, sortDirection]);
 
   // Calendar dates calculation
   const calendarDays = useMemo(() => {
@@ -646,29 +769,77 @@ function MyTasksContent() {
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent bg-muted/20 border-b border-border/60">
-                      <TableHead className="w-20 pl-4 whitespace-nowrap">
-                        ID
+                      <TableHead
+                        className="w-20 pl-4 whitespace-nowrap cursor-pointer select-none hover:text-foreground group transition-colors"
+                        onClick={() => handleSort("id")}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>ID</span>
+                          {renderSortIcon("id")}
+                        </div>
                       </TableHead>
-                      <TableHead className="min-w-[240px]">
-                        Title
+                      <TableHead
+                        className="min-w-[240px] cursor-pointer select-none hover:text-foreground group transition-colors"
+                        onClick={() => handleSort("title")}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Title</span>
+                          {renderSortIcon("title")}
+                        </div>
                       </TableHead>
-                      <TableHead className="w-40 whitespace-nowrap">
-                        Project
+                      <TableHead
+                        className="w-40 whitespace-nowrap cursor-pointer select-none hover:text-foreground group transition-colors"
+                        onClick={() => handleSort("project")}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Project</span>
+                          {renderSortIcon("project")}
+                        </div>
                       </TableHead>
-                      <TableHead className="w-36 whitespace-nowrap">
-                        Assignee
+                      <TableHead
+                        className="w-36 whitespace-nowrap cursor-pointer select-none hover:text-foreground group transition-colors"
+                        onClick={() => handleSort("assignee")}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Assignee</span>
+                          {renderSortIcon("assignee")}
+                        </div>
                       </TableHead>
-                      <TableHead className="w-28 whitespace-nowrap">
-                        Tracker
+                      <TableHead
+                        className="w-28 whitespace-nowrap cursor-pointer select-none hover:text-foreground group transition-colors"
+                        onClick={() => handleSort("tracker")}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Tracker</span>
+                          {renderSortIcon("tracker")}
+                        </div>
                       </TableHead>
-                      <TableHead className="w-28 whitespace-nowrap">
-                        Status
+                      <TableHead
+                        className="w-28 whitespace-nowrap cursor-pointer select-none hover:text-foreground group transition-colors"
+                        onClick={() => handleSort("status")}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Status</span>
+                          {renderSortIcon("status")}
+                        </div>
                       </TableHead>
-                      <TableHead className="w-24 whitespace-nowrap">
-                        Priority
+                      <TableHead
+                        className="w-24 whitespace-nowrap cursor-pointer select-none hover:text-foreground group transition-colors"
+                        onClick={() => handleSort("priority")}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Priority</span>
+                          {renderSortIcon("priority")}
+                        </div>
                       </TableHead>
-                      <TableHead className="w-32 pr-4 whitespace-nowrap">
-                        Due Date
+                      <TableHead
+                        className="w-32 pr-4 whitespace-nowrap cursor-pointer select-none hover:text-foreground group transition-colors"
+                        onClick={() => handleSort("dueDate")}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Due Date</span>
+                          {renderSortIcon("dueDate")}
+                        </div>
                       </TableHead>
                     </TableRow>
                   </TableHeader>

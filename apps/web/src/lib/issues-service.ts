@@ -26,6 +26,7 @@ export interface Issue {
     id: string;
     name: string;
     isFinal?: boolean;
+    orderIndex?: number;
   } | null;
   tracker?: {
     id: string;
